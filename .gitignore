@@ -1,0 +1,32 @@
+# Python virtual environment
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Jupyter
+.ipynb_checkpoints/
+
+# VS Code
+.vscode/
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# Machine-learning outputs
+*.pth
+*.pt
+*.onnx
+
+# Large/generated datasets
+data/raw/
+data/processed/
+
+# Logs and temporary files
+*.log
+*.tmp
