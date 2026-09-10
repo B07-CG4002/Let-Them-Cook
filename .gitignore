@@ -13,6 +13,7 @@ __pycache__/
 
 # VS Code
 .vscode/
+.venv-broken/
 
 # Operating system files
 .DS_Store
