@@ -26,7 +26,11 @@ def main():
     with open(class_names_path, "r") as file:
         class_names = json.load(file)
 
-    model = GestureCNN(num_classes=len(class_names))
+    X = np.load("data/simulated/X.npy")
+    model = GestureCNN(
+        num_classes=len(class_names),
+        num_features=X.shape[2],
+    )
 
     # Load trained weights
     # Load trained weights (avoid unpickling arbitrary objects when possible)
@@ -39,10 +43,9 @@ def main():
 
     model.eval()
 
-    X = np.load("data/simulated/X.npy")
     test_window = torch.tensor(X[0], dtype=torch.float32)
 
-    # Convert from 50 × 16 to 1 × 16 × 50
+    # Convert from 50 × 11 to 1 × 11 × 50
     test_window = test_window.permute(1, 0).unsqueeze(0)
 
     with torch.no_grad():

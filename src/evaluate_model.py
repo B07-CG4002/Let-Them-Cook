@@ -40,9 +40,9 @@ def main():
     y = np.load(labels_path)
 
     # Convert from:
-    # (number of windows, 50 samples, 16 features)
+    # (number of windows, 50 samples, 11 features)
     # to:
-    # (number of windows, 16 features, 50 samples)
+    # (number of windows, 11 features, 50 samples)
     X = torch.tensor(X, dtype=torch.float32).permute(0, 2, 1)
     y = torch.tensor(y, dtype=torch.long)
 
@@ -63,11 +63,14 @@ def main():
         shuffle=False,
     )
 
-    model = GestureCNN(num_classes=len(class_names))
+    model = GestureCNN(
+        num_classes=len(class_names),
+        num_features=X.shape[1],
+    )
 
     # Initialise LazyLinear before loading the trained weights
     with torch.no_grad():
-        model(torch.randn(1, 16, 50))
+        model(torch.randn(1, X.shape[1], X.shape[2]))
 
     try:
         state_dict = torch.load(

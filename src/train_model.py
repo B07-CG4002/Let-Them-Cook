@@ -24,9 +24,9 @@ def main():
     y = np.load("data/simulated/y.npy")
 
     # Convert:
-    # (number of windows, 50 samples, 16 features)
+    # (number of windows, 50 samples, 11 features)
     # to:
-    # (number of windows, 16 features, 50 samples)
+    # (number of windows, 11 features, 50 samples)
     X = torch.tensor(X, dtype=torch.float32).permute(0, 2, 1)
     y = torch.tensor(y, dtype=torch.long)
 
@@ -52,7 +52,10 @@ def main():
         batch_size=32,
     )
 
-    model = GestureCNN(num_classes=len(CLASS_NAMES))
+    model = GestureCNN(
+        num_classes=len(CLASS_NAMES),
+        num_features=X.shape[1],
+    )
 
     loss_function = nn.CrossEntropyLoss()
 
