@@ -20,8 +20,8 @@ CLASS_NAMES = [
 
 
 def main():
-    X = np.load("data/real_processed/X.npy")
-    y = np.load("data/real_processed/y.npy")
+    X = np.load("data/simulated/X.npy")
+    y = np.load("data/simulated/y.npy")
 
     # Convert:
     # (number of windows, 50 samples, 22 features)
