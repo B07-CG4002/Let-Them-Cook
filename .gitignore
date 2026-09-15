@@ -23,10 +23,13 @@ Thumbs.db
 *.pth
 *.pt
 *.onnx
+models/class_names.json
 
 # Large/generated datasets
 data/raw/
 data/processed/
+data/real/
+data/real_processed/
 
 # Logs and temporary files
 *.log

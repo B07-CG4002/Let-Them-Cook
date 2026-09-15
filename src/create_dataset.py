@@ -3,12 +3,12 @@ from pathlib import Path
 
 
 CLASS_NAMES = [
-    "PICK_UP_HOLD",
-    "PLACE_DOWN",
+    "PICKUPHOLD",
+    "PLACEDOWN",
     "CHOP",
     "WASH",
     "THROW",
-    "USE_FIRE_EXTINGUISHER",
+    "FIREEXT",
 ]
 
 WINDOW_SIZE = 50

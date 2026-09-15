@@ -26,7 +26,7 @@ def main():
     with open(class_names_path, "r") as file:
         class_names = json.load(file)
 
-    X = np.load("data/simulated/X.npy")
+    X = np.load("data/real_processed/X.npy")
     model = GestureCNN(
         num_classes=len(class_names),
         num_features=X.shape[2],

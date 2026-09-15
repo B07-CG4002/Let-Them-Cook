@@ -16,8 +16,8 @@ from src.model import GestureCNN
 def main():
     class_names_path = Path("models/class_names.json")
     model_path = Path("models/gesture_cnn.pth")
-    features_path = Path("data/simulated/X.npy")
-    labels_path = Path("data/simulated/y.npy")
+    features_path = Path("data/real_processed/X.npy")
+    labels_path = Path("data/real_processed/y.npy")
 
     required_files = {
         "class names": class_names_path,
