@@ -10,12 +10,12 @@ from src.model import GestureCNN
 
 
 CLASS_NAMES = [
-    "PICK_UP_HOLD",
-    "PLACE_DOWN",
+    "PICKUPHOLD",
+    "PLACEDOWN",
     "CHOP",
     "WASH",
     "THROW",
-    "USE_FIRE_EXTINGUISHER",
+    "FIREEXT",
 ]
 
 
@@ -24,9 +24,9 @@ def main():
     y = np.load("data/simulated/y.npy")
 
     # Convert:
-    # (number of windows, 50 samples, 11 features)
+    # (number of windows, 50 samples, 22 features)
     # to:
-    # (number of windows, 11 features, 50 samples)
+    # (number of windows, 22 features, 50 samples)
     X = torch.tensor(X, dtype=torch.float32).permute(0, 2, 1)
     y = torch.tensor(y, dtype=torch.long)
 

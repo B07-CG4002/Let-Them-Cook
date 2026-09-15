@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 class GestureCNN(nn.Module):
-    def __init__(self, num_classes=6, num_features=11):
+    def __init__(self, num_classes=6, num_features=22):
         super().__init__()
 
         self.features = nn.Sequential(
@@ -31,15 +31,15 @@ model = GestureCNN()
 
 # PyTorch Conv1D input format:
 # batch size × features × samples
-test_input = torch.randn(1, 11, 50)
+test_input = torch.randn(1, 22, 50)
 
 class_names = [
-    "PICK_UP_HOLD",
-    "PLACE_DOWN",
+    "PICKUPHOLD",
+    "PLACEDOWN",
     "CHOP",
     "WASH",
     "THROW",
-    "USE_FIRE_EXTINGUISHER"
+    "FIREEXT",
 ]
 
 model.eval()

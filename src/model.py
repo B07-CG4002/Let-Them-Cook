@@ -1,7 +1,7 @@
 import torch.nn as nn
 
 class GestureCNN(nn.Module):
-    def __init__(self, num_classes=6, num_features=11):
+    def __init__(self, num_classes=6, num_features=22):
         super().__init__()
 
         self.features = nn.Sequential(

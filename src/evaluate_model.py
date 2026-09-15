@@ -40,9 +40,9 @@ def main():
     y = np.load(labels_path)
 
     # Convert from:
-    # (number of windows, 50 samples, 11 features)
+    # (number of windows, 50 samples, 22 features)
     # to:
-    # (number of windows, 11 features, 50 samples)
+    # (number of windows, 22 features, 50 samples)
     X = torch.tensor(X, dtype=torch.float32).permute(0, 2, 1)
     y = torch.tensor(y, dtype=torch.long)
 

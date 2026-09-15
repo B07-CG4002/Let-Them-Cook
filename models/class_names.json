@@ -1,8 +1,8 @@
 [
-  "PICK_UP_HOLD",
-  "PLACE_DOWN",
+  "PICKUPHOLD",
+  "PLACEDOWN",
   "CHOP",
   "WASH",
   "THROW",
-  "USE_FIRE_EXTINGUISHER"
+  "FIREEXT"
 ]

@@ -45,7 +45,7 @@ def main():
 
     test_window = torch.tensor(X[0], dtype=torch.float32)
 
-    # Convert from 50 × 11 to 1 × 11 × 50
+    # Convert from 50 × 22 to 1 × 22 × 50
     test_window = test_window.permute(1, 0).unsqueeze(0)
 
     with torch.no_grad():
