@@ -8,7 +8,8 @@ from sklearn.metrics import (
     classification_report,
     confusion_matrix,
 )
-from torch.utils.data import DataLoader, TensorDataset, random_split
+from torch.utils.data import DataLoader, TensorDataset
+from sklearn.model_selection import train_test_split
 
 from src.model import GestureCNN
 
@@ -46,15 +47,20 @@ def main():
     X = torch.tensor(X, dtype=torch.float32).permute(0, 2, 1)
     y = torch.tensor(y, dtype=torch.long)
 
-    dataset = TensorDataset(X, y)
+    indices = np.arange(len(y))
 
-    train_size = int(0.8 * len(dataset))
-    test_size = len(dataset) - train_size
+    _, test_indices = train_test_split(
+        indices,
+        test_size=0.2,
+        random_state=42,
+        stratify=y.numpy(),
+    )
 
-    _, test_dataset = random_split(
-        dataset,
-        [train_size, test_size],
-        generator=torch.Generator().manual_seed(42),
+    test_indices = torch.tensor(test_indices, dtype=torch.long)
+
+    test_dataset = TensorDataset(
+        X[test_indices],
+        y[test_indices],
     )
 
     test_loader = DataLoader(

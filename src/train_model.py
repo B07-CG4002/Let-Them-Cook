@@ -4,7 +4,8 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, TensorDataset, random_split
+from torch.utils.data import DataLoader, TensorDataset
+from sklearn.model_selection import train_test_split
 
 from src.model import GestureCNN
 
@@ -20,8 +21,8 @@ CLASS_NAMES = [
 
 
 def main():
-    X = np.load("data/simulated/X.npy")
-    y = np.load("data/simulated/y.npy")
+    X = np.load("data/real_processed/X.npy")
+    y = np.load("data/real_processed/y.npy")
 
     # Convert:
     # (number of windows, 50 samples, 22 features)
@@ -30,15 +31,26 @@ def main():
     X = torch.tensor(X, dtype=torch.float32).permute(0, 2, 1)
     y = torch.tensor(y, dtype=torch.long)
 
-    dataset = TensorDataset(X, y)
+    indices = np.arange(len(y))
 
-    train_size = int(0.8 * len(dataset))
-    test_size = len(dataset) - train_size
+    train_indices, test_indices = train_test_split(
+        indices,
+        test_size=0.2,
+        random_state=42,
+        stratify=y.numpy(),
+    )
 
-    train_dataset, test_dataset = random_split(
-        dataset,
-        [train_size, test_size],
-        generator=torch.Generator().manual_seed(42),
+    train_indices = torch.tensor(train_indices, dtype=torch.long)
+    test_indices = torch.tensor(test_indices, dtype=torch.long)
+
+    train_dataset = TensorDataset(
+        X[train_indices],
+        y[train_indices],
+    )
+
+    test_dataset = TensorDataset(
+        X[test_indices],
+        y[test_indices],
     )
 
     train_loader = DataLoader(
