@@ -1,9 +1,9 @@
-# Python virtual environment
+# Python virtual environments
 .venv/
 venv/
 env/
 
-# Python cache
+# Python cache and compiled files
 __pycache__/
 *.py[cod]
 *.pyo
@@ -19,11 +19,17 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-# Machine-learning outputs
+# Machine-learning model outputs
 *.pth
 *.pt
 *.onnx
-models/class_names.json
+
+# Keep all model files used by this project
+!models/
+!models/*.pth
+!models/*.pt
+!models/*.onnx
+!models/class_names.json
 
 # Large/generated datasets
 data/raw/
@@ -31,6 +37,21 @@ data/processed/
 data/real/
 data/real_processed/
 
+# Sensor recordings and temporary datasets
+*.csv
+recordings/
+hardware/gloves/recordings/
+
 # Logs and temporary files
 *.log
 *.tmp
+
+# Build and generated files
+build/
+dist/
+*.egg-info/
+
+# Test and coverage output
+.pytest_cache/
+.coverage
+htmlcov/
