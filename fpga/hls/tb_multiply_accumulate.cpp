@@ -1,5 +1,5 @@
-#include <iostream>
 #include <ap_int.h>
+#include <iostream>
 
 void multiply_accumulate(
     const ap_int<16> a[16],
