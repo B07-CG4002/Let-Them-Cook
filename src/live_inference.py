@@ -19,7 +19,7 @@ RIGHT_PORT = "COM4"
 BAUD_RATE = 115200
 SERIAL_TIMEOUT = 2
 
-MODEL_PATH = Path("models/gesture_cnn.pth")
+MODEL_PATH = Path("models/gesture_cnn_person1_person2.pth")
 CLASS_NAMES_PATH = Path("models/class_names.json")
 
 
