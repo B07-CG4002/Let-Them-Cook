@@ -48,6 +48,7 @@
     <Option Name="DefaultLib" Val="xil_defaultlib"/>
     <Option Name="ProjectType" Val="Default"/>
     <Option Name="IPRepoPath" Val="$PPRDIR/multiply_accumulate"/>
+    <Option Name="IPRepoPath" Val="$PPRDIR/../../../VitisWorkspaces/cg4002-hls/cnn_conv1d/conv1d_layer1/hls/impl/ip"/>
     <Option Name="IPOutputRepo" Val="$PCACHEDIR/ip"/>
     <Option Name="IPDefaultOutputPath" Val="$PGENDIR/sources_1"/>
     <Option Name="IPCachePermission" Val="read"/>
@@ -82,11 +83,8 @@
           <Attr Name="UsedIn" Val="implementation"/>
           <Attr Name="UsedIn" Val="simulation"/>
         </FileInfo>
-        <CompFileExtendedInfo CompFileName="multiply_accumulate.bd" FileRelPathName="ip\multiply_accumulate_axi_smc_0\multiply_accumulate_axi_smc_0.xci">
-          <Proxy FileSetName="multiply_accumulate_axi_smc_0"/>
-        </CompFileExtendedInfo>
-        <CompFileExtendedInfo CompFileName="multiply_accumulate.bd" FileRelPathName="ip\multiply_accumulate_axi_smc_1_0\multiply_accumulate_axi_smc_1_0.xci">
-          <Proxy FileSetName="multiply_accumulate_axi_smc_1_0"/>
+        <CompFileExtendedInfo CompFileName="multiply_accumulate.bd" FileRelPathName="ip\multiply_accumulate_conv1d_layer1_0_0\multiply_accumulate_conv1d_layer1_0_0.xci">
+          <Proxy FileSetName="multiply_accumulate_conv1d_layer1_0_0"/>
         </CompFileExtendedInfo>
         <CompFileExtendedInfo CompFileName="multiply_accumulate.bd" FileRelPathName="ip\multiply_accumulate_multiply_accumulate_0_0\multiply_accumulate_multiply_accumulate_0_0.xci">
           <Proxy FileSetName="multiply_accumulate_multiply_accumulate_0_0"/>
@@ -179,21 +177,15 @@
         <Option Name="UseBlackboxStub" Val="1"/>
       </Config>
     </FileSet>
-    <FileSet Name="multiply_accumulate_axi_smc_0" Type="BlockSrcs" RelSrcDir="$PSRCDIR/multiply_accumulate_axi_smc_0" RelGenDir="$PGENDIR/multiply_accumulate_axi_smc_0">
-      <Config>
-        <Option Name="TopModule" Val="multiply_accumulate_axi_smc_0"/>
-        <Option Name="UseBlackboxStub" Val="1"/>
-      </Config>
-    </FileSet>
-    <FileSet Name="multiply_accumulate_axi_smc_1_0" Type="BlockSrcs" RelSrcDir="$PSRCDIR/multiply_accumulate_axi_smc_1_0" RelGenDir="$PGENDIR/multiply_accumulate_axi_smc_1_0">
-      <Config>
-        <Option Name="TopModule" Val="multiply_accumulate_axi_smc_1_0"/>
-        <Option Name="UseBlackboxStub" Val="1"/>
-      </Config>
-    </FileSet>
     <FileSet Name="multiply_accumulate_rst_ps8_0_99M_0" Type="BlockSrcs" RelSrcDir="$PSRCDIR/multiply_accumulate_rst_ps8_0_99M_0" RelGenDir="$PGENDIR/multiply_accumulate_rst_ps8_0_99M_0">
       <Config>
         <Option Name="TopModule" Val="multiply_accumulate_rst_ps8_0_99M_0"/>
+        <Option Name="UseBlackboxStub" Val="1"/>
+      </Config>
+    </FileSet>
+    <FileSet Name="multiply_accumulate_conv1d_layer1_0_0" Type="BlockSrcs" RelSrcDir="$PSRCDIR/multiply_accumulate_conv1d_layer1_0_0" RelGenDir="$PGENDIR/multiply_accumulate_conv1d_layer1_0_0">
+      <Config>
+        <Option Name="TopModule" Val="multiply_accumulate_conv1d_layer1_0_0"/>
         <Option Name="UseBlackboxStub" Val="1"/>
       </Config>
     </FileSet>
@@ -219,7 +211,9 @@
   <Runs Version="1" Minor="22">
     <Run Id="synth_1" Type="Ft3:Synth" SrcSet="sources_1" Part="xazu3eg-sbva484-1-i" ConstrsSet="constrs_1" Description="Vivado Synthesis Defaults" AutoIncrementalCheckpoint="true" IncrementalCheckpoint="$PSRCDIR/utils_1/imports/synth_1/multiply_accumulate_wrapper.dcp" WriteIncrSynthDcp="false" State="current" Dir="$PRUNDIR/synth_1" IncludeInArchive="true" IsChild="false" AutoIncrementalDir="$PSRCDIR/utils_1/imports/synth_1" AutoRQSDir="$PSRCDIR/utils_1/imports/synth_1" ParallelReportGen="true">
       <Strategy Version="1" Minor="2">
-        <StratHandle Name="Vivado Synthesis Defaults" Flow="Vivado Synthesis 2026"/>
+        <StratHandle Name="Vivado Synthesis Defaults" Flow="Vivado Synthesis 2026">
+          <Desc>Vivado Synthesis Defaults</Desc>
+        </StratHandle>
         <Step Id="synth_design"/>
       </Strategy>
       <GeneratedRun Dir="$PRUNDIR" File="gen_run.xml"/>
@@ -247,26 +241,6 @@
       <Report Name="ROUTE_DESIGN.REPORT_METHODOLOGY" Enabled="1"/>
       <RQSFiles/>
     </Run>
-    <Run Id="multiply_accumulate_axi_smc_0_synth_1" Type="Ft3:Synth" SrcSet="multiply_accumulate_axi_smc_0" Part="xazu3eg-sbva484-1-i" ConstrsSet="multiply_accumulate_axi_smc_0" Description="Vivado Synthesis Defaults" AutoIncrementalCheckpoint="false" WriteIncrSynthDcp="false" Dir="$PRUNDIR/multiply_accumulate_axi_smc_0_synth_1" IncludeInArchive="true" IsChild="false" AutoIncrementalDir="$PSRCDIR/utils_1/imports/multiply_accumulate_axi_smc_0_synth_1" AutoRQSDir="$PSRCDIR/utils_1/imports/multiply_accumulate_axi_smc_0_synth_1" ParallelReportGen="true">
-      <Strategy Version="1" Minor="2">
-        <StratHandle Name="Vivado Synthesis Defaults" Flow="Vivado Synthesis 2026"/>
-        <Step Id="synth_design"/>
-      </Strategy>
-      <GeneratedRun Dir="$PRUNDIR" File="gen_run.xml"/>
-      <ReportStrategy Name="Vivado Synthesis Default Reports" Flow="Vivado Synthesis 2026"/>
-      <Report Name="ROUTE_DESIGN.REPORT_METHODOLOGY" Enabled="1"/>
-      <RQSFiles/>
-    </Run>
-    <Run Id="multiply_accumulate_axi_smc_1_0_synth_1" Type="Ft3:Synth" SrcSet="multiply_accumulate_axi_smc_1_0" Part="xazu3eg-sbva484-1-i" ConstrsSet="multiply_accumulate_axi_smc_1_0" Description="Vivado Synthesis Defaults" AutoIncrementalCheckpoint="false" WriteIncrSynthDcp="false" Dir="$PRUNDIR/multiply_accumulate_axi_smc_1_0_synth_1" IncludeInArchive="true" IsChild="false" AutoIncrementalDir="$PSRCDIR/utils_1/imports/multiply_accumulate_axi_smc_1_0_synth_1" AutoRQSDir="$PSRCDIR/utils_1/imports/multiply_accumulate_axi_smc_1_0_synth_1" ParallelReportGen="true">
-      <Strategy Version="1" Minor="2">
-        <StratHandle Name="Vivado Synthesis Defaults" Flow="Vivado Synthesis 2026"/>
-        <Step Id="synth_design"/>
-      </Strategy>
-      <GeneratedRun Dir="$PRUNDIR" File="gen_run.xml"/>
-      <ReportStrategy Name="Vivado Synthesis Default Reports" Flow="Vivado Synthesis 2026"/>
-      <Report Name="ROUTE_DESIGN.REPORT_METHODOLOGY" Enabled="1"/>
-      <RQSFiles/>
-    </Run>
     <Run Id="multiply_accumulate_rst_ps8_0_99M_0_synth_1" Type="Ft3:Synth" SrcSet="multiply_accumulate_rst_ps8_0_99M_0" Part="xazu3eg-sbva484-1-i" ConstrsSet="multiply_accumulate_rst_ps8_0_99M_0" Description="Vivado Synthesis Defaults" AutoIncrementalCheckpoint="false" WriteIncrSynthDcp="false" Dir="$PRUNDIR/multiply_accumulate_rst_ps8_0_99M_0_synth_1" IncludeInArchive="true" IsChild="false" AutoIncrementalDir="$PSRCDIR/utils_1/imports/multiply_accumulate_rst_ps8_0_99M_0_synth_1" AutoRQSDir="$PSRCDIR/utils_1/imports/multiply_accumulate_rst_ps8_0_99M_0_synth_1" ParallelReportGen="true">
       <Strategy Version="1" Minor="2">
         <StratHandle Name="Vivado Synthesis Defaults" Flow="Vivado Synthesis 2026"/>
@@ -277,9 +251,23 @@
       <Report Name="ROUTE_DESIGN.REPORT_METHODOLOGY" Enabled="1"/>
       <RQSFiles/>
     </Run>
+    <Run Id="multiply_accumulate_conv1d_layer1_0_0_synth_1" Type="Ft3:Synth" SrcSet="multiply_accumulate_conv1d_layer1_0_0" Part="xazu3eg-sbva484-1-i" ConstrsSet="multiply_accumulate_conv1d_layer1_0_0" Description="Vivado Synthesis Defaults" AutoIncrementalCheckpoint="false" WriteIncrSynthDcp="false" Dir="$PRUNDIR/multiply_accumulate_conv1d_layer1_0_0_synth_1" IncludeInArchive="true" IsChild="false" AutoIncrementalDir="$PSRCDIR/utils_1/imports/multiply_accumulate_conv1d_layer1_0_0_synth_1" AutoRQSDir="$PSRCDIR/utils_1/imports/multiply_accumulate_conv1d_layer1_0_0_synth_1" ParallelReportGen="true">
+      <Strategy Version="1" Minor="2">
+        <StratHandle Name="Vivado Synthesis Defaults" Flow="Vivado Synthesis 2026">
+          <Desc>Vivado Synthesis Defaults</Desc>
+        </StratHandle>
+        <Step Id="synth_design"/>
+      </Strategy>
+      <GeneratedRun Dir="$PRUNDIR" File="gen_run.xml"/>
+      <ReportStrategy Name="Vivado Synthesis Default Reports" Flow="Vivado Synthesis 2026"/>
+      <Report Name="ROUTE_DESIGN.REPORT_METHODOLOGY" Enabled="1"/>
+      <RQSFiles/>
+    </Run>
     <Run Id="impl_1" Type="Ft2:EntireDesign" Part="xazu3eg-sbva484-1-i" ConstrsSet="constrs_1" Description="Default settings for Implementation." AutoIncrementalCheckpoint="false" WriteIncrSynthDcp="false" State="current" Dir="$PRUNDIR/impl_1" SynthRun="synth_1" IncludeInArchive="true" IsChild="false" GenFullBitstream="true" AutoIncrementalDir="$PSRCDIR/utils_1/imports/impl_1" LaunchOptions="-jobs 8 " AutoRQSDir="$PSRCDIR/utils_1/imports/impl_1" ParallelReportGen="true">
       <Strategy Version="1" Minor="2">
-        <StratHandle Name="Vivado Implementation Defaults" Flow="Vivado Implementation 2026"/>
+        <StratHandle Name="Vivado Implementation Defaults" Flow="Vivado Implementation 2026">
+          <Desc>Default settings for Implementation.</Desc>
+        </StratHandle>
         <Step Id="init_design"/>
         <Step Id="opt_design"/>
         <Step Id="power_opt_design"/>
@@ -329,43 +317,28 @@
       <Report Name="ROUTE_DESIGN.REPORT_METHODOLOGY" Enabled="1"/>
       <RQSFiles/>
     </Run>
-    <Run Id="multiply_accumulate_axi_smc_0_impl_1" Type="Ft2:EntireDesign" Part="xazu3eg-sbva484-1-i" ConstrsSet="multiply_accumulate_axi_smc_0" Description="Default settings for Implementation." AutoIncrementalCheckpoint="false" WriteIncrSynthDcp="false" SynthRun="multiply_accumulate_axi_smc_0_synth_1" IncludeInArchive="false" IsChild="false" GenFullBitstream="true" AutoIncrementalDir="$PSRCDIR/utils_1/imports/multiply_accumulate_axi_smc_0_impl_1" AutoRQSDir="$PSRCDIR/utils_1/imports/multiply_accumulate_axi_smc_0_impl_1" ParallelReportGen="true">
-      <Strategy Version="1" Minor="2">
-        <StratHandle Name="Vivado Implementation Defaults" Flow="Vivado Implementation 2026"/>
-        <Step Id="init_design"/>
-        <Step Id="opt_design"/>
-        <Step Id="power_opt_design"/>
-        <Step Id="place_design"/>
-        <Step Id="post_place_power_opt_design"/>
-        <Step Id="phys_opt_design"/>
-        <Step Id="route_design"/>
-        <Step Id="post_route_phys_opt_design"/>
-        <Step Id="write_bitstream"/>
-      </Strategy>
-      <ReportStrategy Name="Vivado Implementation Default Reports" Flow="Vivado Implementation 2026"/>
-      <Report Name="ROUTE_DESIGN.REPORT_METHODOLOGY" Enabled="1"/>
-      <RQSFiles/>
-    </Run>
-    <Run Id="multiply_accumulate_axi_smc_1_0_impl_1" Type="Ft2:EntireDesign" Part="xazu3eg-sbva484-1-i" ConstrsSet="multiply_accumulate_axi_smc_1_0" Description="Default settings for Implementation." AutoIncrementalCheckpoint="false" WriteIncrSynthDcp="false" SynthRun="multiply_accumulate_axi_smc_1_0_synth_1" IncludeInArchive="false" IsChild="false" GenFullBitstream="true" AutoIncrementalDir="$PSRCDIR/utils_1/imports/multiply_accumulate_axi_smc_1_0_impl_1" AutoRQSDir="$PSRCDIR/utils_1/imports/multiply_accumulate_axi_smc_1_0_impl_1" ParallelReportGen="true">
-      <Strategy Version="1" Minor="2">
-        <StratHandle Name="Vivado Implementation Defaults" Flow="Vivado Implementation 2026"/>
-        <Step Id="init_design"/>
-        <Step Id="opt_design"/>
-        <Step Id="power_opt_design"/>
-        <Step Id="place_design"/>
-        <Step Id="post_place_power_opt_design"/>
-        <Step Id="phys_opt_design"/>
-        <Step Id="route_design"/>
-        <Step Id="post_route_phys_opt_design"/>
-        <Step Id="write_bitstream"/>
-      </Strategy>
-      <ReportStrategy Name="Vivado Implementation Default Reports" Flow="Vivado Implementation 2026"/>
-      <Report Name="ROUTE_DESIGN.REPORT_METHODOLOGY" Enabled="1"/>
-      <RQSFiles/>
-    </Run>
     <Run Id="multiply_accumulate_rst_ps8_0_99M_0_impl_1" Type="Ft2:EntireDesign" Part="xazu3eg-sbva484-1-i" ConstrsSet="multiply_accumulate_rst_ps8_0_99M_0" Description="Default settings for Implementation." AutoIncrementalCheckpoint="false" WriteIncrSynthDcp="false" SynthRun="multiply_accumulate_rst_ps8_0_99M_0_synth_1" IncludeInArchive="false" IsChild="false" GenFullBitstream="true" AutoIncrementalDir="$PSRCDIR/utils_1/imports/multiply_accumulate_rst_ps8_0_99M_0_impl_1" AutoRQSDir="$PSRCDIR/utils_1/imports/multiply_accumulate_rst_ps8_0_99M_0_impl_1" ParallelReportGen="true">
       <Strategy Version="1" Minor="2">
         <StratHandle Name="Vivado Implementation Defaults" Flow="Vivado Implementation 2026"/>
+        <Step Id="init_design"/>
+        <Step Id="opt_design"/>
+        <Step Id="power_opt_design"/>
+        <Step Id="place_design"/>
+        <Step Id="post_place_power_opt_design"/>
+        <Step Id="phys_opt_design"/>
+        <Step Id="route_design"/>
+        <Step Id="post_route_phys_opt_design"/>
+        <Step Id="write_bitstream"/>
+      </Strategy>
+      <ReportStrategy Name="Vivado Implementation Default Reports" Flow="Vivado Implementation 2026"/>
+      <Report Name="ROUTE_DESIGN.REPORT_METHODOLOGY" Enabled="1"/>
+      <RQSFiles/>
+    </Run>
+    <Run Id="multiply_accumulate_conv1d_layer1_0_0_impl_1" Type="Ft2:EntireDesign" Part="xazu3eg-sbva484-1-i" ConstrsSet="multiply_accumulate_conv1d_layer1_0_0" Description="Default settings for Implementation." AutoIncrementalCheckpoint="false" WriteIncrSynthDcp="false" SynthRun="multiply_accumulate_conv1d_layer1_0_0_synth_1" IncludeInArchive="false" IsChild="false" GenFullBitstream="true" AutoIncrementalDir="$PSRCDIR/utils_1/imports/multiply_accumulate_conv1d_layer1_0_0_impl_1" AutoRQSDir="$PSRCDIR/utils_1/imports/multiply_accumulate_conv1d_layer1_0_0_impl_1" ParallelReportGen="true">
+      <Strategy Version="1" Minor="2">
+        <StratHandle Name="Vivado Implementation Defaults" Flow="Vivado Implementation 2026">
+          <Desc>Default settings for Implementation.</Desc>
+        </StratHandle>
         <Step Id="init_design"/>
         <Step Id="opt_design"/>
         <Step Id="power_opt_design"/>
