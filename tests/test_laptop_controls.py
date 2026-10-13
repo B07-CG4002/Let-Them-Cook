@@ -81,11 +81,7 @@ def test_bridge_command_uses_packet_magic(sensor_seen_first):
     asyncio.run(run())
 
 
-@pytest.mark.parametrize("stats_magic, command_magic", [
-    (b"LCS1", b"LC"),
-])
-def test_command_uses_validated_source_stats_magic_before_first_sensor(
-        monkeypatch, stats_magic, command_magic):
+def test_command_is_available_after_the_statistics_read_before_first_sensor(monkeypatch):
     from types import SimpleNamespace
 
     from common.control import (COMMAND, CONTROL_UUID, RESPONSE_UUID, ControlFrame,
@@ -136,7 +132,7 @@ def test_command_uses_validated_source_stats_magic_before_first_sensor(
 
             async def read_gatt_char(self, uuid, **kwargs):
                 assert uuid == SOURCE_STATS_UUID
-                return struct.pack("<4sB3xIIII", stats_magic, 1, 7, 0, 0, 0)
+                return struct.pack("<4sB3xIIII", b"LCS1", 1, 7, 0, 0, 0)
 
             async def start_notify(self, uuid, callback):
                 if uuid == RESPONSE_UUID:
@@ -162,7 +158,7 @@ def test_command_uses_validated_source_stats_magic_before_first_sensor(
             await asyncio.wait_for(active.wait(), 1)
             command = SensorPacket(1, 7, 101, 0, (0,) * 8, version=2)
             await bridge.control.command(command)
-            assert sent == [command_magic]
+            assert sent == [b"LC"]
         finally:
             worker.cancel()
             await asyncio.gather(worker, return_exceptions=True)

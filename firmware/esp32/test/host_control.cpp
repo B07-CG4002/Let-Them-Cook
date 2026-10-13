@@ -66,6 +66,10 @@ int main() {
   // Any other packet marker is rejected before the command changes state.
   auto wrongMagic = sensor; wrongMagic[0] = 'W'; wrongMagic[1] = '7'; wrongMagic[8] = 11;
   execute(engine, request(1, 11, 0, wrongMagic), 1);
+  wrongMagic[1] = 'C';
+  execute(engine, request(1, 11, 0, wrongMagic), 1);
+  wrongMagic[0] = 'L'; wrongMagic[1] = '7';
+  execute(engine, request(1, 11, 0, wrongMagic), 1);
   auto command = request(1, 10, 0, sensor);
   auto result = execute(engine, command);
   const uint8_t expected[] = {

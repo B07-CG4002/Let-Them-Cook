@@ -37,6 +37,14 @@ class HelperTests(unittest.TestCase):
     def setUp(self):
         self.assertIsNotNone(control, "the scoped iSH helper is not implemented")
 
+    def test_master_command_uses_the_names_provisioned_on_the_phone(self):
+        home = Path("/root")
+        args = control.master_exec_args("print(1)", "/home/xilinx/run", "/root/socket", home)
+        self.assertEqual(args[:5], ["ssh", "-F", str(home / ".ssh" / "week7-ish-password.conf"),
+                                    "-S", "/root/socket"])
+        self.assertEqual(args[-2], "week7-ultra96")
+        self.assertEqual(shlex.split(args[-1]), ["python3", "-c", "print(1)", "/home/xilinx/run"])
+
     def test_metadata_rejects_shell_paths_and_malformed_keys(self):
         self.assertEqual(control.validate_metadata(metadata()), metadata())
         bad = [("remote_dir", "/tmp/a;touch-x"), ("remote_dir", "/tmp/../root"),

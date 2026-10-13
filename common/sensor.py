@@ -75,7 +75,7 @@ def decode_packet(data: bytes) -> SensorPacket:
         raise ValueError("sensor packet must contain exactly 32 bytes")
     magic, version, device_id, boot_id, seq, uptime_ms, *values = _PACKET.unpack(data)
     if magic != PACKET_MAGIC:
-        raise ValueError("invalid sensor packet magic")
+        raise ValueError("invalid sensor packet magic; expected LC")
     if version not in (1, 2):
         raise ValueError("unsupported sensor packet version")
     return SensorPacket(device_id, boot_id, seq, uptime_ms, tuple(values), version)

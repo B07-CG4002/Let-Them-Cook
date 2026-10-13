@@ -188,10 +188,11 @@ def check_sshd_config(config):
 
 
 def master_exec_args(remote_code, remote_dir, socket_path, home):
+    # The config file and host alias were provisioned on the phone under these names.
     command = " ".join(shlex.quote(arg) for arg in ["python3", "-c", remote_code, remote_dir])
-    return ["ssh", "-F", str(home / ".ssh" / "comms-ish-password.conf"), "-S", socket_path,
+    return ["ssh", "-F", str(home / ".ssh" / "week7-ish-password.conf"), "-S", socket_path,
             "-o", "BatchMode=yes", "-o", "ControlMaster=no", "-o", "ClearAllForwardings=yes",
-            "-o", "ProxyCommand=false", "comms-ultra96", command]
+            "-o", "ProxyCommand=false", "week7-ultra96", command]
 
 
 def check_remote_available(metadata, socket_path, home):

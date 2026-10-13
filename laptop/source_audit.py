@@ -48,7 +48,7 @@ def parse_source_stats(data: bytes, *, expected_device_id: Optional[int] = None)
         raise ValueError("source statistics reserved bytes must be zero")
     magic, device_id, boot_id, next_seq, submitted, failures = _SOURCE_STATS.unpack(raw)
     if magic != SOURCE_STATS_MAGIC:
-        raise ValueError("invalid source statistics magic")
+        raise ValueError("invalid source statistics magic; flash this board with the current firmware")
     if expected_device_id is not None and device_id != expected_device_id:
         raise ValueError("source statistics device identity mismatch")
     return SourceStats(device_id, boot_id, next_seq, submitted, failures)
