@@ -249,7 +249,7 @@ final class TransportTests: XCTestCase {
     }
 
     func testTrustedCertificateWithWrongHostnameCannotSubscribe() throws {
-        let wrongName = try TestPKI(hostname: "wrong.week7.internal")
+        let wrongName = try TestPKI(hostname: "wrong-host.internal")
         let peers = try LocalPeers(pki: wrongName)
         try assertRejected(peers, route: peers.route())
         XCTAssertEqual(peers.subscriptionCount, 0)

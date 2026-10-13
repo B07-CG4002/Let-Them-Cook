@@ -189,9 +189,9 @@ def check_sshd_config(config):
 
 def master_exec_args(remote_code, remote_dir, socket_path, home):
     command = " ".join(shlex.quote(arg) for arg in ["python3", "-c", remote_code, remote_dir])
-    return ["ssh", "-F", str(home / ".ssh" / "week7-ish-password.conf"), "-S", socket_path,
+    return ["ssh", "-F", str(home / ".ssh" / "comms-ish-password.conf"), "-S", socket_path,
             "-o", "BatchMode=yes", "-o", "ControlMaster=no", "-o", "ClearAllForwardings=yes",
-            "-o", "ProxyCommand=false", "week7-ultra96", command]
+            "-o", "ProxyCommand=false", "comms-ultra96", command]
 
 
 def check_remote_available(metadata, socket_path, home):
@@ -231,11 +231,11 @@ def start_control(metadata, socket_path, home=None):
     run_command(mux_command(socket_path, "check"), "PHONE_CONTROL_MASTER_UNAVAILABLE: existing SSH master is required")
     check_port_free()
     check_remote_available(metadata, socket_path, home)
-    root = home / "week7-control"
+    root = home / "comms-control"
     root.mkdir(mode=0o700, exist_ok=True)
     info = root.lstat()
     if not stat.S_ISDIR(info.st_mode) or info.st_mode & 0o022 or (hasattr(os, "geteuid") and info.st_uid != os.geteuid()):
-        raise ControlError("PHONE_CONTROL_SCOPE_UNSAFE: week7-control directory is unsafe")
+        raise ControlError("PHONE_CONTROL_SCOPE_UNSAFE: comms-control directory is unsafe")
     directory = Path(tempfile.mkdtemp(prefix=metadata["id"] + "-", dir=str(root)))
     process = None
     forwarded = False
@@ -298,11 +298,11 @@ def stop_control(state_path, home=None):
     """Request cleanup only after verifying the saved scope and live PID."""
     require_root()
     home = Path.home() if home is None else Path(home)
-    root = home.absolute() / "week7-control"
+    root = home.absolute() / "comms-control"
     state_path = Path(state_path).absolute()
     directory = state_path.parent
     if state_path.name != "state.json" or directory.parent != root:
-        raise ControlError("PHONE_CONTROL_STOP_SCOPE_INVALID: expected a scoped week7-control state.json")
+        raise ControlError("PHONE_CONTROL_STOP_SCOPE_INVALID: expected a scoped comms-control state.json")
     for path, is_directory in [(root, True), (directory, True), (state_path, False)]:
         info = path.lstat()
         expected_type = stat.S_ISDIR if is_directory else stat.S_ISREG

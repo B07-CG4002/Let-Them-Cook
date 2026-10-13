@@ -61,22 +61,17 @@ int main() {
   comms::ControlEngine engine(2, 0x78563412, hashSix);
   // Literal sensor packet exercises int16 wrap and every identity field.
   std::vector<uint8_t> sensor = {
-    'W','7',2,2,0x12,0x34,0x56,0x78,10,0,0,0,1,0,0,0,
+    'L','C',2,2,0x12,0x34,0x56,0x78,10,0,0,0,1,0,0,0,
     0xff,0x7f,0,0x80,0xff,0xff,0,0,1,0,0xff,0,0,1,0,0xff};
-  auto currentSensor = sensor;
-  currentSensor[0] = 'L'; currentSensor[1] = 'C';
-  comms::ControlEngine currentEngine(2, 0x78563412, hashSix);
-  auto currentResult = execute(currentEngine, request(1, 10, 0, currentSensor));
-  assert(currentResult.size() == 46 && currentResult[14] == 'L' && currentResult[15] == 'C');
-  auto mixedMagic = currentSensor; mixedMagic[0] = 'W'; mixedMagic[8] = 11;
-  execute(currentEngine, request(1, 11, 0, mixedMagic), 1);
+  // Any other packet marker is rejected before the command changes state.
+  auto wrongMagic = sensor; wrongMagic[0] = 'W'; wrongMagic[1] = '7'; wrongMagic[8] = 11;
+  execute(engine, request(1, 11, 0, wrongMagic), 1);
   auto command = request(1, 10, 0, sensor);
   auto result = execute(engine, command);
   const uint8_t expected[] = {
-    'W','7',2,2,0x12,0x34,0x56,0x78,10,0,0,0,0xf4,1,0,0,
+    'L','C',2,2,0x12,0x34,0x56,0x78,10,0,0,0,0xf4,1,0,0,
     0,0x80,1,0x80,0,0,1,0,2,0,0,1,1,1,1,0xff};
   assert(result.size() == 46 && std::memcmp(result.data()+14, expected, 32) == 0);
-  assert(std::memcmp(currentResult.data()+16, result.data()+16, 30) == 0);
   assert(execute(engine, command, 0, 900) == result);  // Identical replay, not second transform.
   auto conflict = command; conflict.back() ^= 1;
   execute(engine, conflict, 5);

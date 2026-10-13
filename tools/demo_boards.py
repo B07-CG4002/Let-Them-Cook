@@ -7,7 +7,6 @@ import tempfile
 
 
 CONFIG_PATH = Path(__file__).resolve().parents[1] / '.comms-local' / 'boards.json'
-LEGACY_CONFIG_PATH = Path(__file__).resolve().parents[1] / '.week7-local' / 'boards.json'
 DEFAULT_BOARDS = (('left', '38:18:2B:19:82:AE'), ('right', '38:18:2B:18:9D:6A'))
 
 
@@ -20,7 +19,7 @@ def address(value):
 
 
 def load_boards():
-    path = CONFIG_PATH if CONFIG_PATH.exists() else LEGACY_CONFIG_PATH
+    path = CONFIG_PATH
     if not path.exists():
         return DEFAULT_BOARDS
     try:

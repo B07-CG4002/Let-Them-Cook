@@ -46,12 +46,8 @@ def test_command_loop_correlates_and_verifies_modified_payload():
     asyncio.run(run())
 
 
-@pytest.mark.parametrize("observed_magic, expected_magic", [
-    (None, b"LC"),
-    (b"W7", b"W7"),
-    (b"LC", b"LC"),
-])
-def test_bridge_command_matches_observed_board_packet_magic(observed_magic, expected_magic):
+@pytest.mark.parametrize("sensor_seen_first", [False, True])
+def test_bridge_command_uses_packet_magic(sensor_seen_first):
     from common.control import COMMAND, ControlFrame, decode_control, encode_control, transformed_values
     from common.sensor import SensorPacket, encode_packet
     from laptop.bridge import Bridge, BridgeConfig
@@ -71,22 +67,21 @@ def test_bridge_command_matches_observed_board_packet_magic(observed_magic, expe
                 modified = SensorPacket(1, 7, request.request_id, 50,
                                         transformed_values(original.values), version=2)
                 bridge.control.receive(None, encode_control(ControlFrame(COMMAND | 128, 1,
-                    request.request_id, payload=encode_packet(modified, magic=expected_magic)), mtu=64))
+                    request.request_id, payload=encode_packet(modified)), mtu=64))
 
         bridge.control.attach(Client(), 7)
         bridge.inbox.activate(1)
-        if observed_magic is not None:
+        if sensor_seen_first:
             sensor = SensorPacket(1, 7, 1, 100, (0,) * 8, version=2)
-            assert bridge.enqueue(1, encode_packet(sensor, magic=observed_magic))
+            assert bridge.enqueue(1, encode_packet(sensor))
         command = SensorPacket(1, 7, 101, 0, (0,) * 8, version=2)
         await bridge.control.command(command)
-        assert sent == [expected_magic]
+        assert sent == [b"LC"]
 
     asyncio.run(run())
 
 
 @pytest.mark.parametrize("stats_magic, command_magic", [
-    (b"W7S1", b"W7"),
     (b"LCS1", b"LC"),
 ])
 def test_command_uses_validated_source_stats_magic_before_first_sensor(
@@ -159,7 +154,7 @@ def test_command_uses_validated_source_stats_magic_before_first_sensor(
                 modified = SensorPacket(1, 7, request.request_id, 50,
                                         transformed_values(original.values), version=2)
                 self.response_callback(None, encode_control(ControlFrame(COMMAND | 128, 1,
-                    request.request_id, payload=encode_packet(modified, magic=request.payload[:2]))))
+                    request.request_id, payload=encode_packet(modified))))
 
         worker = asyncio.create_task(bridge.ble_loop(scanner=Scanner, client_factory=Client,
                                                      active_event=active))

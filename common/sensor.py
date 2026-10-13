@@ -10,6 +10,7 @@ from typing import Tuple
 
 _PACKET = struct.Struct("<2sBBIII8h")
 PACKET_SIZE = _PACKET.size
+PACKET_MAGIC = b"LC"
 SENSOR_CHARACTERISTIC_UUID = "6e1c0005-7a45-4dc4-b678-3f2d5a9c1001"
 
 
@@ -60,13 +61,11 @@ class SensorPacket:
         return result
 
 
-def encode_packet(packet: SensorPacket, *, magic: bytes = b"LC") -> bytes:
+def encode_packet(packet: SensorPacket) -> bytes:
     if not isinstance(packet, SensorPacket):
         raise ValueError("packet must be a SensorPacket")
-    if type(magic) is not bytes or magic not in (b"LC", b"W7"):
-        raise ValueError("packet magic must be LC or W7")
     return _PACKET.pack(
-        magic, packet.version, packet.device_id, packet.boot_id, packet.seq, packet.uptime_ms,
+        PACKET_MAGIC, packet.version, packet.device_id, packet.boot_id, packet.seq, packet.uptime_ms,
         *packet.values
     )
 
@@ -75,7 +74,7 @@ def decode_packet(data: bytes) -> SensorPacket:
     if not isinstance(data, (bytes, bytearray, memoryview)) or len(data) != PACKET_SIZE:
         raise ValueError("sensor packet must contain exactly 32 bytes")
     magic, version, device_id, boot_id, seq, uptime_ms, *values = _PACKET.unpack(data)
-    if magic not in (b"LC", b"W7"):
+    if magic != PACKET_MAGIC:
         raise ValueError("invalid sensor packet magic")
     if version not in (1, 2):
         raise ValueError("unsupported sensor packet version")

@@ -266,10 +266,7 @@ def run_capture(args):
 
 def latest_report(output_root):
     root = Path(output_root).expanduser()
-    roots = [root]
-    if root == OUTPUT_ROOT:
-        roots.append(root.with_name(".week7-local"))
-    folders = [path for candidate in roots for path in candidate.glob("B07-*") if path.is_dir()]
+    folders = [path for path in root.glob("B07-*") if path.is_dir()]
     if not folders:
         raise FileNotFoundError(f"No B07 captures in {root}; run a capture first.")
     # Select the newest attempt, even when interrupted and missing its report.

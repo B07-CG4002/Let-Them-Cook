@@ -16,22 +16,7 @@ def board_module(monkeypatch, tmp_path):
     assert importlib.util.find_spec('tools.demo_boards'), 'shared board configuration is missing'
     module = importlib.import_module('tools.demo_boards')
     monkeypatch.setattr(module, 'CONFIG_PATH', tmp_path / 'boards.json')
-    monkeypatch.setattr(module, 'LEGACY_CONFIG_PATH', tmp_path / 'legacy' / 'boards.json', raising=False)
     return module
-
-
-def test_legacy_mapping_is_read_until_new_mapping_is_saved(monkeypatch, tmp_path):
-    boards = board_module(monkeypatch, tmp_path)
-    legacy = boards.LEGACY_CONFIG_PATH
-    legacy.parent.mkdir()
-    legacy.write_text(json.dumps(dict(version=1, status='ready',
-                                     left='24:6F:28:00:00:22', right='24:6F:28:00:00:42')))
-    assert dict(boards.load_boards()) == {
-        'left': '24:6F:28:00:00:22', 'right': '24:6F:28:00:00:42'}
-    boards.save_boards('24:6F:28:00:00:62', '24:6F:28:00:00:82')
-    assert dict(boards.load_boards()) == {
-        'left': '24:6F:28:00:00:62', 'right': '24:6F:28:00:00:82'}
-    assert json.loads(legacy.read_text())['left'] == '24:6F:28:00:00:22'
 
 
 def test_new_boards_persist_in_upload_order_and_drive_both_capture_and_pairing(monkeypatch, tmp_path):

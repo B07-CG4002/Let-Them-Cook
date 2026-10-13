@@ -19,17 +19,10 @@ def test_literal_source_snapshot_decodes_all_wire_fields():
         device_id=2, boot_id=7, next_seq=3, submitted=3, failures=0)
 
 
-def test_legacy_source_snapshot_still_decodes():
-    raw = (b"W7S1" + bytes([2, 0, 0, 0])
-           + bytes.fromhex("07000000030000000300000000000000"))
-
-    assert parse_source_stats(raw, expected_device_id=2) == SourceStats(
-        device_id=2, boot_id=7, next_seq=3, submitted=3, failures=0)
-
-
 @pytest.mark.parametrize("raw", [
     struct.pack("<4sB3xIIII", b"BAD!", 2, 7, 3, 3, 0),
-    b"W7S1" + bytes([2, 1, 0, 0]) + bytes(16),
+    b"LCS1" + bytes([2, 1, 0, 0]) + bytes(16),
+    struct.pack("<4sB3xIIII", b"W7S1", 2, 7, 3, 3, 0),
     bytes(23),
 ])
 def test_source_snapshot_rejects_wrong_schema(raw):
@@ -38,18 +31,18 @@ def test_source_snapshot_rejects_wrong_schema(raw):
 
 
 def test_source_snapshot_rejects_wrong_device_identity():
-    raw = struct.pack("<4sB3xIIII", b"W7S1", 1, 7, 3, 3, 0)
+    raw = struct.pack("<4sB3xIIII", b"LCS1", 1, 7, 3, 3, 0)
     with pytest.raises(ValueError, match="device"):
         parse_source_stats(raw, expected_device_id=2)
 
 
 def test_source_contract_rejects_device_ids_outside_two_gloves():
-    raw = struct.pack("<4sB3xIIII", b"W7S1", 3, 7, 0, 0, 0)
+    raw = struct.pack("<4sB3xIIII", b"LCS1", 3, 7, 0, 0, 0)
     with pytest.raises(ValueError, match="device"):
         parse_source_stats(raw)
     with pytest.raises(ValueError, match="device"):
         SourceAudit(expected_device_id=3)
-    valid = struct.pack("<4sB3xIIII", b"W7S1", 1, 7, 0, 0, 0)
+    valid = struct.pack("<4sB3xIIII", b"LCS1", 1, 7, 0, 0, 0)
     with pytest.raises(ValueError, match="expected device"):
         parse_source_stats(valid, expected_device_id=True)
 

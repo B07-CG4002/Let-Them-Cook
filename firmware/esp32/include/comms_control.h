@@ -121,9 +121,7 @@ class ControlEngine {
   size_t command(uint32_t id, uint32_t offset, const uint8_t* payload,
                  size_t length, uint32_t nowMs, uint8_t* output) {
     if (offset != 0 || length != kPacketSize) return status(output, ControlInvalid);
-    const bool validPacketMagic =
-        (payload[0] == 'L' && payload[1] == 'C') ||
-        (payload[0] == 'W' && payload[1] == '7');
+    const bool validPacketMagic = payload[0] == 'L' && payload[1] == 'C';
     if (!validPacketMagic ||
         payload[2] != 2 || payload[3] != device_ || readUint32Le(payload + 4) != boot_ ||
         readUint32Le(payload + 8) != id) return status(output, ControlInvalid);

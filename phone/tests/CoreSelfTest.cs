@@ -111,7 +111,7 @@ public static class CoreSelfTest
             request.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.KeyCertSign, true));
             using (var root = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-2), DateTimeOffset.UtcNow.AddDays(10)))
             using (var valid = Issue(root, leafKey, PhoneReceiver.TlsIdentity, false))
-            using (var wrongName = Issue(root, otherKey, "wrong.week7.internal", false))
+            using (var wrongName = Issue(root, otherKey, "wrong-host.internal", false))
             using (var expired = Issue(root, otherKey, PhoneReceiver.TlsIdentity, true))
             using (var otherRoot = new CertificateRequest("CN=OtherRoot", otherKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1).CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(2)))
             {

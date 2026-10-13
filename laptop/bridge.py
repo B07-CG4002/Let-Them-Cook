@@ -289,8 +289,6 @@ class Bridge:
             packet = decode_packet(data)
             if (self.config.expected_device_id is None or
                     packet.device_id == self.config.expected_device_id):
-                if self.control is not None:
-                    self.control.observe_sensor(data, packet)
                 self.goodput.record(packet, received_at)
                 self.log("sensor", direction="ESP->laptop", version=packet.version,
                          boot_id=packet.boot_id, seq=packet.seq, uptime_ms=packet.uptime_ms,
@@ -762,8 +760,7 @@ class Bridge:
                         control_char = service.get_characteristic(uuid)
                         if control_char is None or property_name not in control_char.properties:
                             raise ValueError("protected B07 control characteristics missing; update firmware")
-                    self.control.attach(client, snapshot.boot_id,
-                                        packet_magic=bytes(raw_snapshot[:2]))
+                    self.control.attach(client, snapshot.boot_id)
                     control_generation = self.control._generation
                     def control_notification(sender, data, gen=control_generation):
                         self.control.receive(sender, data, generation=gen)

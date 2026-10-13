@@ -1,4 +1,5 @@
 """Foreground Ultra96 status/start operations for the existing demo CLI."""
+import os
 from pathlib import Path
 import shlex
 import subprocess
@@ -25,7 +26,10 @@ def ssh_command(script):
     return command + [tunnel[-1], "sh -c " + shlex.quote(script)]
 
 
-def start_script():
+def start_script(session_id=None):
+    # Same default as the laptop launcher, so service and capture agree.
+    if session_id is None:
+        session_id = os.environ.get("LTC_COMMS_SESSION", "ltc-comms")
     # A failed listener query is an error, never evidence that the ports are free.
     return f'''set -eu
 cd {shlex.quote(BOARD_SOURCE)}
@@ -45,7 +49,7 @@ while read -r b07_state b07_recv_q b07_send_q b07_local b07_peer; do
 done <<EOF
 $b07_listeners
 EOF
-exec /usr/bin/python3 -u -m ultra96.server --cert {BOARD_ROOT}/tls/server-cert.pem --key {BOARD_ROOT}/tls/server-key.pem --session-id week7-demo --ingest-port 8888 --gateway-port 9999
+exec /usr/bin/python3 -u -m ultra96.server --cert {BOARD_ROOT}/tls/server-cert.pem --key {BOARD_ROOT}/tls/server-key.pem --session-id {shlex.quote(session_id)} --ingest-port 8888 --gateway-port 9999
 '''
 
 

@@ -67,7 +67,7 @@ async def capture_tail(mode="delayed"):
                 boot = 8 if mode == "wrong_boot" else 7
                 if "remote_none" in order:
                     assert kwargs.get("use_cached") is False
-            return struct.pack("<4sB3xIIII", b"W7S1", 1, boot, seq, seq, 0)
+            return struct.pack("<4sB3xIIII", b"LCS1", 1, boot, seq, seq, 0)
 
         async def start_notify(self, uuid, callback):
             self.callback = callback

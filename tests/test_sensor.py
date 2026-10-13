@@ -21,29 +21,14 @@ def test_encoder_emits_lc_magic():
     assert raw[:2] == b"LC"
 
 
-def test_encoder_can_emit_legacy_magic_for_old_firmware_commands():
-    from common.sensor import SensorPacket, encode_packet
-
-    packet = SensorPacket(**VECTORS[0]["packet"])
-    raw = encode_packet(packet, magic=b"W7")
-    assert raw == b"W7" + (FIXTURES / "comms-dummy.bin").read_bytes()[2:]
-
-
-def test_encoder_rejects_unknown_magic():
-    from common.sensor import SensorPacket, encode_packet
-
-    with pytest.raises(ValueError, match="magic"):
-        encode_packet(SensorPacket(**VECTORS[0]["packet"]), magic=b"WC")
-
-
-@pytest.mark.parametrize("version", [1, 2])
-def test_decoder_accepts_legacy_w7_magic(version):
-    from common.sensor import SensorPacket, decode_packet
+@pytest.mark.parametrize("magic", [b"W7", b"WC", b"lc"])
+def test_decoder_rejects_any_other_packet_magic(magic):
+    from common.sensor import decode_packet
 
     raw = bytearray((FIXTURES / "comms-dummy.bin").read_bytes())
-    raw[:2] = b"W7"
-    raw[2] = version
-    assert decode_packet(raw) == SensorPacket(**VECTORS[0]["packet"], version=version)
+    raw[:2] = magic
+    with pytest.raises(ValueError, match="magic"):
+        decode_packet(raw)
 
 
 @pytest.mark.parametrize("vector", VECTORS)

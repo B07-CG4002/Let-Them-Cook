@@ -29,7 +29,6 @@ class ControlChannel:
             raise ValueError("invalid control device/timeout")
         self.device_id, self.timeout, self.evidence = device_id, timeout, evidence
         self.client = self.boot_id = None
-        self._command_magic = b"LC"
         self._generation = 0
         self._serial = asyncio.Lock()
         self._pending = None
@@ -73,31 +72,20 @@ class ControlChannel:
         if self.evidence is not None:
             self.evidence.record(kind, device_id=self.device_id, **fields)
 
-    def attach(self, client, boot_id, *, packet_magic=b"LC"):
+    def attach(self, client, boot_id):
         if any(not task.done() for task in self._native_tasks):
             raise RuntimeError("native control write still pending")
         if client.mtu_size < MIN_CONTROL_MTU:
             raise ValueError("controls require negotiated ATT MTU >= 64")
-        if type(packet_magic) is not bytes or packet_magic not in (b"LC", b"W7"):
-            raise ValueError("command packet magic must be LC or W7")
         self.detach()
         self.client, self.boot_id = client, boot_id
-        self._command_magic = packet_magic
         self.log("control_connected", boot_id=boot_id, mtu=client.mtu_size)
 
     def detach(self):
         self._generation += 1
         self.client = self.boot_id = None
-        self._command_magic = b"LC"
         if self._pending is not None and not self._pending[1].done():
             self._pending[1].set_exception(ConnectionError("BLE control connection ended"))
-
-    def observe_sensor(self, raw, packet):
-        """Match command encoding to a validated packet from this BLE boot."""
-        magic = bytes(raw[:2])
-        if (self.client is not None and packet.device_id == self.device_id
-                and packet.boot_id == self.boot_id and magic in (b"LC", b"W7")):
-            self._command_magic = magic
 
     def receive(self, _sender, data, *, generation=None):
         """Bound both response storage and cross-thread event-loop wakeups."""
@@ -201,7 +189,7 @@ class ControlChannel:
                      boot_id=packet.boot_id, values=list(packet.values),
                      expected_values=list(transformed_values(packet.values)))
             response = await self._exchange(ControlFrame(COMMAND, self.device_id,
-                packet.seq, payload=encode_packet(packet, magic=self._command_magic)))
+                packet.seq, payload=encode_packet(packet)))
             modified = decode_packet(response.payload)
             if (response.offset != 0 or modified.version != 2 or
                     modified.device_id != packet.device_id or modified.boot_id != packet.boot_id

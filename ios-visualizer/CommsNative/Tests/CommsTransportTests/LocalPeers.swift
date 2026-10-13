@@ -104,7 +104,7 @@ private final class IOSFixturePool: @unchecked Sendable {
         let capacity: Int
         switch (hostname, expired) {
         case ("ultra96.week7.internal", false): kind = "valid"; capacity = 8
-        case ("wrong.week7.internal", false): kind = "wrong-host"; capacity = 2
+        case ("wrong-host.internal", false): kind = "wrong-host"; capacity = 2
         case ("ultra96.week7.internal", true): kind = "expired"; capacity = 2
         default: throw FixtureError.pki
         }

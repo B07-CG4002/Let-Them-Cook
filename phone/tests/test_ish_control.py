@@ -29,7 +29,7 @@ def public_key():
 
 
 def metadata():
-    return {"id": "week7-20260908", "remote_dir": "/home/xilinx/week7-control/week7-20260908",
+    return {"id": "control-run-01", "remote_dir": "/home/xilinx/comms-control/control-run-01",
             "client_public_key": public_key()}
 
 
@@ -117,9 +117,9 @@ class HelperTests(unittest.TestCase):
         stack.enter_context(patch.object(control.os, "geteuid", return_value=0, create=True))
         real_lstat = Path.lstat
         def lstat(path, *args, **kwargs):
-            if path == home / "week7-control":
+            if path == home / "comms-control":
                 return SimpleNamespace(st_mode=0o40700, st_uid=0)
-            if home / "week7-control" in path.parents:
+            if home / "comms-control" in path.parents:
                 info = real_lstat(path, *args, **kwargs)
                 return SimpleNamespace(st_mode=0o40700 if info.st_mode & 0o40000 else 0o100600, st_uid=0)
             return real_lstat(path, *args, **kwargs)
@@ -134,7 +134,7 @@ class HelperTests(unittest.TestCase):
         home, calls = self.launch()
         status = control.start_control(metadata(), "/tmp/master.sock", home)
         directory = Path(status["directory"])
-        self.assertEqual(directory.parent, home / "week7-control")
+        self.assertEqual(directory.parent, home / "comms-control")
         config = dict(line.split(None, 1) for line in (directory / "sshd_config").read_text().splitlines())
         for name, value in {"ListenAddress": "127.0.0.1", "Port": "2222", "PermitRootLogin": "prohibit-password",
                             "PasswordAuthentication": "no", "KbdInteractiveAuthentication": "no",
@@ -195,7 +195,7 @@ class HelperTests(unittest.TestCase):
             control.start_control(metadata(), "/tmp/master.sock", home)
         self.assertFalse(any("cancel" in args for args in calls))
         self.assertIn(["terminate", "34567"], calls)
-        cleanup = json.loads(next((home / "week7-control").glob("*/cleanup.json")).read_text())
+        cleanup = json.loads(next((home / "comms-control").glob("*/cleanup.json")).read_text())
         self.assertEqual(cleanup["reverse_cancel"], "outcome_unknown_board_observation_required")
 
     def test_board_preflight_failure_creates_no_local_daemon_or_scope(self):
@@ -214,7 +214,7 @@ class HelperTests(unittest.TestCase):
     def test_proc_identity_uses_executable_scoped_log_and_session_not_ish_zero_start_ticks(self):
         with tempfile.TemporaryDirectory() as tmp:
             proc = Path(tmp); process = proc / "123"; process.mkdir()
-            scope = Path("/root/week7-control/run")
+            scope = Path("/root/comms-control/run")
             (process / "stat").write_text("123 (sshd) " + " ".join(["S", "1", "123", "123"] + ["0"] * 18))
             expected_links = {str(process / "exe"): "/usr/sbin/sshd", str(process / "fd" / "2"): str(scope / "sshd.log")}
             real_readlink = control.os.readlink
