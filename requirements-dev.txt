@@ -1,0 +1,4 @@
+# Local provisioning and test tools; Ultra96 runtime remains standard-library-only.
+pytest>=8,<10
+cryptography>=42,<51
+pyserial==3.5
