@@ -376,6 +376,62 @@ def test_pki_refuses_git_and_overwrites_and_has_selected_certificate_extensions(
     assert (cert.not_valid_after_utc - cert.not_valid_before_utc).days == 30
 
 
+def test_renewed_server_certificate_keeps_the_ca_and_is_trusted_by_existing_clients(pki, tmp_path_factory):
+    from common.tls import client_context, server_context
+    from common.wire import read_frame, write_frame
+    from cryptography import x509
+    from tools.generate_comms_pki import renew_server_identity
+    from ultra96.server import CommsServer
+    folder, other = pki
+    renewed = renew_server_identity(folder, tmp_path_factory.mktemp("comms-renewed-pki"))
+    assert sorted(path.name for path in renewed.iterdir()) == ["ca-cert.pem", "server-cert.pem", "server-key.pem"]
+    assert (renewed / "ca-cert.pem").read_bytes() == (folder / "ca-cert.pem").read_bytes()
+    assert (renewed / "server-key.pem").read_bytes() != (folder / "server-key.pem").read_bytes()
+    ca = x509.load_pem_x509_certificate((folder / "ca-cert.pem").read_bytes())
+    cert = x509.load_pem_x509_certificate((renewed / "server-cert.pem").read_bytes())
+    assert cert.issuer == ca.subject
+    assert cert.extensions.get_extension_for_class(x509.SubjectAlternativeName).value.get_values_for_type(
+        x509.DNSName) == ["ultra96.week7.internal"]
+    assert (cert.not_valid_after_utc - cert.not_valid_before_utc).days == 30
+
+    async def check():
+        server = CommsServer(server_context(renewed / "server-cert.pem", renewed / "server-key.pem"),
+                             ingest_port=0, gateway_port=0)
+        await server.start()
+        try:
+            # A client that only holds the original CA file accepts the renewed server.
+            reader, writer = await asyncio.open_connection("127.0.0.1", server.gateway_port,
+                ssl=client_context(folder / "ca-cert.pem"), server_hostname="ultra96.week7.internal")
+            await write_frame(writer, {"v": 1, "type": "SUBSCRIBE", "session_id": "ltc-comms"})
+            assert await read_frame(reader) == {"v": 1, "type": "SUBSCRIBED", "session_id": "ltc-comms"}
+            await disconnect(writer)
+            with pytest.raises(ssl.SSLError):
+                await asyncio.open_connection("127.0.0.1", server.gateway_port,
+                    ssl=client_context(other / "ca-cert.pem"), server_hostname="ultra96.week7.internal")
+        finally:
+            await server.close()
+    run(check())
+
+
+def test_renewal_refuses_a_mismatched_key_an_occupied_folder_and_git(pki, tmp_path):
+    from tools.generate_comms_pki import renew_server_identity
+    folder, other = pki
+    mixed = tmp_path / "mixed"
+    mixed.mkdir()
+    (mixed / "ca-cert.pem").write_bytes((folder / "ca-cert.pem").read_bytes())
+    (mixed / "ca-key.pem").write_bytes((other / "ca-key.pem").read_bytes())
+    with pytest.raises(ValueError, match="does not belong"):
+        renew_server_identity(mixed, tmp_path / "out")
+    assert not (tmp_path / "out").exists()
+    with pytest.raises(ValueError, match="overwrite"):
+        renew_server_identity(folder, folder)
+    with pytest.raises(FileNotFoundError):
+        renew_server_identity(tmp_path / "missing", tmp_path / "out")
+    (tmp_path / ".git").write_text("gitdir: elsewhere")
+    with pytest.raises(ValueError, match="outside Git"):
+        renew_server_identity(folder, tmp_path / "secrets")
+
+
 def test_phone_simulator_receives_results_from_independent_gateway(pki):
     from laptop.phone_simulator import receive_results
     from common.wire import read_frame, write_frame

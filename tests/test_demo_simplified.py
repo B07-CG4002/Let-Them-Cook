@@ -52,7 +52,8 @@ def test_live_dispatches_capture_and_service_dispatches_maintenance(monkeypatch)
     assert demo.main(["live"]) == 7
     assert calls[0].keyboard is True
     from tools import demo_service
-    monkeypatch.setattr(demo_service, "main", lambda start=False: calls.append(start) or 8)
+    monkeypatch.setattr(demo_service, "main",
+                        lambda start=False, session_id=None: calls.append(start) or 8)
     assert demo.main(["service"]) == 8
     assert calls[-1] is False
     assert demo.main(["service", "--start"]) == 8

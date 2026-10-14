@@ -21,7 +21,7 @@ OWNER = "CommsNativePreview transport XCTest PKI; generated fixture version 1\n"
 FILES = {"ca.pem", "server.pem", "server.key"}
 VARIANTS = (
     [(f"valid-{index:02d}", "ultra96.week7.internal", False) for index in range(8)]
-    + [(f"wrong-host-{index:02d}", "wrong.week7.internal", False) for index in range(2)]
+    + [(f"wrong-host-{index:02d}", "wrong-host.internal", False) for index in range(2)]
     + [(f"expired-{index:02d}", "ultra96.week7.internal", True) for index in range(2)]
 )
 

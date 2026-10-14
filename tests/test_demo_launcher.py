@@ -209,8 +209,8 @@ def test_explicit_capture_options_reach_the_existing_bridge(tmp_path):
 @pytest.mark.parametrize("mode", ["run", "live"])
 @pytest.mark.parametrize("environment, extra, expected", [
     (None, [], "ltc-comms"),
-    ("week7-demo", [], "week7-demo"),
-    ("another-session", ["--session-id", "week7-demo"], "week7-demo"),
+    ("env-session", [], "env-session"),
+    ("env-session", ["--session-id", "cli-session"], "cli-session"),
 ])
 def test_capture_session_selection(tmp_path, monkeypatch, mode, environment, extra, expected):
     if environment is None:
@@ -224,13 +224,6 @@ def test_capture_session_selection(tmp_path, monkeypatch, mode, environment, ext
 
 def test_capture_defaults_to_comms_local():
     assert demo._parser().parse_args(["run"]).output_root == demo.ROOT / ".comms-local"
-
-
-def test_latest_report_finds_existing_legacy_capture(tmp_path, monkeypatch):
-    new_root = tmp_path / ".comms-local"
-    legacy = saved_capture(tmp_path / ".week7-local")
-    monkeypatch.setattr(demo, "OUTPUT_ROOT", new_root)
-    assert demo.latest_report(new_root) == legacy / "report.json"
 
 
 def test_nonzero_child_exit_survives_capture_and_saved_report_review(

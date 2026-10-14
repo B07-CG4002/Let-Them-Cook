@@ -31,7 +31,7 @@ class Writer:
 
 
 def source_bytes(device, boot, next_seq, submitted, failures=0):
-    return struct.pack("<4sB3xIIII", b"W7S1", device, boot, next_seq,
+    return struct.pack("<4sB3xIIII", b"LCS1", device, boot, next_seq,
                        submitted, failures)
 
 

@@ -26,9 +26,61 @@ def local_shell():
     return shell
 
 
+def launch_arguments(script):
+    launch, = [line for line in script.splitlines() if line.startswith("exec ")]
+    return shlex.split(launch)
+
+
+def test_start_script_launches_the_requested_session(service):
+    arguments = launch_arguments(service.start_script("rehearsal-2"))
+    assert arguments[arguments.index("--session-id") + 1] == "rehearsal-2"
+
+
+def test_start_script_keeps_a_hostile_session_as_one_argument(service):
+    session = "two words; quote'$(id)"
+    arguments = launch_arguments(service.start_script(session))
+    assert arguments[arguments.index("--session-id") + 1] == session
+    assert arguments[-4:] == ["--ingest-port", "8888", "--gateway-port", "9999"]
+
+
+@pytest.mark.parametrize("session", ["", "x" * 129, "two\nlines", None])
+def test_start_script_rejects_an_invalid_session(service, session):
+    with pytest.raises(ValueError):
+        service.start_script(session)
+
+
+@pytest.mark.parametrize("environment, extra, expected", [
+    (None, [], "ltc-comms"),
+    ("env-session", [], "env-session"),
+    ("env-session", ["--session-id", "cli-session"], "cli-session"),
+])
+def test_service_start_uses_the_same_session_rule_as_capture(service, monkeypatch, capsys,
+                                                            environment, extra, expected):
+    import demo
+
+    if environment is None:
+        monkeypatch.delenv("LTC_COMMS_SESSION", raising=False)
+    else:
+        monkeypatch.setenv("LTC_COMMS_SESSION", environment)
+    scripts = []
+
+    def run(command, **kwargs):
+        scripts.append(shlex.split(command[-1])[2])
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(service.subprocess, "run", run)
+    monkeypatch.setattr("builtins.input", lambda _: "")
+    assert demo.main(["service", "--start"] + extra) == 0
+    script, = scripts
+    arguments = launch_arguments(script)
+    assert arguments[arguments.index("--session-id") + 1] == expected
+    assert "Session: " + expected in capsys.readouterr().out
+    assert demo._parser().parse_args(["run"] + extra).session_id == expected
+
+
 def run_start_guard(module, shell, monkeypatch, listeners="", ss_status=0):
     monkeypatch.setattr(module, "BOARD_SOURCE", "/")
-    lines = module.start_script().splitlines()
+    lines = module.start_script("ltc-comms").splitlines()
     launch_lines = [index for index, line in enumerate(lines) if line.startswith("exec ")]
     assert len(launch_lines) == 1, "Refuse to run an unrecognized server-launch script"
     launch = shlex.split(lines[launch_lines[0]])

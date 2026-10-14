@@ -291,7 +291,7 @@ namespace LetThemCook.Comms
         {
             if (certificate == null || authority == null ||
                 (errors & (SslPolicyErrors.RemoteCertificateNotAvailable | SslPolicyErrors.RemoteCertificateNameMismatch)) != 0) return false;
-            // SslStream still checks SAN against ultra96.week7.internal. Rebuild a chain
+            // SslStream still checks SAN against PhoneReceiver.TlsIdentity. Rebuild a chain
             // that must terminate at the explicitly supplied private CA, never any unknown CA.
             using (var chain = new X509Chain())
             using (var leaf = new X509Certificate2(certificate))

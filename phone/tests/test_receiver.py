@@ -349,7 +349,7 @@ class TlsReceiverTests(unittest.IsolatedAsyncioTestCase):
         server = await asyncio.start_server(handle, "127.0.0.1", 0, ssl=self.server_context)
         port = server.sockets[0].getsockname()[1]
         try:
-            for ca, identity in [("wrong", "ultra96.week7.internal"), ("pki", "wrong.week7.internal")]:
+            for ca, identity in [("wrong", "ultra96.week7.internal"), ("pki", "wrong-host.internal")]:
                 with self.subTest(ca=ca, identity=identity), self.assertRaises(ssl.SSLCertVerificationError):
                     await asyncio.open_connection("127.0.0.1", port, ssl=tls_context(self.folder / ca / "ca-cert.pem"), server_hostname=identity)
         finally:

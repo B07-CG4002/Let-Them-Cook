@@ -67,6 +67,8 @@ def _parser():
     report.add_argument("--output-root", type=Path, default=OUTPUT_ROOT)
     service = commands.add_parser("service", help="inspect the Ultra96 service before the demo")
     service.add_argument("--start", action="store_true", help="start only after confirming both ports are free")
+    service.add_argument("--session-id", default=os.environ.get("LTC_COMMS_SESSION", "ltc-comms"),
+                         help="session the started server accepts; default: LTC_COMMS_SESSION or ltc-comms")
     return parser
 
 
@@ -266,10 +268,7 @@ def run_capture(args):
 
 def latest_report(output_root):
     root = Path(output_root).expanduser()
-    roots = [root]
-    if root == OUTPUT_ROOT:
-        roots.append(root.with_name(".week7-local"))
-    folders = [path for candidate in roots for path in candidate.glob("B07-*") if path.is_dir()]
+    folders = [path for path in root.glob("B07-*") if path.is_dir()]
     if not folders:
         raise FileNotFoundError(f"No B07 captures in {root}; run a capture first.")
     # Select the newest attempt, even when interrupted and missing its report.
@@ -290,7 +289,7 @@ def main(argv=None):
             return run_capture(args)
         if args.action == "service":
             from tools.demo_service import main as service_main
-            return service_main(start=args.start)
+            return service_main(start=args.start, session_id=args.session_id)
         return show_report(args.path if args.path is not None else latest_report(args.output_root))
     except (OSError, ValueError, subprocess.SubprocessError) as error:
         print(f"Demo could not complete: {error}", file=sys.stderr)

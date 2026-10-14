@@ -4,6 +4,7 @@ import shlex
 import subprocess
 
 from tools.ssh_tunnel import tunnel_command
+from ultra96.protocol import validate_session
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,7 +26,8 @@ def ssh_command(script):
     return command + [tunnel[-1], "sh -c " + shlex.quote(script)]
 
 
-def start_script():
+def start_script(session_id):
+    validate_session(session_id)
     # A failed listener query is an error, never evidence that the ports are free.
     return f'''set -eu
 cd {shlex.quote(BOARD_SOURCE)}
@@ -45,17 +47,18 @@ while read -r b07_state b07_recv_q b07_send_q b07_local b07_peer; do
 done <<EOF
 $b07_listeners
 EOF
-exec /usr/bin/python3 -u -m ultra96.server --cert {BOARD_ROOT}/tls/server-cert.pem --key {BOARD_ROOT}/tls/server-key.pem --session-id week7-demo --ingest-port 8888 --gateway-port 9999
+exec /usr/bin/python3 -u -m ultra96.server --cert {BOARD_ROOT}/tls/server-cert.pem --key {BOARD_ROOT}/tls/server-key.pem --session-id {shlex.quote(session_id)} --ingest-port 8888 --gateway-port 9999
 '''
 
 
-def main(start=False) -> int:
+def main(start=False, session_id="ltc-comms") -> int:
     if start:
+        script = start_script(session_id)
         print("Run 'python demo.py service' first. Reuse an existing healthy service.")
         print("Confirm ESP, board and iPhone versions match this deployment: " + BOARD_SOURCE)
+        print("Session: " + session_id + " (the capture and the phone must use the same one)")
         if input("Press Enter to start only if absent, or type q to cancel: ").strip():
             return 130
-        script = start_script()
     else:
         # Read-only checks: no deployment, process termination or service restart.
         script = '''set -eu

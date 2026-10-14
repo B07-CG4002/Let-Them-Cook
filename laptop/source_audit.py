@@ -10,6 +10,7 @@ from common.sensor import SensorPacket
 
 SOURCE_STATS_UUID = "6e1c0006-7a45-4dc4-b678-3f2d5a9c1001"
 _SOURCE_STATS = struct.Struct("<4sB3xIIII")
+SOURCE_STATS_MAGIC = b"LCS1"
 _UINT32_MASK = 0xFFFFFFFF
 
 
@@ -46,8 +47,8 @@ def parse_source_stats(data: bytes, *, expected_device_id: Optional[int] = None)
     if raw[5:8] != b"\0\0\0":
         raise ValueError("source statistics reserved bytes must be zero")
     magic, device_id, boot_id, next_seq, submitted, failures = _SOURCE_STATS.unpack(raw)
-    if magic not in (b"LCS1", b"W7S1"):
-        raise ValueError("invalid source statistics magic")
+    if magic != SOURCE_STATS_MAGIC:
+        raise ValueError("invalid source statistics magic; flash this board with the current firmware")
     if expected_device_id is not None and device_id != expected_device_id:
         raise ValueError("source statistics device identity mismatch")
     return SourceStats(device_id, boot_id, next_seq, submitted, failures)
