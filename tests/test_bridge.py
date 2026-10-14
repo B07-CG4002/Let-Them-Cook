@@ -1,13 +1,19 @@
 import asyncio
+import struct
+from types import SimpleNamespace
 import unittest
-from unittest.mock import AsyncMock
-from common.sensor import SensorPacket, dummy_values, encode_packet
-from laptop.bridge import Bridge, BridgeConfig, RawInbox, StreamTracker
+from unittest.mock import AsyncMock, patch
+from common.sensor import DUMMY_FIXTURES, SENSOR_MTU_FLOOR, SensorPacket, encode_packet
+from laptop.bridge import Bridge, BridgeConfig, RawInbox, StreamTracker, SENSOR_UUID
 from tools.ssh_tunnel import tunnel_command, supervise
 
 
+def values(seq):
+    return DUMMY_FIXTURES[seq % len(DUMMY_FIXTURES)]
+
+
 def payload(seq=0, boot=7):
-    return encode_packet(SensorPacket(1, boot, seq, 100 * seq, dummy_values(seq)))
+    return encode_packet(SensorPacket(1, boot, seq, 100 * seq, values(seq)))
 
 
 class BridgeTests(unittest.IsolatedAsyncioTestCase):
@@ -30,8 +36,8 @@ class BridgeTests(unittest.IsolatedAsyncioTestCase):
     async def test_tracker_wrap_duplicate_old_and_new_boot(self):
         tracker = StreamTracker()
         for seq in [0xfffffffe, 0xffffffff, 0, 2, 2, 1]:
-            tracker.observe(SensorPacket(1, 7, seq, 0, dummy_values(seq)))
-        tracker.observe(SensorPacket(1, 8, 0, 0, dummy_values(0)))
+            tracker.observe(SensorPacket(1, 7, seq, 0, values(seq)))
+        tracker.observe(SensorPacket(1, 8, 0, 0, values(0)))
         self.assertEqual((tracker.gaps, tracker.duplicates, tracker.out_of_order, tracker.new_boots),
                          (1, 1, 1, 1))
 
@@ -53,31 +59,74 @@ class BridgeTests(unittest.IsolatedAsyncioTestCase):
         bridge.inbox.activate(1)
         bridge.inbox.put(1, payload(), bridge.clock())
         bridge._write_frame = AsyncMock()
-        bridge._read_frame = AsyncMock(return_value=dict(v=1, type="INGEST_ACK", session_id="ltc-comms",
-            device_id=1, boot_id=7, seq=999, status="accepted"))
+        bridge._read_frame = AsyncMock(return_value=dict(v=3, type="INGEST_ACK", session_id="ltc-comms",
+            device_id=1, boot_id=7, seq=999, request_id=None, status="accepted"))
         await bridge.forward_one()
         self.assertEqual(bridge.metrics.ack_errors, 1)
         self.assertEqual(bridge.metrics.ambiguous_dropped, 1)
         self.assertEqual(bridge.inbox.size, 0)
         self.assertIsNone(bridge.writer)
 
-    async def test_valid_ack_and_bad_dummy_packet(self):
+    async def test_valid_ack_and_packets_that_are_not_version_3(self):
         writer = FakeWriter()
         connector = AsyncMock(return_value=(object(), writer))
         bridge = Bridge(BridgeConfig(ca_file="unused"), connector=connector)
         bridge.inbox.activate(1)
         bridge._write_frame = AsyncMock()
-        bridge._read_frame = AsyncMock(return_value=dict(v=1, type="INGEST_ACK", session_id="ltc-comms",
-            device_id=1, boot_id=7, seq=0, status="accepted"))
+        bridge._read_frame = AsyncMock(return_value=dict(v=3, type="INGEST_ACK", session_id="ltc-comms",
+            device_id=1, boot_id=7, seq=0, request_id=None, status="accepted"))
         bridge.inbox.put(1, payload(), bridge.clock())
         await bridge.forward_one()
         self.assertEqual(bridge.metrics.acked, 1)
-        bad = SensorPacket(1, 7, 1, 100, (0,) * 8)
-        bridge.inbox.put(1, encode_packet(bad), bridge.clock())
-        await bridge.forward_one()
-        self.assertEqual(bridge.metrics.malformed, 1)
+        # A 32-byte packet from version-2 firmware, a 38-byte packet with version byte 2
+        # and a truncated version-3 packet are malformed and never forwarded.
+        old_firmware = struct.pack("<2sBBIII8h", b"LC", 2, 1, 7, 1, 100, *([0] * 8))
+        wrong_version = bytearray(payload(1))
+        wrong_version[2] = 2
+        for raw in (old_firmware, bytes(wrong_version), payload(1)[:-1]):
+            bridge.inbox.put(1, raw, bridge.clock())
+            await bridge.forward_one()
+        self.assertEqual(bridge.metrics.malformed, 3)
         self.assertEqual(bridge._write_frame.await_count, 1)
         await bridge.close_transport()
+
+    async def test_ble_mtu_floor_is_the_38_byte_packet_plus_att_header(self):
+        self.assertEqual(SENSOR_MTU_FLOOR, 41)
+        for mtu in (40, 41):
+            stop = asyncio.Event()
+            bridge = Bridge(BridgeConfig(ca_file="unused", diagnostic_unprotected=True))
+
+            class Scanner:
+                @staticmethod
+                async def find_device_by_filter(predicate, timeout):
+                    return SimpleNamespace(address="AA:BB:CC:DD:EE:FF")
+
+            class Client:
+                mtu_size = mtu
+                is_connected = False
+
+                def __init__(self, _device, disconnected_callback):
+                    sensor = SimpleNamespace(properties=["notify"])
+                    service = SimpleNamespace(
+                        get_characteristic=lambda uuid: sensor if uuid == SENSOR_UUID else None)
+                    self.services = SimpleNamespace(get_service=lambda uuid: service)
+
+                async def connect(self):
+                    self.is_connected = True
+                    stop.set()  # One attempt only.
+
+                async def disconnect(self):
+                    self.is_connected = False
+
+            async def refuse(_client, *, source_rate):
+                raise OSError("connection parameters are not part of this test")
+
+            with patch("laptop.bridge.prefer_throughput", refuse, create=True):
+                await asyncio.wait_for(bridge.ble_loop(scanner=Scanner, client_factory=Client,
+                                                       stop_event=stop), 2)
+            # MTU 40 fails at the floor; MTU 41 passes it and fails later, at the patched step.
+            self.assertEqual(bridge.metrics.ble_errors, 1)
+            self.assertEqual(bridge.negotiated_mtu, None if mtu == 40 else 41)
 
     async def test_disconnect_during_connect_discards_old_generation(self):
         bridge = None
@@ -189,8 +238,8 @@ class BleLifecycleTests(unittest.IsolatedAsyncioTestCase):
         async def read(_reader, timeout):
             await asyncio.sleep(0)
             inflight[0] -= 1
-            return dict(v=1, type="INGEST_ACK", session_id="ltc-comms", device_id=1,
-                        boot_id=7, seq=sent[-1], status="accepted")
+            return dict(v=3, type="INGEST_ACK", session_id="ltc-comms", device_id=1,
+                        boot_id=7, seq=sent[-1], request_id=None, status="accepted")
         bridge._write_frame, bridge._read_frame = write, read
         await asyncio.gather(*(bridge.forward_one() for _ in range(3)))
         self.assertEqual(sent, [0, 1, 2])

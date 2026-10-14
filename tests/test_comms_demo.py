@@ -6,7 +6,7 @@ import sys
 
 import pytest
 
-from common.sensor import SensorPacket, dummy_values, encode_packet
+from common.sensor import decode_packet, encode_packet
 from common.tls import client_context, server_context
 from common.wire import ProtocolError, read_frame, write_frame
 from tools.comms_demo import DemoBridge, audit_logs, packet_example
@@ -16,11 +16,19 @@ from laptop.bridge import BridgeConfig
 def test_packet_example_matches_literal_bytes_and_real_protocol():
     example = packet_example()
     assert example["kind"] == "illustrative example; not captured hardware evidence"
-    assert example["ble_hex"] == "4c430101070000002a0000006810000042fc4cfc56fc60fc6afc74fc7efc88fc"
-    assert example["ble_bytes"] == 32
-    assert example["sensor_batch"]["values"] == [-958, -948, -938, -928, -918, -908, -898, -888]
+    # Hand-checked: LC, version 3, device 1, boot 7, seq 42, uptime 4200, 11 x int16 LE.
+    assert example["ble_hex"] == ("4c43" "03" "01" "07000000" "2a000000" "68100000"
+                                  "b004" "d4fe" "ccde" "a00f" "30f8" "dc05" "e204" "48f4" "5802"
+                                  "7017" "7c15")
+    assert example["ble_bytes"] == 38
+    assert example["sensor_batch"]["values"] == [1200, -300, -8500, 4000, -2000, 1500,
+                                                 1250, -3000, 600, 6000, 5500]
+    assert example["sensor_batch"]["request_id"] is None
+    assert example["ingest_ack"]["v"] == example["gesture_result"]["v"] == 3
     assert example["gesture_result"]["result_id"] == "1:7:42"
-    assert example["gesture_result"]["gesture"] == "OPEN"
+    assert example["gesture_result"]["gesture"] == "CHOP"
+    assert example["gesture_result"]["confidence"] == 0.875
+    assert example["frames"]["subscribe"]["json_utf8"].startswith('{"v":1,')
     for frame in example["frames"].values():
         assert int(frame["length_prefix_hex"], 16) == len(frame["json_utf8"].encode())
 
@@ -73,11 +81,34 @@ def test_incomplete_duplicate_fault_or_short_evidence_cannot_pass(tmp_path, chan
     assert not audit_logs(save(tmp_path, rows), minimum_count=minimum)["audit_passed"]
 
 
-@pytest.mark.parametrize("change", ["wrong_gesture", "wrong_session", "bad_id", "duplicate_json", "truncated", "after_summary", "summary_session", "missing_summary_session", "deep_json"])
+def test_model_labels_and_fractional_confidence_pass_the_audit(tmp_path):
+    rows = records()
+    rows[1].update(gesture="PICKUPHOLD", confidence=0.42)
+    assert audit_logs(save(tmp_path, rows), minimum_count=1)["audit_passed"]
+    rows[1].update(gesture="fire-ext_2", confidence=0)
+    assert audit_logs(save(tmp_path, rows), minimum_count=1)["audit_passed"]
+
+
+@pytest.mark.parametrize("change", ["spaced_gesture", "long_gesture", "empty_gesture", "high_confidence",
+    "negative_confidence", "boolean_confidence", "text_confidence", "wrong_session", "bad_id",
+    "duplicate_json", "truncated", "after_summary", "summary_session", "missing_summary_session",
+    "deep_json"])
 def test_invalid_evidence_is_rejected(tmp_path, change):
     rows = records()
-    if change == "wrong_gesture":
-        rows[1]["gesture"] = "FIST"
+    if change == "spaced_gesture":
+        rows[1]["gesture"] = "FIRE EXT"
+    elif change == "long_gesture":
+        rows[1]["gesture"] = "A" * 33
+    elif change == "empty_gesture":
+        rows[1]["gesture"] = ""
+    elif change == "high_confidence":
+        rows[1]["confidence"] = 1.5
+    elif change == "negative_confidence":
+        rows[1]["confidence"] = -0.25
+    elif change == "boolean_confidence":
+        rows[1]["confidence"] = True
+    elif change == "text_confidence":
+        rows[1]["confidence"] = "1.0"
     elif change == "wrong_session":
         rows[1]["session_id"] = "another-demo"
     elif change == "bad_id":
@@ -102,8 +133,9 @@ def test_invalid_evidence_is_rejected(tmp_path, change):
 def test_raw_phone_results_match_sender_ack_without_desktop_subscriber(tmp_path):
     rows = records()
     rows.pop(1)
-    phone_result = dict(v=1, type="GESTURE_RESULT", session_id="ltc-comms", device_id=1,
-                        boot_id=7, seq=42, result_id="1:7:42", gesture="OPEN", confidence=1.0)
+    phone_result = dict(v=3, type="GESTURE_RESULT", session_id="ltc-comms", device_id=1,
+                        boot_id=7, seq=42, request_id=None, result_id="1:7:42", gesture="OPEN",
+                        confidence=1.0)
     phone = save(tmp_path, [phone_result], "phone.jsonl")
     result = audit_logs(save(tmp_path, rows), phone_results=phone, minimum_count=1)
     assert result["audit_passed"] and result["matched"] == 1
@@ -126,8 +158,9 @@ def test_sender_timing_exposes_stall_and_trailing_silence():
     async def check():
         now = [100.0]
         bridge = DemoBridge(BridgeConfig(ca_file="unused.pem"), lambda e: None, clock=lambda: now[0])
-        packet = SensorPacket(1, 7, 42, 4200, dummy_values(42))
-        ack = dict(v=1, type="INGEST_ACK", session_id="ltc-comms", device_id=1, boot_id=7, seq=42, status="accepted")
+        packet = decode_packet(bytes.fromhex(packet_example()["ble_hex"]))
+        ack = dict(v=3, type="INGEST_ACK", session_id="ltc-comms", device_id=1, boot_id=7, seq=42,
+                   request_id=None, status="accepted")
         now[0] = 103.0
         bridge._check_ack(ack, packet)
         now[0] = 109.0
@@ -138,6 +171,10 @@ def test_sender_timing_exposes_stall_and_trailing_silence():
         assert not timing["activity_met"]
         now[0] = 120.0
         assert bridge.ack_timing()["max_gap_seconds"] == 11.0
+        # The override passes a command's request_id through to the bridge's own check.
+        bridge._check_ack(dict(ack, request_id=42), packet, request_id=42)
+        with pytest.raises(ProtocolError):
+            bridge._check_ack(ack, packet, request_id=42)
     asyncio.run(check())
 
 
@@ -158,7 +195,7 @@ def test_sender_observes_actual_tls_ack_and_does_not_create_a_subscriber(tmp_pat
                 ssl=client_context(pki / "ca-cert.pem"), server_hostname="ultra96.week7.internal")
             await write_frame(writer, dict(v=1, type="SUBSCRIBE", session_id="ltc-comms"))
             assert (await read_frame(reader))["type"] == "SUBSCRIBED"
-            packet = SensorPacket(1, 7, 42, 4200, dummy_values(42))
+            packet = decode_packet(bytes.fromhex(packet_example()["ble_hex"]))
             bridge.inbox.activate(1)
             bridge.inbox.put(1, encode_packet(packet), bridge.clock())
             await bridge.forward_one()
@@ -169,8 +206,8 @@ def test_sender_observes_actual_tls_ack_and_does_not_create_a_subscriber(tmp_pat
             assert bridge.metrics.acked == 1
             before = len(events)
             with pytest.raises(ProtocolError):
-                bridge._check_ack(dict(v=1, type="INGEST_ACK", session_id="ltc-comms",
-                    device_id=1, boot_id=8, seq=42, status="accepted"), packet)
+                bridge._check_ack(dict(v=3, type="INGEST_ACK", session_id="ltc-comms",
+                    device_id=1, boot_id=8, seq=42, request_id=None, status="accepted"), packet)
             assert len(events) == before
         finally:
             await bridge.close_transport()

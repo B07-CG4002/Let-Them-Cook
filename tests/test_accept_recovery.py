@@ -58,6 +58,8 @@ class AcceptRecoveryTests(unittest.IsolatedAsyncioTestCase):
             gateway_port = 9999
             metrics = {}
             closed = False
+            model = SimpleNamespace(name="dummy")
+            model_start_seconds = 0.0
             async def start(self):
                 pass
             async def wait_failure(self):

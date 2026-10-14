@@ -19,7 +19,7 @@ from common.control import (COMMAND, SET_RATE, FILE_BEGIN, FILE_CHUNK, FILE_END,
     FILE_ABORT, RESPONSE_FLAG, CONTROL_UUID, MIN_CONTROL_MTU, MAX_FILE_SIZE,
     ControlFrame, encode_control, decode_control, chunk_size, file_metadata,
     parse_file_metadata, transformed_values)
-from common.sensor import SensorPacket, encode_packet, decode_packet
+from common.sensor import SensorPacket, encode_packet, decode_packet, VERSION
 from common.wire import ProtocolError
 
 
@@ -182,16 +182,16 @@ class ControlChannel:
         async with self._serial:
             if generation != self._generation:
                 raise ConnectionError("command belongs to a disconnected BLE generation")
-            if (packet.version != 2 or packet.device_id != self.device_id or
+            if (packet.version != VERSION or packet.device_id != self.device_id or
                     packet.boot_id != self.boot_id or packet.uptime_ms != 0):
-                raise ValueError("command requires current boot, device, v2 and uptime zero")
+                raise ValueError("command requires current boot, device, v3 and uptime zero")
             self.log("command_original", direction="laptop->ESP", request_id=packet.seq,
                      boot_id=packet.boot_id, values=list(packet.values),
                      expected_values=list(transformed_values(packet.values)))
             response = await self._exchange(ControlFrame(COMMAND, self.device_id,
                 packet.seq, payload=encode_packet(packet)))
             modified = decode_packet(response.payload)
-            if (response.offset != 0 or modified.version != 2 or
+            if (response.offset != 0 or modified.version != VERSION or
                     modified.device_id != packet.device_id or modified.boot_id != packet.boot_id
                     or modified.seq != packet.seq
                     or modified.values != transformed_values(packet.values)):

@@ -6,7 +6,7 @@ from contextlib import suppress
 
 import pytest
 
-from common.sensor import SensorPacket, dummy_values, encode_packet
+from common.sensor import DUMMY_FIXTURES, SensorPacket, encode_packet
 from laptop.bridge import Bridge, BridgeConfig
 from laptop.source_audit import SourceStats
 
@@ -85,12 +85,13 @@ class DelayedAckTransport:
         self.max_outstanding = max(self.max_outstanding, self.outstanding)
         written_at = asyncio.get_running_loop().time()
         acknowledgement = {
-            "v": 1,
+            "v": 3,
             "type": "INGEST_ACK",
             "session_id": copied["session_id"],
             "device_id": copied["device_id"],
             "boot_id": copied["boot_id"],
             "seq": copied["seq"],
+            "request_id": copied["request_id"],
             "status": "accepted",
         }
 
@@ -225,10 +226,14 @@ def _finish_source(bridge: Bridge, *, count: int, boot_id: int = BOOT_ID) -> Non
     ))
 
 
+def _values(seq: int) -> tuple:
+    return DUMMY_FIXTURES[seq % len(DUMMY_FIXTURES)]
+
+
 def _enqueue(bridge: Bridge, count: int, *, boot_id: int = BOOT_ID) -> None:
     device_id = bridge.config.expected_device_id
     for seq in range(count):
-        packet = SensorPacket(device_id, boot_id, seq, seq * 100, dummy_values(seq))
+        packet = SensorPacket(device_id, boot_id, seq, seq * 100, _values(seq))
         assert bridge.enqueue(1, encode_packet(packet))
 
 
@@ -297,7 +302,7 @@ async def _run_delayed_ack_case() -> tuple[Bridge, DelayedAckTransport, dict]:
                 BOOT_ID,
                 seq,
                 seq * 100,
-                dummy_values(seq),
+                _values(seq),
             )
             assert bridge.enqueue(1, encode_packet(packet))
 

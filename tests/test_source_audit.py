@@ -2,17 +2,17 @@ import struct
 
 import pytest
 
-from common.sensor import SensorPacket, dummy_values
+from common.sensor import DUMMY_FIXTURES, SensorPacket
 from laptop.source_audit import SourceAudit, SourceStats, parse_source_stats
 
 
 def packet(device_id, boot_id, seq):
     return SensorPacket(device_id, boot_id, seq, (100 * seq) & 0xFFFFFFFF,
-                        dummy_values(seq))
+                        DUMMY_FIXTURES[seq % len(DUMMY_FIXTURES)])
 
 
 def test_literal_source_snapshot_decodes_all_wire_fields():
-    raw = (b"LCS1" + bytes([2, 0, 0, 0])
+    raw = (b"LCS3" + bytes([2, 0, 0, 0])
            + bytes.fromhex("07000000030000000300000000000000"))
 
     assert parse_source_stats(raw, expected_device_id=2) == SourceStats(
@@ -21,7 +21,7 @@ def test_literal_source_snapshot_decodes_all_wire_fields():
 
 @pytest.mark.parametrize("raw", [
     struct.pack("<4sB3xIIII", b"BAD!", 2, 7, 3, 3, 0),
-    b"LCS1" + bytes([2, 1, 0, 0]) + bytes(16),
+    b"LCS3" + bytes([2, 1, 0, 0]) + bytes(16),
     struct.pack("<4sB3xIIII", b"W7S1", 2, 7, 3, 3, 0),
     bytes(23),
 ])
@@ -30,19 +30,27 @@ def test_source_snapshot_rejects_wrong_schema(raw):
         parse_source_stats(raw, expected_device_id=2)
 
 
+@pytest.mark.parametrize("magic", [b"LCS1", b"LCS2", b"LCS4", b"lcs3"])
+def test_source_snapshot_from_other_firmware_asks_for_a_reflash(magic):
+    # Version 2 firmware reported LCS1; only the current LCS3 marker is accepted.
+    raw = struct.pack("<4sB3xIIII", magic, 2, 7, 3, 3, 0)
+    with pytest.raises(ValueError, match="flash this board with the current firmware"):
+        parse_source_stats(raw, expected_device_id=2)
+
+
 def test_source_snapshot_rejects_wrong_device_identity():
-    raw = struct.pack("<4sB3xIIII", b"LCS1", 1, 7, 3, 3, 0)
+    raw = struct.pack("<4sB3xIIII", b"LCS3", 1, 7, 3, 3, 0)
     with pytest.raises(ValueError, match="device"):
         parse_source_stats(raw, expected_device_id=2)
 
 
 def test_source_contract_rejects_device_ids_outside_two_gloves():
-    raw = struct.pack("<4sB3xIIII", b"LCS1", 3, 7, 0, 0, 0)
+    raw = struct.pack("<4sB3xIIII", b"LCS3", 3, 7, 0, 0, 0)
     with pytest.raises(ValueError, match="device"):
         parse_source_stats(raw)
     with pytest.raises(ValueError, match="device"):
         SourceAudit(expected_device_id=3)
-    valid = struct.pack("<4sB3xIIII", b"LCS1", 1, 7, 0, 0, 0)
+    valid = struct.pack("<4sB3xIIII", b"LCS3", 1, 7, 0, 0, 0)
     with pytest.raises(ValueError, match="expected device"):
         parse_source_stats(valid, expected_device_id=True)
 

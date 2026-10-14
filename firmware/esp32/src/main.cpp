@@ -10,6 +10,9 @@
 #include <mbedtls/sha256.h>
 #include <vector>
 #include "comms_packet.h"
+// Compiled into the board build now; the sensor module will call scaleSample
+// and allocate a sequence number only after it succeeds.
+#include "comms_sample.h"
 #include "comms_source_stats.h"
 #include "comms_security.h"
 #include "comms_gatts_control.h"
@@ -24,9 +27,6 @@
 #ifndef COMMS_INITIAL_RATE_HZ
 #define COMMS_INITIAL_RATE_HZ 10
 #endif
-#ifndef COMMS_LEGACY_DUMMY
-#define COMMS_LEGACY_DUMMY 0
-#endif
 
 namespace {
 constexpr bool kDiagnostic = COMMS_UNPROTECTED_DIAGNOSTIC != 0;
@@ -37,7 +37,6 @@ static_assert(comms::kRequiredAuthMode == ESP_LE_AUTH_REQ_SC_MITM_BOND,
 constexpr uint32_t kReportIntervalMs = 1000;
 constexpr uint16_t kInitialRateHz = COMMS_INITIAL_RATE_HZ;
 static_assert(kInitialRateHz >= 1 && kInitialRateHz <= 200, "rate must be 1..200 Hz");
-constexpr bool kLegacyDummy = COMMS_LEGACY_DUMMY != 0;
 constexpr char kDeviceName[] = "LTC-COMMS";
 constexpr char kServiceUuid[] = "6e1c0001-7a45-4dc4-b678-3f2d5a9c1001";
 constexpr char kCounterUuid[] = "6e1c0002-7a45-4dc4-b678-3f2d5a9c1001";
@@ -447,9 +446,9 @@ void setup() {
   advertising->setScanResponse(true);
   advertising->start();
   bleReady = true;
-  Serial.printf("comms_ready device_id=%u packet_bytes=32 packet_version=%u rate_hz=%u protected=%u control_version=1 file_max_bytes=%lu\n",
-      kDeviceId, kLegacyDummy ? 1 : 2, controls->rateHz(), !kDiagnostic,
-      static_cast<unsigned long>(comms::kControlMaxFile));
+  Serial.printf("comms_ready device_id=%u packet_bytes=%u packet_version=%u rate_hz=%u protected=%u control_version=1 file_max_bytes=%lu\n",
+      kDeviceId, static_cast<unsigned>(comms::kPacketSize), comms::kPacketVersion, controls->rateHz(),
+      !kDiagnostic, static_cast<unsigned long>(comms::kControlMaxFile));
 }
 
 void loop() {
@@ -502,10 +501,8 @@ void loop() {
       else {
         uint8_t payload[comms::kPacketSize];
         const uint32_t sampleSequence = comms::allocateSampleSequence(sensorStats);
-        const bool serialized = kLegacyDummy
-            ? comms::serializeDummyPacket(payload, sizeof(payload), kDeviceId, bootId, sampleSequence, nowMs)
-            : comms::serializeFixturePacket(payload, sizeof(payload), kDeviceId, bootId, sampleSequence,
-                                            nowMs, fixtureRandomWord());
+        const bool serialized = comms::serializeFixturePacket(payload, sizeof(payload), kDeviceId,
+            bootId, sampleSequence, nowMs, fixtureRandomWord());
         const bool submitted = serialized &&
             submitNotification(sensorCharacteristic, payload, sizeof(payload));
         comms::recordSensorSubmission(sensorStats, submitted);

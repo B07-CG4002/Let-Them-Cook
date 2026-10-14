@@ -17,7 +17,7 @@ def test_command_loop_correlates_and_verifies_modified_payload():
     from laptop.controls import ControlChannel, CommandPipeline
 
     async def run():
-        original = SensorPacket(1, 7, 101, 0, (32767, -32768, 0, 1, 2, 3, 4, 5), version=2)
+        original = SensorPacket(1, 7, 101, 0, (32767, -32768, 0, 1, 2, 3, 4, 5, 6, 7, 8))
         sent = []
         class Client:
             mtu_size = 64
@@ -25,7 +25,7 @@ def test_command_loop_correlates_and_verifies_modified_payload():
                 request = decode_control(data, mtu=64)
                 sent.append(request)
                 packet = decode_packet(request.payload)
-                modified = SensorPacket(1, 7, packet.seq, 50, transformed_values(packet.values), version=2)
+                modified = SensorPacket(1, 7, packet.seq, 50, transformed_values(packet.values))
                 channel.receive(None, encode_control(ControlFrame(COMMAND | 128, 1,
                     request.request_id, payload=encode_packet(modified)), mtu=64))
         channel = ControlChannel(1, timeout=0.1)
@@ -41,6 +41,8 @@ def test_command_loop_correlates_and_verifies_modified_payload():
         await asyncio.gather(task, return_exceptions=True)
         assert len(sent) == len(forwarded) == 1
         assert forwarded[0][0].values == transformed_values(original.values)
+        # Every one of the 11 channels is incremented; 32767 wraps to -32768.
+        assert forwarded[0][0].values == (-32768, -32767, 1, 2, 3, 4, 5, 6, 7, 8, 9)
         assert forwarded[0][1] == 101
         assert pipeline.summary()["completed"] == 1
     asyncio.run(run())
@@ -63,18 +65,18 @@ def test_bridge_command_uses_packet_magic(sensor_seen_first):
             async def write_gatt_char(self, _uuid, data, response):
                 request = decode_control(data, mtu=64)
                 sent.append(request.payload[:2])
-                original = SensorPacket(1, 7, request.request_id, 0, (0,) * 8, version=2)
+                original = SensorPacket(1, 7, request.request_id, 0, (0,) * 11)
                 modified = SensorPacket(1, 7, request.request_id, 50,
-                                        transformed_values(original.values), version=2)
+                                        transformed_values(original.values))
                 bridge.control.receive(None, encode_control(ControlFrame(COMMAND | 128, 1,
                     request.request_id, payload=encode_packet(modified)), mtu=64))
 
         bridge.control.attach(Client(), 7)
         bridge.inbox.activate(1)
         if sensor_seen_first:
-            sensor = SensorPacket(1, 7, 1, 100, (0,) * 8, version=2)
+            sensor = SensorPacket(1, 7, 1, 100, (0,) * 11)
             assert bridge.enqueue(1, encode_packet(sensor))
-        command = SensorPacket(1, 7, 101, 0, (0,) * 8, version=2)
+        command = SensorPacket(1, 7, 101, 0, (0,) * 11)
         await bridge.control.command(command)
         assert sent == [b"LC"]
 
@@ -88,7 +90,7 @@ def test_command_is_available_after_the_statistics_read_before_first_sensor(monk
                                 decode_control, encode_control, transformed_values)
     from common.sensor import SensorPacket, decode_packet, encode_packet
     from laptop.bridge import Bridge, BridgeConfig, SENSOR_UUID, SERVICE_UUID
-    from laptop.source_audit import SOURCE_STATS_UUID
+    from laptop.source_audit import SOURCE_STATS_MAGIC, SOURCE_STATS_UUID
     import laptop.windows_pairing as pairing
 
     async def paired(_client):
@@ -132,7 +134,7 @@ def test_command_is_available_after_the_statistics_read_before_first_sensor(monk
 
             async def read_gatt_char(self, uuid, **kwargs):
                 assert uuid == SOURCE_STATS_UUID
-                return struct.pack("<4sB3xIIII", b"LCS1", 1, 7, 0, 0, 0)
+                return struct.pack("<4sB3xIIII", SOURCE_STATS_MAGIC, 1, 7, 0, 0, 0)
 
             async def start_notify(self, uuid, callback):
                 if uuid == RESPONSE_UUID:
@@ -148,7 +150,7 @@ def test_command_is_available_after_the_statistics_read_before_first_sensor(monk
                 sent.append(request.payload[:2])
                 original = decode_packet(request.payload)
                 modified = SensorPacket(1, 7, request.request_id, 50,
-                                        transformed_values(original.values), version=2)
+                                        transformed_values(original.values))
                 self.response_callback(None, encode_control(ControlFrame(COMMAND | 128, 1,
                     request.request_id, payload=encode_packet(modified))))
 
@@ -156,7 +158,7 @@ def test_command_is_available_after_the_statistics_read_before_first_sensor(monk
                                                      active_event=active))
         try:
             await asyncio.wait_for(active.wait(), 1)
-            command = SensorPacket(1, 7, 101, 0, (0,) * 8, version=2)
+            command = SensorPacket(1, 7, 101, 0, (0,) * 11)
             await bridge.control.command(command)
             assert sent == [b"LC"]
         finally:
@@ -172,7 +174,7 @@ def test_bounded_acceptance_and_disconnect_fail_every_accepted_command():
     async def run():
         channel = ControlChannel(1)
         pipeline = CommandPipeline(channel, lambda *_: None, capacity=1)
-        packet = SensorPacket(1, 7, 1, 0, (0,) * 8, version=2)
+        packet = SensorPacket(1, 7, 1, 0, (0,) * 11)
         assert not pipeline.submit(packet)
         channel.attach(type("Client", (), {"mtu_size": 64})(), 7)
         assert pipeline.submit(packet)
@@ -194,11 +196,11 @@ def test_timeout_never_retries_command_and_disconnect_unblocks_pending():
                 writes.append(1)
         channel = ControlChannel(1, timeout=0.1)
         channel.attach(Client(), 7)
-        packet = SensorPacket(1, 7, 1, 0, (0,) * 8, version=2)
+        packet = SensorPacket(1, 7, 1, 0, (0,) * 11)
         with pytest.raises(asyncio.TimeoutError):
             await channel.command(packet)
         assert len(writes) == 1
-        pending = asyncio.create_task(channel.command(SensorPacket(1, 7, 2, 0, (0,) * 8, version=2)))
+        pending = asyncio.create_task(channel.command(SensorPacket(1, 7, 2, 0, (0,) * 11)))
         await asyncio.sleep(0)
         channel.detach()
         with pytest.raises(ConnectionError):
@@ -284,12 +286,12 @@ def test_control_forward_uses_separate_tls_and_checks_request_ack():
             return object(), writer
         bridge = Bridge(BridgeConfig(ca_file="unused"), connector=connect)
         bridge.writer = "sensor connection"
-        packet = SensorPacket(1, 7, 12, 200, (1,) * 8, version=2)
+        packet = SensorPacket(1, 7, 12, 200, (1,) * 11)
         async def write(writer, message, timeout):
             assert writer is not bridge.writer
             messages.append(message)
         async def read(reader, timeout):
-            return dict(v=2, type="INGEST_ACK", session_id="ltc-comms", device_id=1,
+            return dict(v=3, type="INGEST_ACK", session_id="ltc-comms", device_id=1,
                         boot_id=7, seq=12, request_id=12, status="accepted")
         bridge._write_frame, bridge._read_frame = write, read
         await bridge.forward_command(packet, 12)
@@ -312,7 +314,7 @@ def test_reconnect_does_not_replay_accepted_old_generation_commands():
         channel = ControlChannel(1)
         channel.attach(Client(), 7)
         pipeline = CommandPipeline(channel, lambda *_: None)
-        assert pipeline.submit(SensorPacket(1, 7, 1, 0, (0,) * 8, version=2))
+        assert pipeline.submit(SensorPacket(1, 7, 1, 0, (0,) * 11))
         channel.attach(Client(), 7)
         worker = asyncio.create_task(pipeline.run())
         await asyncio.wait_for(pipeline.join(), 0.5)
@@ -330,15 +332,15 @@ def test_bad_and_duplicate_ble_response_cannot_forward_an_unverified_command(fai
     from common.sensor import SensorPacket, encode_packet
     from laptop.controls import ControlChannel, CommandPipeline
     async def run():
-        packet = SensorPacket(1, 7, 10, 0, (0,) * 8, version=2)
+        packet = SensorPacket(1, 7, 10, 0, (0,) * 11)
         writes = []
         class Client:
             mtu_size = 64
             async def write_gatt_char(self, *_args, **_kwargs):
                 identity = 11 if failure == "wrong_request" else 10
                 device = 2 if failure == "wrong_device" else 1
-                values = (77,) * 8 if failure == "wrong_values" else transformed_values(packet.values)
-                response = SensorPacket(device, 7, identity, 1, values, version=2)
+                values = (77,) * 11 if failure == "wrong_values" else transformed_values(packet.values)
+                response = SensorPacket(device, 7, identity, 1, values)
                 encoded = encode_control(ControlFrame(COMMAND | 128, device, identity,
                                         payload=encode_packet(response)), mtu=64)
                 channel.receive(None, encoded)
@@ -429,8 +431,8 @@ def test_rate_ack_must_echo_requested_rate_and_command_ack_request_is_strict():
         with pytest.raises(ProtocolError, match="requested source rate"):
             await channel.set_rate(80)
         bridge = Bridge(BridgeConfig(ca_file="unused"))
-        packet = SensorPacket(1, 7, 12, 5, (0,) * 8, version=2)
-        ack = dict(v=2, type="INGEST_ACK", session_id="ltc-comms", device_id=1,
+        packet = SensorPacket(1, 7, 12, 5, (0,) * 11)
+        ack = dict(v=3, type="INGEST_ACK", session_id="ltc-comms", device_id=1,
                    boot_id=7, seq=12, request_id=13, status="accepted")
         with pytest.raises(ProtocolError, match="uncorrelated"):
             bridge._check_ack(ack, packet, request_id=12)
@@ -454,7 +456,7 @@ def test_old_generation_command_waiting_for_file_lock_is_never_sent_after_reconn
         channel.attach(Client(), 7)
         pipeline = CommandPipeline(channel, lambda *_: None)
         await channel._serial.acquire()
-        assert pipeline.submit(SensorPacket(1, 7, 1, 0, (0,) * 8, version=2))
+        assert pipeline.submit(SensorPacket(1, 7, 1, 0, (0,) * 11))
         worker = asyncio.create_task(pipeline.run())
         await asyncio.sleep(0)
         channel.attach(Client(), 7)
@@ -482,7 +484,7 @@ def test_native_write_cancellation_resistance_is_bounded_and_prevents_overlap():
                         continue
         channel = ControlChannel(1, timeout=0.03)
         channel.attach(Client(), 7)
-        task = asyncio.create_task(channel.command(SensorPacket(1, 7, 1, 0, (0,) * 8, version=2)))
+        task = asyncio.create_task(channel.command(SensorPacket(1, 7, 1, 0, (0,) * 11)))
         try:
             done, _ = await asyncio.wait({task}, timeout=0.2)
             assert task in done, "a resistant native write must not trap the command owner"
@@ -559,9 +561,9 @@ def test_bridge_supervised_resistant_write_also_prevents_next_control_write():
         bridge.control.attach(Client(), 7)
         try:
             with pytest.raises(asyncio.TimeoutError):
-                await bridge.control.command(SensorPacket(1, 7, 1, 0, (0,) * 8, version=2))
+                await bridge.control.command(SensorPacket(1, 7, 1, 0, (0,) * 11))
             with pytest.raises(RuntimeError, match="pending"):
-                await bridge.control.command(SensorPacket(1, 7, 2, 0, (0,) * 8, version=2))
+                await bridge.control.command(SensorPacket(1, 7, 2, 0, (0,) * 11))
             assert writes == [1]
             assert bridge.control.summary()["native_pending"] == 1
             assert len(bridge._retained) == 1

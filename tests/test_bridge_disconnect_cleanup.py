@@ -8,7 +8,7 @@ from unittest.mock import patch
 from bleak.exc import BleakError
 from common.control import CONTROL_UUID, RESPONSE_UUID
 from laptop.bridge import Bridge, BridgeConfig, SENSOR_UUID, SERVICE_UUID
-from laptop.source_audit import SOURCE_STATS_UUID
+from laptop.source_audit import SOURCE_STATS_MAGIC, SOURCE_STATS_UUID
 
 
 class FakeScanner:
@@ -182,7 +182,7 @@ class DisconnectCleanupTests(unittest.IsolatedAsyncioTestCase):
                 clients.append(self)
 
             async def read_gatt_char(self, uuid):
-                return struct.pack("<4sB3xIIII", b"LCS1", 1, 7, 0, 0, 0)
+                return struct.pack("<4sB3xIIII", SOURCE_STATS_MAGIC, 1, 7, 0, 0, 0)
 
             async def disconnect(self):
                 self.disconnect_calls += 1

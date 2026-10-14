@@ -9,7 +9,7 @@ import pytest
 
 from common.sensor import SensorPacket, encode_packet
 from laptop.bridge import Bridge, BridgeConfig, SENSOR_UUID, SERVICE_UUID
-from laptop.source_audit import SOURCE_STATS_UUID
+from laptop.source_audit import SOURCE_STATS_MAGIC, SOURCE_STATS_UUID
 
 
 async def capture_tail(mode="delayed"):
@@ -67,11 +67,11 @@ async def capture_tail(mode="delayed"):
                 boot = 8 if mode == "wrong_boot" else 7
                 if "remote_none" in order:
                     assert kwargs.get("use_cached") is False
-            return struct.pack("<4sB3xIIII", b"LCS1", 1, boot, seq, seq, 0)
+            return struct.pack("<4sB3xIIII", SOURCE_STATS_MAGIC, 1, boot, seq, seq, 0)
 
         async def start_notify(self, uuid, callback):
             self.callback = callback
-            callback(None, encode_packet(SensorPacket(1, 7, 0, 0, (0,) * 8, version=2)))
+            callback(None, encode_packet(SensorPacket(1, 7, 0, 0, (0,) * 11)))
 
         async def stop_notify(self, uuid):
             assert not self.remote_pending, "a pending native CCCD stop must not be retried"
@@ -102,7 +102,7 @@ async def capture_tail(mode="delayed"):
             await asyncio.sleep(0 if mode == "budget" else 0.05)
             if client.callback is not None and mode != "lost":
                 order.append("tail_delivered")
-                client.callback(None, encode_packet(SensorPacket(1, 7, 1, 10, (0,) * 8, version=2)))
+                client.callback(None, encode_packet(SensorPacket(1, 7, 1, 10, (0,) * 11)))
         client.tail_task = asyncio.create_task(delayed_tail())
         return True
 

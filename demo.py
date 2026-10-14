@@ -209,6 +209,8 @@ def show_report(path, *, save_readable=False):
     total = sum(source["generated"] for _, _, source in _device_rows(report)) + command_total
     print("CAPTURE PASSED: physical ESP input through Ultra96 ingestion ACKs.")
     print(f"Phone expected increase: {total}")
+    print("This count holds while the Ultra96 runs the built-in dummy model "
+          "(one result per accepted sample or command).")
     print("Film the iPhone Received count before and after with your camera; phone receipt is not checked here.")
     return 0
 

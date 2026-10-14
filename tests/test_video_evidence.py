@@ -41,13 +41,21 @@ def write_json(path, value):
 
 def sensor(device, *, boot=None, seq=7):
     boot = 100 + device if boot is None else boot
-    values = [32767, -32768, -1, 0, 1, 123, -456, 789]
+    values = [32767, -32768, -1, 0, 1, 123, -456, 789, 18000, 10000, -9000]
     return {"timestamp_utc": "2026-09-29T00:00:00+00:00", "monotonic_seconds": 1.0,
             "type": "sensor", "device_id": device, "direction": "ESP->laptop",
-            "version": 2, "boot_id": boot, "seq": seq, "uptime_ms": 100,
-            "values": values, "raw_hex": struct.pack("<2sBBIII8h", b"LC", 2, device,
+            "version": 3, "boot_id": boot, "seq": seq, "uptime_ms": 100,
+            "values": values, "raw_hex": struct.pack("<2sBBIII11h", b"LC", 3, device,
                 boot, seq, 100, *values).hex(), "validation": "decoded",
             "received_monotonic": 1.0}
+
+
+def version_2_sensor(device, *, boot=None, seq=7):
+    """A record written by version-2 firmware and tools (32 bytes, 8 values)."""
+    boot = 100 + device if boot is None else boot
+    values = [32767, -32768, -1, 0, 1, 123, -456, 789]
+    return dict(sensor(device, boot=boot, seq=seq), version=2, values=values,
+                raw_hex=struct.pack("<2sBBIII8h", b"LC", 2, device, boot, seq, 100, *values).hex())
 
 
 def ack(device, *, boot=None, seq=7):
@@ -68,7 +76,7 @@ def test_packet_examples_pair_exact_boot_and_sequence_and_show_all_values(tmp_pa
     assert api().show_packet_examples(folder) is True
     output = capsys.readouterr().out
     assert str(folder.resolve()) in output
-    assert "32767, -32768, -1, 0, 1, 123, -456, 789" in output
+    assert "32767, -32768, -1, 0, 1, 123, -456, 789, 18000, 10000, -9000" in output
     assert '"device_id": 1' in output and '"device_id": 2' in output
     assert '"boot_id": 99' not in output
     assert "sensor_ack" in output and "accepted" in output
@@ -87,7 +95,8 @@ def test_packet_examples_do_not_match_partial_identity(tmp_path, capsys, change)
 
 
 @pytest.mark.parametrize("extra", [
-    {"session_id": "another-session"}, {"request_id": 7}, {"version": 1},
+    {"session_id": "another-session"}, {"request_id": 7}, {"version": 1}, {"version": 2},
+    {"version": 4}, {"version": True},
 ])
 def test_packet_examples_reject_conflicting_extended_ack_identity(tmp_path, capsys, extra):
     folder = capture(tmp_path)
@@ -107,6 +116,23 @@ def test_packet_examples_reject_corruption_even_after_both_examples(tmp_path, ca
     assert "NOT PASSED" in capsys.readouterr().out
 
 
+def test_explicit_version_3_ack_is_checked_and_accepted(tmp_path, capsys):
+    folder = capture(tmp_path)
+    packets(folder, [sensor(1), dict(ack(1), version=3), sensor(2), ack(2)])
+    assert api().show_packet_examples(folder) is True
+
+
+@pytest.mark.parametrize("old", ["sensor", "ack"])
+def test_captures_from_before_version_3_are_named_as_such(tmp_path, capsys, old):
+    folder = capture(tmp_path)
+    rows = [version_2_sensor(1), ack(1)] if old == "sensor" else [sensor(1), dict(ack(1), version=2)]
+    packets(folder, rows + [sensor(2), ack(2)])
+    assert api().show_packet_examples(folder) is False
+    output = capsys.readouterr().out
+    assert "NOT PASSED" in output
+    assert "protocol version 2" in output and "only version-3 captures" in output
+
+
 def test_packet_examples_never_fill_a_missing_device_from_another_capture(tmp_path, capsys):
     requested, other = capture(tmp_path, "requested"), capture(tmp_path, "other")
     packets(requested, [sensor(1), ack(1)])
@@ -118,7 +144,7 @@ def test_packet_examples_never_fill_a_missing_device_from_another_capture(tmp_pa
 def test_packet_examples_reject_raw_and_decoded_value_disagreement(tmp_path, capsys):
     folder = capture(tmp_path)
     row = sensor(1)
-    row["values"][7] = 800
+    row["values"][10] = 800
     packets(folder, [row, ack(1), sensor(2), ack(2)])
     assert api().show_packet_examples(folder) is False
     assert "NOT PASSED" in capsys.readouterr().out

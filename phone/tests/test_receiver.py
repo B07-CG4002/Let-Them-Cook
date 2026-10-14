@@ -13,12 +13,25 @@ from unittest.mock import AsyncMock, patch
 from phone.receiver import ProtocolError, encode_frame, read_frame, receive, tls_context, validate_result, validate_subscribed, validate_session
 
 
+MODEL_LABELS = ("PICKUPHOLD", "PLACEDOWN", "CHOP", "WASH", "THROW", "FIREEXT")
+
+
 def result():
-    return dict(v=1, type="GESTURE_RESULT", session_id="ltc-comms", device_id=1,
-                boot_id=4294967295, seq=3, result_id="1:4294967295:3", gesture="POINT", confidence=1.0)
+    # A version-3 model result: request_id null, a model label and a real confidence.
+    return dict(v=3, type="GESTURE_RESULT", session_id="ltc-comms", device_id=1,
+                boot_id=4294967295, seq=3, request_id=None, result_id="1:4294967295:3",
+                gesture="PICKUPHOLD", confidence=0.73)
+
+
+def command_result():
+    return dict(result(), request_id=3, result_id="cmd:1:4294967295:3")
 
 
 class ContractTests(unittest.IsolatedAsyncioTestCase):
+    def assert_rejected(self, item, **context):
+        with self.subTest(**context), self.assertRaises(ProtocolError):
+            validate_result(item, "ltc-comms")
+
     def test_result_and_subscription_contracts(self):
         self.assertEqual(validate_session("a" * 128), "a" * 128)
         for invalid in ["", "a" * 129, "line\nbreak", "\ud800"]:
@@ -26,13 +39,79 @@ class ContractTests(unittest.IsolatedAsyncioTestCase):
                 validate_session(invalid)
         self.assertEqual(validate_result(result(), "ltc-comms"), result())
         validate_subscribed(dict(v=1, type="SUBSCRIBED", session_id="ltc-comms"), "ltc-comms")
-        for field, value in [("v", True), ("seq", -1), ("boot_id", 2**32),
-                             ("confidence", float("nan")), ("confidence", True),
-                             ("gesture", "FIST"), ("result_id", "1:2:3"),
-                             ("session_id", "elsewhere"), ("extra", 1)]:
-            item = result(); item[field] = value
-            with self.subTest(field=field), self.assertRaises(ProtocolError):
-                validate_result(item, "ltc-comms")
+        # The subscription envelopes did not move to version 3.
+        for version in (2, 3, True):
+            with self.subTest(subscribed=version), self.assertRaises(ProtocolError):
+                validate_subscribed(dict(v=version, type="SUBSCRIBED", session_id="ltc-comms"), "ltc-comms")
+        for field, value in [("v", True), ("v", 3.0), ("seq", -1), ("boot_id", 2**32),
+                             ("device_id", 0), ("device_id", 3),
+                             ("result_id", "1:2:3"), ("result_id", "cmd:1:4294967295:3"),
+                             ("session_id", "elsewhere"), ("type", "SUBSCRIBED"), ("extra", 1)]:
+            self.assert_rejected(dict(result(), **{field: value}), field=field, value=value)
+        for field in result():
+            item = result(); del item[field]
+            self.assert_rejected(item, missing=field)
+
+    def test_only_version_3_results_are_accepted(self):
+        for version in (0, 1, 2, 4):
+            self.assert_rejected(dict(result(), v=version), version=version)
+        # The exact version-1 and version-2 dummy results of the earlier protocol.
+        old = dict(v=1, type="GESTURE_RESULT", session_id="ltc-comms", device_id=1, boot_id=4294967295,
+                   seq=3, result_id="1:4294967295:3", gesture="POINT", confidence=1.0)
+        self.assert_rejected(old, shape="version 1")
+        self.assert_rejected(dict(old, v=2, request_id=None), shape="version 2")
+
+    def test_any_well_formed_label_and_real_confidence_is_accepted(self):
+        for gesture in MODEL_LABELS + ("REST", "FIST", "OPEN", "POINT", "a", "Z" * 32, "left_chop-2"):
+            item = dict(result(), gesture=gesture)
+            with self.subTest(gesture=gesture):
+                self.assertEqual(validate_result(item, "ltc-comms"), item)
+        for confidence in (0, 1, 0.0, 1.0, 0.5, 1e-05, 0.999999, -0.0):
+            item = dict(result(), confidence=confidence)
+            with self.subTest(confidence=confidence):
+                self.assertEqual(validate_result(item, "ltc-comms"), item)
+
+    def test_gesture_rule(self):
+        for gesture in ["", "A" * 33, "PICK UP", "PICK.UP", "PICKUP\n", "\nPICKUP", "CHOP\t",
+                        "caf\u00e9", "\uff21", "\u0661", None, 5, ["CHOP"]]:
+            self.assert_rejected(dict(result(), gesture=gesture), gesture=gesture)
+
+    def test_confidence_rule(self):
+        for confidence in [-0.01, 1.01, 1.5, -1, 2, float("inf"), float("-inf"), float("nan"),
+                           True, False, None, "0.5", 10**12]:
+            self.assert_rejected(dict(result(), confidence=confidence), confidence=confidence)
+
+    def test_command_echo_correlation(self):
+        self.assertEqual(validate_result(command_result(), "ltc-comms"), command_result())
+        self.assertEqual(validate_result(dict(command_result(), request_id=4294967295, seq=4294967295,
+                                              result_id="cmd:1:4294967295:4294967295"), "ltc-comms")["seq"],
+                         4294967295)
+        for request in [True, 0, -1, 2, 3.0, 2**32, "3"]:
+            self.assert_rejected(dict(command_result(), request_id=request), request_id=request)
+        # A command result without the cmd: prefix, and a model result with it.
+        self.assert_rejected(dict(command_result(), result_id="1:4294967295:3"), prefix="missing")
+        self.assert_rejected(dict(result(), result_id="cmd:1:4294967295:3"), prefix="unexpected")
+
+    async def test_wire_numbers_reach_the_confidence_rule(self):
+        def frame(confidence):
+            body = ('{"v":3,"type":"GESTURE_RESULT","session_id":"ltc-comms","device_id":2,"boot_id":7,'
+                    '"seq":9,"request_id":null,"result_id":"2:7:9","gesture":"CHOP","confidence":'
+                    + confidence + '}').encode("utf-8")
+            stream = asyncio.StreamReader()
+            stream.feed_data(len(body).to_bytes(4, "big") + body); stream.feed_eof()
+            return stream
+        for token, value in [("0.73", 0.73), ("7.3e-1", 0.73), ("1", 1), ("0", 0), ("1e-05", 1e-05)]:
+            with self.subTest(token=token):
+                message = validate_result(await read_frame(frame(token)), "ltc-comms")
+                self.assertEqual(message["confidence"], value)
+        # 1e999 overflows to Infinity and NaN is not JSON: the frame itself is refused.
+        # true decodes to a boolean, which the confidence rule refuses.
+        for token in ["1e999", "-1e999", "NaN", "Infinity", "true"]:
+            with self.subTest(token=token), self.assertRaises(ProtocolError):
+                validate_result(await read_frame(frame(token)), "ltc-comms")
+        for token in ["1.01", "-0.5", "\"0.5\"", "null"]:
+            with self.subTest(token=token), self.assertRaises(ProtocolError):
+                validate_result(await read_frame(frame(token)), "ltc-comms")
 
     async def test_split_and_coalesced_frames(self):
         stream = asyncio.StreamReader()
@@ -217,7 +296,7 @@ class ReceiverStartupTests(unittest.IsolatedAsyncioTestCase):
         async with self.running_receiver([stream], count=2) as (task, statistics, output, _, _):
             await asyncio.sleep(0.25)
             self.assertEqual(statistics, dict(received=1, reconnects=0))
-            next_result = dict(result(), seq=4, result_id='1:4294967295:4', gesture='REST')
+            next_result = dict(result(), seq=4, result_id='1:4294967295:4', gesture='CHOP', confidence=0.41)
             stream.feed_data(encode_frame(next_result))
             await asyncio.wait_for(task, 0.3)
             self.assertEqual([json.loads(line) for line in output.getvalue().splitlines()], [result(), next_result])
@@ -245,7 +324,8 @@ class ReceiverStartupTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_invalid_result_does_not_consume_startup_grace(self):
         first = self.subscribed_stream()
-        invalid = result(); invalid["gesture"] = "REST"
+        # A result from a service still on protocol version 2.
+        invalid = result(); invalid["v"] = 2
         first.feed_data(encode_frame(invalid))
         second = self.subscribed_stream()
         async with self.running_receiver([first, second]) as (task, statistics, output, errors, _):
@@ -312,7 +392,8 @@ class TlsReceiverTests(unittest.IsolatedAsyncioTestCase):
             task = asyncio.current_task(); handlers.add(task)
             try:
                 attempts.append(await read_frame(reader))
-                writer.write(encode_frame(dict(v=2 if len(attempts) == 1 else 1, type="SUBSCRIBED", session_id="ltc-comms")))
+                # SUBSCRIBED stays at version 1; a version-3 envelope forces one reconnect.
+                writer.write(encode_frame(dict(v=3 if len(attempts) == 1 else 1, type="SUBSCRIBED", session_id="ltc-comms")))
                 if len(attempts) > 1:
                     writer.write(encode_frame(result()))
                 await writer.drain()

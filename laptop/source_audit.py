@@ -10,7 +10,9 @@ from common.sensor import SensorPacket
 
 SOURCE_STATS_UUID = "6e1c0006-7a45-4dc4-b678-3f2d5a9c1001"
 _SOURCE_STATS = struct.Struct("<4sB3xIIII")
-SOURCE_STATS_MAGIC = b"LCS1"
+# LCS3 follows sensor packet version 3. A board still running version 2
+# firmware reports LCS1, so an audited bridge refuses it before subscribing.
+SOURCE_STATS_MAGIC = b"LCS3"
 _UINT32_MASK = 0xFFFFFFFF
 
 

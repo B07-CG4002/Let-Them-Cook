@@ -15,7 +15,7 @@ final class TransportTests: XCTestCase {
         let peers = try LocalPeers(pki: Self.pki)
         let got = expectation(description: "validated result")
         let client = CommsClient(route: peers.route(), session: "ltc-comms", options: peers.options, onStatus: { _ in }, onResult: {
-            XCTAssertEqual($0.resultID, "1:7:42"); XCTAssertEqual($0.gesture, "OPEN"); got.fulfill()
+            XCTAssertEqual($0.resultID, "1:7:42"); XCTAssertEqual($0.gesture, "WASH"); XCTAssertEqual($0.confidence, 0.93); got.fulfill()
         })
         client.start(); wait(for: [got], timeout: 4); client.stop()
         XCTAssertEqual(peers.subscriptionCount, 1)

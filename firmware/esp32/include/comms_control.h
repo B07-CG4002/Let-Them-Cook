@@ -13,6 +13,12 @@ constexpr size_t kControlMaxFrame = 194;
 constexpr size_t kControlMaxChunk = 180;
 constexpr uint32_t kControlMaxFile = 65536;
 constexpr uint32_t kFileIdleTimeoutMs = 30000;
+constexpr size_t kFileMetadataSize = 36;  // uint32 length + SHA-256
+// Largest response: a COMMAND echo (header + one packet, 52 bytes for version
+// 3) or a FILE_END completion (header + metadata, 50 bytes).
+constexpr size_t kControlMinOutput = kControlHeaderSize +
+    (kPacketSize > kFileMetadataSize ? kPacketSize : kFileMetadataSize);
+static_assert(kControlMinOutput <= kControlMaxFrame, "responses must fit one control frame");
 enum ControlStatus : uint8_t {
   ControlOk = 0, ControlInvalid = 1, ControlBusy = 2, ControlOrder = 3,
   ControlIntegrity = 4, ControlConflict = 5, ControlUnsupported = 6
@@ -59,7 +65,7 @@ class ControlEngine {
   size_t process(const uint8_t* input, size_t length, uint32_t nowMs,
                  uint8_t* output, size_t capacity) {
     if (input == nullptr || output == nullptr || length < kControlHeaderSize ||
-        capacity < 50 || input[0] != 'B' || input[1] != '7') return 0;
+        capacity < kControlMinOutput || input[0] != 'B' || input[1] != '7') return 0;
     const uint8_t opcode = input[3];
     const uint32_t id = readUint32Le(input + 6);
     const uint32_t offset = readUint32Le(input + 10);
@@ -123,7 +129,7 @@ class ControlEngine {
     if (offset != 0 || length != kPacketSize) return status(output, ControlInvalid);
     const bool validPacketMagic = payload[0] == 'L' && payload[1] == 'C';
     if (!validPacketMagic ||
-        payload[2] != 2 || payload[3] != device_ || readUint32Le(payload + 4) != boot_ ||
+        payload[2] != kPacketVersion || payload[3] != device_ || readUint32Le(payload + 4) != boot_ ||
         readUint32Le(payload + 8) != id) return status(output, ControlInvalid);
     for (const auto& cached : commands_) {
       if (cached.id != id) continue;
@@ -137,8 +143,8 @@ class ControlEngine {
     memcpy(cached.input, payload, kPacketSize);
     memcpy(cached.output, payload, kPacketSize);
     writeUint32Le(cached.output + 12, nowMs);
-    for (size_t channel = 0; channel < 8; ++channel) {
-      const size_t position = 16 + channel * 2;
+    for (size_t channel = 0; channel < kChannelCount; ++channel) {
+      const size_t position = kPacketHeaderSize + channel * 2;
       // Increment the unsigned representation; int16 wrap is explicit and has
       // no signed-overflow or out-of-range signed-conversion dependency.
       const uint16_t previous = static_cast<uint16_t>(payload[position]) |
@@ -163,7 +169,7 @@ class ControlEngine {
   }
   size_t beginFile(uint32_t id, uint32_t offset, const uint8_t* payload,
                    size_t length, uint32_t nowMs, uint8_t* output) {
-    if (offset != 0 || length != 36) return status(output, ControlInvalid);
+    if (offset != 0 || length != kFileMetadataSize) return status(output, ControlInvalid);
     const uint32_t total = readUint32Le(payload);
     if (total == 0 || total > kControlMaxFile) return status(output, ControlInvalid);
     if (fileId_ == id) {
@@ -212,7 +218,7 @@ class ControlEngine {
     fileActivityMs_ = nowMs;
     writeUint32Le(output + kControlHeaderSize, fileLength_);
     memcpy(output + kControlHeaderSize + 4, actualDigest_, 32);
-    return kControlHeaderSize + 36;
+    return kControlHeaderSize + kFileMetadataSize;
   }
 };
 

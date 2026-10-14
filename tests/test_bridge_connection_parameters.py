@@ -8,7 +8,7 @@ import pytest
 
 from common.control import CONTROL_UUID, RESPONSE_UUID, ControlFrame, decode_control, encode_control
 from laptop.bridge import Bridge, BridgeConfig, SENSOR_UUID, SERVICE_UUID
-from laptop.source_audit import SOURCE_STATS_UUID
+from laptop.source_audit import SOURCE_STATS_MAGIC, SOURCE_STATS_UUID
 
 
 async def capture(mode="normal", cleanup_error=False):
@@ -64,7 +64,7 @@ async def capture(mode="normal", cleanup_error=False):
             if mode == "source_error":
                 stop.set()
                 raise OSError("synthetic source read error")
-            return struct.pack("<4sB3xIIII", b"LCS1", 1, 7, 0, 0, 0)
+            return struct.pack("<4sB3xIIII", SOURCE_STATS_MAGIC, 1, 7, 0, 0, 0)
 
         async def start_notify(self, uuid, callback):
             order.append("response_subscribe" if uuid == RESPONSE_UUID else "sensor_subscribe")

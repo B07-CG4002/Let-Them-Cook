@@ -70,7 +70,10 @@ final class PythonBoardTests: XCTestCase {
         XCTAssertEqual(observed.map(\.seq), (0..<100).map(UInt32.init))
         XCTAssertEqual(observed.map(\.resultID), (0..<100).map { "1:7:\($0)" })
         XCTAssertEqual(Set(observed.map(\.resultID)).count, 100)
-        XCTAssertEqual(observed.first { $0.seq == 42 }?.gesture, "OPEN")
+        // The built-in dummy model answers each sample once with a random dummy label.
+        let dummyLabels: Set<String> = ["REST", "FIST", "OPEN", "POINT"]
+        XCTAssertTrue(observed.allSatisfy { dummyLabels.contains($0.gesture) })
+        XCTAssertTrue(observed.allSatisfy { $0.confidence == 1 && $0.requestID == nil })
 
         board.terminate()
         XCTAssertTrue(board.waitForExit(timeout: 5), "Python board did not shut down")
@@ -84,6 +87,11 @@ final class PythonBoardTests: XCTestCase {
         XCTAssertEqual(metrics["disconnected_results"] as? Int, 0)
         XCTAssertEqual(metrics["result_drops"] as? Int, 0)
         XCTAssertEqual(metrics["result_stale"] as? Int, 0)
+        XCTAssertEqual(metrics["model_samples"] as? Int, 100)
+        XCTAssertEqual(metrics["model_results"] as? Int, 100)
+        XCTAssertEqual(metrics["model_errors"] as? Int, 0)
+        XCTAssertEqual(metrics["model_results_rejected"] as? Int, 0)
+        XCTAssertEqual(metrics["model_results_duplicate"] as? Int, 0)
         withExtendedLifetime(peers) {}
     }
 
@@ -93,7 +101,7 @@ final class PythonBoardTests: XCTestCase {
 
     private static let ingestProgram = #"""
     import asyncio, json, sys
-    from common.sensor import dummy_values
+    from common.sensor import DUMMY_FIXTURES
     from common.tls import TLS_SERVER_NAME, client_context
     from common.wire import read_frame, write_frame
 
@@ -103,12 +111,13 @@ final class PythonBoardTests: XCTestCase {
             server_hostname=TLS_SERVER_NAME, ssl_handshake_timeout=5.0), 5.0)
         try:
             for seq in range(100):
-                await write_frame(writer, dict(v=1, type="SENSOR_BATCH", session_id="ltc-comms",
+                await write_frame(writer, dict(v=3, type="SENSOR_BATCH", session_id="ltc-comms",
                     device_id=1, boot_id=7, seq=seq, uptime_ms=seq * 100,
-                    values=list(dummy_values(seq))))
+                    values=list(DUMMY_FIXTURES[seq % len(DUMMY_FIXTURES)]), request_id=None))
                 ack = await read_frame(reader)
-                assert ack == dict(v=1, type="INGEST_ACK", session_id="ltc-comms",
-                    device_id=1, boot_id=7, seq=seq, status="accepted"), "unexpected ingestion ACK"
+                assert ack == dict(v=3, type="INGEST_ACK", session_id="ltc-comms",
+                    device_id=1, boot_id=7, seq=seq, request_id=None,
+                    status="accepted"), "unexpected ingestion ACK"
                 await asyncio.sleep(0.02)
         finally:
             writer.close()

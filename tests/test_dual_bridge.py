@@ -9,10 +9,10 @@ from types import MethodType, SimpleNamespace
 
 import pytest
 
-from common.sensor import SensorPacket, dummy_values, encode_packet
+from common.sensor import DUMMY_FIXTURES, SensorPacket, encode_packet
 from laptop.bridge import Bridge, BridgeConfig, SENSOR_UUID, SERVICE_UUID
 from laptop.dual_bridge import DualBridge
-from laptop.source_audit import SOURCE_STATS_UUID, SourceStats
+from laptop.source_audit import SOURCE_STATS_MAGIC, SOURCE_STATS_UUID, SourceStats
 
 
 def async_test(function):
@@ -30,8 +30,12 @@ class Writer:
         pass
 
 
+def fixture(seq):
+    return DUMMY_FIXTURES[seq % len(DUMMY_FIXTURES)]
+
+
 def source_bytes(device, boot, next_seq, submitted, failures=0):
-    return struct.pack("<4sB3xIIII", b"LCS1", device, boot, next_seq,
+    return struct.pack("<4sB3xIIII", SOURCE_STATS_MAGIC, device, boot, next_seq,
                        submitted, failures)
 
 
@@ -61,7 +65,7 @@ def install_ack_transport(bridge, *, gate=None, progress=None, progress_count=1)
             "v": message["v"], "type": "INGEST_ACK", "session_id": message["session_id"],
             "device_id": message["device_id"], "boot_id": message["boot_id"],
             "seq": message["seq"], "status": "accepted",
-            **({"request_id": message["request_id"]} if message["v"] == 2 else {}),
+            "request_id": message["request_id"],
         }
 
     bridge._connector = connect
@@ -166,7 +170,7 @@ async def test_startup_packets_do_not_count_toward_common_window_coverage():
         self.source_audit.start(SourceStats(device, boot, 0, 0, 0))
         for seq in range(5):
             self.enqueue(1, encode_packet(
-                SensorPacket(device, boot, seq, seq * 100, dummy_values(seq))))
+                SensorPacket(device, boot, seq, seq * 100, fixture(seq))))
         active_event.set()
         await stop_event.wait()
         self.source_audit.finish(SourceStats(device, boot, 5, 5, 0))
@@ -213,7 +217,7 @@ async def test_final_quiet_tail_is_included_in_silence_verdict():
         active_event.set()
         await common_started.wait()
         self.enqueue(1, encode_packet(
-            SensorPacket(device, boot, 0, 0, dummy_values(0))))
+            SensorPacket(device, boot, 0, 0, fixture(0))))
         await stop_event.wait()
         self.source_audit.finish(SourceStats(device, boot, 1, 1, 0))
         self.inbox.deactivate(preserve=True)
@@ -269,7 +273,7 @@ async def test_source_snapshot_order_is_read_subscribe_stop_read_disconnect():
 
         async def start_notify(self, uuid, callback):
             events.append("subscribe")
-            callback(None, encode_packet(SensorPacket(2, 7, 0, 0, dummy_values(0))))
+            callback(None, encode_packet(SensorPacket(2, 7, 0, 0, fixture(0))))
 
         async def stop_notify(self, uuid):
             events.append("stop")
@@ -408,7 +412,7 @@ async def test_ble_disconnect_reconnect_is_per_device_and_keeps_fault_verdict():
                             seq = environment.seq
                             callback(None, encode_packet(SensorPacket(
                                 environment.device, environment.boot, seq,
-                                seq * 100, dummy_values(seq))))
+                                seq * 100, fixture(seq))))
                             environment.seq += 1
                             if environment.disconnect_first and self.number == 0:
                                 self.is_connected = False

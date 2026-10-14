@@ -35,7 +35,7 @@ def test_real_tls_receives_exact_device_tagged_sets_from_both_sources(tmp_path):
                 source = report["devices"][str(device)]["source"]
                 expected.update((device, source["boot_id"], seq)
                                 for seq in range(source["generated"]))
-            assert set(server._v2_recent) == expected
+            assert set(server._fingerprints) == expected
             assert server.metrics["accepted"] == len(expected)
         finally:
             await server.close()

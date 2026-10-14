@@ -5,7 +5,7 @@ import json
 import math
 from pathlib import Path
 
-from common.sensor import SensorPacket, decode_packet
+from common.sensor import VERSION, SensorPacket, decode_packet
 from ultra96.protocol import validate_session
 
 
@@ -43,6 +43,15 @@ def _integer(value, low, high, field):
     return value
 
 
+def _version(row, field):
+    """Only protocol-version-3 captures are read; older ones are named as such."""
+    version = row.get("version")
+    if type(version) is int and version != VERSION:
+        raise ValueError(f"{field} is protocol version {version}; this tool reads only version-{VERSION} "
+                         "captures (check older captures with the code from before version 3)")
+    return _integer(version, VERSION, VERSION, field)
+
+
 def _identity(row, session):
     """Old evidence omits session/request ID; never silently ignore explicit conflicts."""
     if "session_id" in row and row["session_id"] != session:
@@ -60,7 +69,8 @@ def show_packet_examples(folder: Path) -> bool:
 
     Current sensor_ack records contain device/boot/seq/status but omit version,
     session and request_id. Session comes from report.json; these event types are
-    telemetry, whose v2 request_id is null. Those provenance limits are printed.
+    telemetry, whose request_id is null. Those provenance limits are printed.
+    Only protocol-version-3 captures (38-byte packets, 11 values) are accepted.
     This is a packet illustration, not a whole-capture or phone-delivery audit.
     """
     folder = Path(folder).expanduser().resolve()
@@ -83,6 +93,7 @@ def show_packet_examples(folder: Path) -> bool:
                         continue
                     identity = _identity(row, session)
                     if kind == "sensor":
+                        _version(row, "sensor version")
                         packet = SensorPacket(identity[1], identity[2], identity[3],
                                               row.get("uptime_ms"), row.get("values"),
                                               version=row.get("version"))
@@ -100,7 +111,7 @@ def show_packet_examples(folder: Path) -> bool:
                         if row.get("validation") not in ("accepted", "duplicate") or row.get("direction") != "Ultra96->laptop":
                             raise ValueError("sensor ACK has an invalid status or direction")
                         if "version" in row:
-                            _integer(row["version"], 1, 2, "ACK version")
+                            _version(row, "ACK version")
                         acknowledgements.setdefault(identity, []).append(row)
                 except (ValueError, TypeError) as error:
                     raise ValueError(f"packets.jsonl line {number}: {error}") from error

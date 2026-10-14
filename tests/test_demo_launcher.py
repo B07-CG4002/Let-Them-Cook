@@ -62,8 +62,8 @@ def packet_lines():
     rows = []
     for device in (1, 2):
         identity = dict(device_id=device, boot_id=7, seq=0)
-        rows.append(dict(identity, type="sensor", direction="ESP->laptop", version=2,
-                         uptime_ms=100, values=list(range(8)), validation="decoded"))
+        rows.append(dict(identity, type="sensor", direction="ESP->laptop", version=3,
+                         uptime_ms=100, values=list(range(11)), validation="decoded"))
         rows.append(dict(identity, type="sensor_ack", direction="Ultra96->laptop",
                          validation="accepted"))
     return "".join(json.dumps(row) + "\n" for row in rows)

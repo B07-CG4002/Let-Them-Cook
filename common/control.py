@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import hashlib
 import struct
 
-from common.sensor import _integer, decode_packet, SensorPacket
+from common.sensor import _integer, decode_packet, SensorPacket, VERSION
 
 CONTROL_UUID = '6e1c0007-7a45-4dc4-b678-3f2d5a9c1001'
 RESPONSE_UUID = '6e1c0008-7a45-4dc4-b678-3f2d5a9c1001'
@@ -53,7 +53,7 @@ def _validate(frame, mtu):
         return
     if opcode == COMMAND:
         packet = decode_packet(frame.payload)
-        if (frame.offset or packet.version != 2 or packet.device_id != frame.device_id
+        if (frame.offset or packet.version != VERSION or packet.device_id != frame.device_id
                 or packet.seq != frame.request_id):
             raise ValueError('uncorrelated command sensor packet')
     elif opcode == SET_RATE:
@@ -117,5 +117,5 @@ def parse_file_metadata(payload):
 
 
 def transformed_values(values):
-    packet = SensorPacket(1, 0, 0, 0, values, version=2)
+    packet = SensorPacket(1, 0, 0, 0, values)
     return tuple(-32768 if value == 32767 else value + 1 for value in packet.values)

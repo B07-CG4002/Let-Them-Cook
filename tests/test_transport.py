@@ -17,10 +17,13 @@ def test_transport_modules_exist():
     assert spec is not None, "framed transport is missing"
 
 
+DUMMY_GESTURES = ("REST", "FIST", "OPEN", "POINT")
+
+
 def message(seq=0, session="ltc-comms"):
-    return {"v": 1, "type": "SENSOR_BATCH", "session_id": session,
+    return {"v": 3, "type": "SENSOR_BATCH", "session_id": session,
             "device_id": 1, "boot_id": 42, "seq": seq, "uptime_ms": seq * 100,
-            "values": [-1000 + seq % 2000 + 10 * i for i in range(8)]}
+            "values": [(seq + 10 * i) % 32768 for i in range(11)], "request_id": None}
 
 
 def run(coro):
@@ -119,13 +122,16 @@ def test_real_tls_100_correlated_ack_and_independent_gateway_results(pki):
             for seq in range(100):
                 await write_frame(laptop_writer, message(seq))
                 assert await read_frame(laptop) == {
-                    "v": 1, "type": "INGEST_ACK", "session_id": "ltc-comms",
-                    "device_id": 1, "boot_id": 42, "seq": seq, "status": "accepted"}
-                assert await read_frame(phone) == {
-                    "v": 1, "type": "GESTURE_RESULT", "session_id": "ltc-comms",
-                    "device_id": 1, "boot_id": 42, "seq": seq,
-                    "result_id": "1:42:" + str(seq),
-                    "gesture": ["REST", "FIST", "OPEN", "POINT"][seq % 4], "confidence": 1.0}
+                    "v": 3, "type": "INGEST_ACK", "session_id": "ltc-comms",
+                    "device_id": 1, "boot_id": 42, "seq": seq, "request_id": None,
+                    "status": "accepted"}
+                # The built-in dummy model answers every accepted sample once.
+                result = await read_frame(phone)
+                assert result.pop("gesture") in DUMMY_GESTURES
+                assert result == {
+                    "v": 3, "type": "GESTURE_RESULT", "session_id": "ltc-comms",
+                    "device_id": 1, "boot_id": 42, "seq": seq, "request_id": None,
+                    "result_id": "1:42:" + str(seq), "confidence": 1.0}
             await write_frame(laptop_writer, message(99))
             assert (await read_frame(laptop))["status"] == "duplicate"
             with pytest.raises(asyncio.TimeoutError):
@@ -164,9 +170,12 @@ def test_server_rejects_schema_session_values_and_oversize_frames(pki):
         server = await server_fixture(pki)
         try:
             bad_messages = [dict(message(), **patch) for patch in (
-                {"v": True}, {"session_id": "wrong"}, {"device_id": 3},
+                {"v": True}, {"v": 2}, {"v": 1}, {"session_id": "wrong"}, {"device_id": 3},
                 {"boot_id": -1}, {"seq": 4294967296}, {"uptime_ms": False},
-                {"values": [0] * 8}, {"extra": 1}, {"type": "SUBSCRIBE"})]
+                {"values": [0] * 8}, {"values": [0] * 10}, {"values": [0] * 12},
+                {"values": [32768] + [0] * 10}, {"request_id": 5}, {"extra": 1},
+                {"type": "SUBSCRIBE"})]
+            bad_messages.append({key: value for key, value in message().items() if key != "request_id"})
             for invalid in bad_messages:
                 reader, writer = await connect(pki, server.ingest_port)
                 await write_frame(writer, invalid)
@@ -218,7 +227,7 @@ def test_subscriber_replacement_reconnect_and_service_close(pki):
     run(check())
 
 
-def test_dedup_evicts_oldest_trace_at_4096(pki):
+def test_identity_evicted_from_the_4096_fingerprints_is_refused_as_stale(pki):
     from common.wire import read_frame, write_frame
 
     async def check():
@@ -230,9 +239,18 @@ def test_dedup_evicts_oldest_trace_at_4096(pki):
                 assert (await read_frame(reader))["status"] == "accepted"
             await write_frame(writer, message(4096))
             assert (await read_frame(reader))["status"] == "duplicate"
+            # seq 1 is still among the last 4096 fingerprints: an exact retry is a duplicate.
+            await write_frame(writer, message(1))
+            assert (await read_frame(reader))["status"] == "duplicate"
+            # seq 0 left the fingerprints but is below the high-water mark: it can never be
+            # accepted again, so the service refuses it and closes ingestion without an ACK.
             await write_frame(writer, message(0))
-            assert (await read_frame(reader))["status"] == "accepted"
+            assert await asyncio.wait_for(reader.read(), 1) == b""
             await disconnect(writer)
+            assert server.metrics["accepted"] == 4097
+            assert server.metrics["duplicates"] == 2
+            assert server.metrics["rejected"] == 1
+            assert server.metrics["model_samples"] == 4097
         finally:
             await server.close()
     run(check())
@@ -467,8 +485,10 @@ def test_phone_simulator_rejects_bad_result_schema_and_bad_ca(pki):
         async def bad_peer(reader, writer):
             await read_frame(reader)
             await write_frame(writer, {"v": 1, "type": "SUBSCRIBED", "session_id": "ltc-comms"})
-            await write_frame(writer, {"v": 1, "type": "GESTURE_RESULT", "session_id": "ltc-comms",
-                "device_id": 1, "boot_id": 42, "seq": 0, "result_id": "wrong", "gesture": "REST", "confidence": 1.0})
+            # Valid in every field except result_id, so the receiver refuses it for that reason.
+            await write_frame(writer, {"v": 3, "type": "GESTURE_RESULT", "session_id": "ltc-comms",
+                "device_id": 1, "boot_id": 42, "seq": 0, "request_id": None, "result_id": "wrong",
+                "gesture": "REST", "confidence": 1.0})
             await disconnect(writer)
         folder, _ = pki
         server = await asyncio.start_server(bad_peer, "127.0.0.1", 0,

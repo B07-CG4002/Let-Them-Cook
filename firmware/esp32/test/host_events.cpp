@@ -42,11 +42,11 @@ int main() {
   assert(comms::parseMtuControlWrite(true, &request, 123).status == ProbeWriteStatus::Malformed);
   request.write.len = 2; request.write.value = nullptr;
   assert(comms::parseMtuControlWrite(true, &request, 123).status == ProbeWriteStatus::Malformed);
-  uint8_t control[46] = {};
-  request.write = {7, 123, 0, 46, false, control};
+  uint8_t control[52] = {};  // A COMMAND frame: 14-byte header + 38-byte packet.
+  request.write = {7, 123, 0, 52, false, control};
   auto application = comms::parseApplicationControlWrite(true, &request, 123);
   assert(application.status == ProbeWriteStatus::Valid && application.connectionId == 7);
-  assert(application.inputLength == 46 && application.value == control);
+  assert(application.inputLength == 52 && application.value == control);
   assert(comms::parseApplicationControlWrite(false, &execute, 123).status == ProbeWriteStatus::Ignored);
   assert(comms::parseApplicationControlWrite(true, &request, 124).status == ProbeWriteStatus::Ignored);
   request.write.is_prep = true;
@@ -57,7 +57,7 @@ int main() {
   assert(comms::parseApplicationControlWrite(true, &request, 123).status == ProbeWriteStatus::Malformed);
   request.write.len = 195;
   assert(comms::parseApplicationControlWrite(true, &request, 123).status == ProbeWriteStatus::Malformed);
-  request.write.len = 46; request.write.value = nullptr;
+  request.write.len = 52; request.write.value = nullptr;
   assert(comms::parseApplicationControlWrite(true, &request, 123).status == ProbeWriteStatus::Malformed);
   std::puts("PASS GATT event/union and malformed-write regression");
 }

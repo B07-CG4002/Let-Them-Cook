@@ -1,4 +1,8 @@
-"""TLS-only B07 Communications service. Ingestion ACKs and Phone results use separate ports."""
+"""TLS-only B07 Communications service. Ingestion ACKs and Phone results use separate ports.
+
+Each newly accepted stream sample goes to the model (ultra96.model); its results go to the
+one subscribed phone. Only protocol version 3 is accepted.
+"""
 import argparse
 import asyncio
 from collections import OrderedDict
@@ -10,11 +14,17 @@ import random
 import signal
 import socket
 import ssl
+import sys
+import threading
 import time
+import traceback
 
 from common.tls import server_context
 from common.wire import ProtocolError, STREAM_LIMIT, read_frame, write_frame
-from ultra96.protocol import GESTURES, result_identity, trace_fields, validate_message, validate_session
+from common.sensor import VERSION
+from ultra96.model import DummyModel, ModelPort, ModelStartError, load_model
+from ultra96.protocol import (DUMMY_GESTURES, result_identity, trace_fields, validate_message,
+                              validate_session)
 
 LOG = logging.getLogger(__name__)
 _EXPECTED_ERRORS = (ProtocolError, asyncio.IncompleteReadError, asyncio.TimeoutError,
@@ -85,7 +95,7 @@ class ResultQueue:
 
 class CommsServer:
     def __init__(self, ssl_context, session_id="ltc-comms", ingest_port=8888, gateway_port=9999,
-                 *, observer=None, rng=None, max_v2_namespaces=128, max_v2_commands=4096):
+                 *, observer=None, rng=None, max_namespaces=128, max_commands=4096, model=None):
         if (not isinstance(ssl_context, ssl.SSLContext)
                 or ssl_context.minimum_version < ssl.TLSVersion.TLSv1_2):
             raise ValueError("server requires TLS >=1.2")
@@ -101,19 +111,20 @@ class CommsServer:
         self._subscriber = None
         self.observer = observer
         self._subscriber_generation = 0
-        self._recent = OrderedDict()
-        # V2 stream high-water marks are never evicted: an old identity cannot
-        # draw another random event after leaving the bounded fingerprint cache.
-        # Command IDs need not be ordered across relay restarts, so commands use
-        # a separate bounded ledger that rejects capacity exhaustion.
-        if (type(max_v2_namespaces) is not int or max_v2_namespaces < 1 or
-                type(max_v2_commands) is not int or max_v2_commands < 1):
-            raise ValueError("v2 identity capacities must be positive integers")
-        self._v2_high_water = {}
-        self._v2_recent = OrderedDict()
-        self._v2_commands = {}
-        self._max_v2_namespaces = max_v2_namespaces
-        self._max_v2_commands = max_v2_commands
+        # Stream high-water marks are never evicted: an old identity cannot reach
+        # the model again after leaving the bounded fingerprint cache. Command IDs
+        # need not be ordered across relay restarts, so commands use a separate
+        # bounded ledger that rejects capacity exhaustion.
+        if (type(max_namespaces) is not int or max_namespaces < 1 or
+                type(max_commands) is not int or max_commands < 1):
+            raise ValueError("identity capacities must be positive integers")
+        self._high_water = {}
+        self._fingerprints = OrderedDict()
+        self._commands = {}
+        self._max_namespaces = max_namespaces
+        self._max_commands = max_commands
+        # Model result IDs already sent; the phone also de-duplicates the last 4096.
+        self._emitted = OrderedDict()
         self._rng = random.SystemRandom() if rng is None else rng
         self._closing = False
         self._accept_failure = None
@@ -124,6 +135,9 @@ class CommsServer:
                         "accept_retries": 0, "accept_failures": 0}
         if observer is not None:
             self.metrics["observer_errors"] = 0
+        self.model = ModelPort(DummyModel(self._rng) if model is None else model,
+                               self._model_result, self.metrics)
+        self.model_start_seconds = None
 
     def _observe(self, event, **fields):
         """Observers must be nonblocking; diagnostic failures never stop forwarding."""
@@ -136,6 +150,8 @@ class CommsServer:
     async def start(self):
         if self._listeners or self._closing:
             raise RuntimeError("server is already started or closed")
+        # The model is ready before any listener can deliver a sample.
+        self.model_start_seconds = self.model.start(asyncio.get_running_loop())
         try:
             for gateway, port in ((False, self.ingest_port), (True, self.gateway_port)):
                 listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -247,34 +263,63 @@ class CommsServer:
         while not self._closing:
             message = validate_message(await read_frame(reader), "SENSOR_BATCH", self.session_id)
             trace = (message["device_id"], message["boot_id"], message["seq"])
-            duplicate = (self._v2_duplicate(message) if message["v"] == 2
-                         else trace in self._recent)
+            duplicate = self._duplicate(message)
             if duplicate:
                 self.metrics["duplicates"] += 1
                 self._observe("result_duplicate", **trace_fields(message))
             else:
-                if message["v"] == 1:
-                    self._recent[trace] = None
-                    if len(self._recent) > 4096:
-                        self._recent.popitem(last=False)
                 self.metrics["accepted"] += 1
                 self._observe("result_accepted", **trace_fields(message))
                 LOG.info("accepted session=%s device=%d boot=%d seq=%d",
                          self.session_id, *trace)
-                result = dict(v=message["v"], type="GESTURE_RESULT", **trace_fields(message))
-                result.update(result_id=result_identity(message),
-                              gesture=(self._rng.choice(GESTURES) if message["v"] == 2
-                                       else GESTURES[message["seq"] % 4]), confidence=1.0)
-                if self._subscriber is None:
-                    self.metrics["disconnected_results"] += 1
-                    self._observe("result_no_subscriber", **trace_fields(message))
+                if message["request_id"] is None:
+                    # Runs before the ACK is written; the model must return immediately.
+                    self.model.on_sample(message["device_id"], message["boot_id"], message["seq"],
+                                         message["uptime_ms"], message["values"])
                 else:
-                    self._subscriber[1].put(result)
+                    # Commands test the control path; they never reach the model.
+                    result = dict(v=VERSION, type="GESTURE_RESULT", **trace_fields(message))
+                    result.update(result_id=result_identity(message),
+                                  gesture=self._rng.choice(DUMMY_GESTURES), confidence=1.0)
+                    self._publish(result)
             ack = dict(v=message["v"], type="INGEST_ACK", **trace_fields(message))
             ack["status"] = "duplicate" if duplicate else "accepted"
             await write_frame(writer, ack)
 
-    def _v2_duplicate(self, message):
+    def _publish(self, result):
+        if self._subscriber is None:
+            self.metrics["disconnected_results"] += 1
+            self._observe("result_no_subscriber", **trace_fields(result))
+        else:
+            self._subscriber[1].put(result)
+
+    def _model_result(self, gesture, confidence, device_id, boot_id, seq):
+        """Loop thread: one already-normalized model result for an accepted stream sample."""
+        identity = dict(session_id=self.session_id, device_id=device_id, boot_id=boot_id,
+                        seq=seq, request_id=None)
+        high_water = self._high_water.get((device_id, boot_id))
+        if high_water is None or seq > high_water:
+            self.metrics["model_results_rejected"] += 1
+            self._observe("model_result_refused", reason="unknown_identity", **identity)
+            self.model.warn("identity", "model result names a sample this service has not accepted")
+            return
+        result_id = "{}:{}:{}".format(device_id, boot_id, seq)
+        if result_id in self._emitted:
+            self.metrics["model_results_duplicate"] += 1
+            self._observe("model_result_refused", reason="duplicate", **identity)
+            self.model.warn("duplicate", "model emitted a second result for one sample")
+            return
+        self._emitted[result_id] = None
+        if len(self._emitted) > 4096:
+            self._emitted.popitem(last=False)
+        result = dict(v=VERSION, type="GESTURE_RESULT", result_id=result_id, gesture=gesture,
+                      confidence=confidence, **identity)
+        validate_message(result, "GESTURE_RESULT", self.session_id)
+        self.metrics["model_results"] += 1
+        self._observe("model_result", **identity)
+        self._publish(result)
+
+    def _duplicate(self, message):
         """Record acceptance atomically before the next await; no outage replay.
 
         State is scoped to this server process/configured session. A fresh server
@@ -285,22 +330,22 @@ class CommsServer:
         trace = (message["device_id"], message["boot_id"], message["seq"])
         fingerprint = (message["uptime_ms"], tuple(message["values"]))
         command = message["request_id"] is not None
-        ledger = self._v2_commands if command else self._v2_recent
+        ledger = self._commands if command else self._fingerprints
         if trace in ledger:
             if ledger[trace] != fingerprint:
-                raise ProtocolError("conflicting payload for existing v2 identity")
+                raise ProtocolError("conflicting payload for existing identity")
             return True
         if command:
-            if len(ledger) >= self._max_v2_commands:
-                raise ProtocolError("v2 command identity capacity exhausted; start a new session")
+            if len(ledger) >= self._max_commands:
+                raise ProtocolError("command identity capacity exhausted; start a new session")
         else:
             namespace = trace[:2]
-            if namespace in self._v2_high_water:
-                if message["seq"] <= self._v2_high_water[namespace]:
-                    raise ProtocolError("stale v2 stream identity outside replay window")
-            elif len(self._v2_high_water) >= self._max_v2_namespaces:
-                raise ProtocolError("v2 stream identity capacity exhausted; start a new session")
-            self._v2_high_water[namespace] = message["seq"]
+            if namespace in self._high_water:
+                if message["seq"] <= self._high_water[namespace]:
+                    raise ProtocolError("stale stream identity outside replay window")
+            elif len(self._high_water) >= self._max_namespaces:
+                raise ProtocolError("stream identity capacity exhausted; start a new session")
+            self._high_water[namespace] = message["seq"]
         ledger[trace] = fingerprint
         if not command and len(ledger) > 4096:
             ledger.popitem(last=False)
@@ -400,7 +445,7 @@ class CommsServer:
         await asyncio.gather(*tasks, return_exceptions=True)
         self._listeners.clear()
         self._subscriber = None
-        self._recent.clear()
+        self.model.close()
 
 
 async def _run(args):
@@ -419,16 +464,37 @@ async def _run(args):
             print(json.dumps({"event": "observation_stopped", "state": state}), flush=True)
 
 
+def _model_failed(spec, exc):
+    print(json.dumps({"event": "model_failed", "model": spec or "dummy",
+                      "error_type": type(exc.__cause__ or exc).__name__}), flush=True)
+
+
 async def _run_service(args, observer=None):
+    spec = getattr(args, "model", None)
+    # Only loading the model and its start(emit) are model failures; a bad session,
+    # certificate or port is reported as itself.
+    try:
+        model = load_model(spec, getattr(args, "model_path", None))
+    except (Exception, SystemExit) as exc:
+        _model_failed(spec, exc)
+        if isinstance(exc, SystemExit):  # exit nonzero even for a bare sys.exit() in the model
+            raise ModelStartError("importing the model raised SystemExit") from exc
+        raise
     service = CommsServer(server_context(args.cert, args.key), session_id=args.session_id,
                           ingest_port=args.ingest_port, gateway_port=args.gateway_port,
-                          observer=observer)
-    await service.start()
+                          observer=observer, model=model)
+    try:
+        await service.start()
+    except ModelStartError as exc:
+        _model_failed(spec, exc)
+        raise
     loop = asyncio.get_running_loop()
     stopped = asyncio.Event()
     handles_sigterm = False
     waiters = ()
     try:
+        print(json.dumps({"event": "model_ready", "model": service.model.name,
+                          "seconds": round(service.model_start_seconds, 3)}), flush=True)
         try:
             loop.add_signal_handler(signal.SIGTERM, stopped.set)
             handles_sigterm = True
@@ -464,12 +530,38 @@ def main():
     parser.add_argument("--ingest-port", type=int, default=8888)
     parser.add_argument("--gateway-port", type=int, default=9999)
     parser.add_argument("--event-log-dir", help="new directory for bounded result-path diagnostics")
+    parser.add_argument("--model", metavar="MODULE",
+                        help="importable module with start(emit) and on_sample(...); "
+                             "default: the built-in dummy model")
+    parser.add_argument("--model-path", metavar="DIR",
+                        help="directory put first on the import path before loading --model")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     try:
         asyncio.run(_run(args))
     except KeyboardInterrupt:
         pass
+    except BaseException as exc:
+        if _model_threads_left():
+            traceback.print_exc()
+            _exit_now(exc.code if isinstance(exc, SystemExit) and type(exc.code) is int else 1)
+        raise
+    if _model_threads_left():
+        _exit_now(0)
+
+
+def _model_threads_left():
+    """Non-daemon threads a model started; they would keep a stopped service alive."""
+    return [thread for thread in threading.enumerate()
+            if thread is not threading.main_thread() and not thread.daemon and thread.is_alive()]
+
+
+def _exit_now(code):
+    # The service has closed its ports and printed its metrics; nothing else may hold it.
+    print(json.dumps({"event": "exit_with_model_threads",
+                      "threads": len(_model_threads_left())}), flush=True)
+    sys.stderr.flush()
+    os._exit(code)
 
 
 if __name__ == "__main__":

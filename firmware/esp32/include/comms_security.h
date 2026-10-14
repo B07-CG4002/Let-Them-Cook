@@ -1,6 +1,8 @@
 #pragma once
 
+#include <stddef.h>
 #include <stdint.h>
+#include "comms_packet.h"
 
 namespace comms {
 
@@ -16,7 +18,8 @@ inline bool canNotify(bool connected, bool subscribed, bool authenticated,
   return connected && subscribed && (authenticated || diagnostic);
 }
 
-inline bool sensorFitsMtu(uint16_t mtu) { return mtu >= 35; }
+// One whole packet plus the 3-byte ATT notification header (41 for version 3).
+inline bool sensorFitsMtu(uint16_t mtu) { return static_cast<size_t>(mtu) >= kPacketSize + 3; }
 
 inline bool canAcceptControl(bool connected, bool subscribed, bool authenticated,
                              bool diagnostic, uint16_t writeConnection,

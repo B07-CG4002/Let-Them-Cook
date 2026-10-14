@@ -87,7 +87,7 @@ namespace LetThemCook.Comms
         private void OnGUI()
         {
             if (!showOverlay) return;
-            GUI.Label(new Rect(16, 16, Screen.width - 32, 64), "B07 Communications dummy receiver | " + status);
+            GUI.Label(new Rect(16, 16, Screen.width - 32, 64), "B07 Communications receiver | " + status);
             GUI.TextArea(new Rect(16, 80, Screen.width - 32, 220), latestJson);
         }
     }

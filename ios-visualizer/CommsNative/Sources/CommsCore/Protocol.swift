@@ -8,16 +8,28 @@ public struct GestureResult: Equatable, Sendable {
     public let json: String
     public let resultID: String
     public let gesture: String
+    public let confidence: Double
     public let seq: UInt32
     public let deviceID: UInt32
     public let bootID: UInt32
     public let requestID: UInt32?
 }
 
+extension GestureResult {
+    /// The object CommsNextResult hands to the game, keys in this order. The parser
+    /// limits result_id to digits, colons and "cmd:", and gesture to [A-Za-z0-9_-],
+    /// so neither needs escaping; a finite Double's description is a JSON number.
+    public var nextResultJSON: String {
+        "{\"result_id\":\"\(resultID)\",\"gesture\":\"\(gesture)\",\"confidence\":\(confidence),\"device_id\":\(deviceID)}"
+    }
+}
+
 public enum CommsProtocol {
     public static let maximumFrameBytes = 16_384
+    public static let maximumGestureLength = 32
     private static let baseFields: Set<String> = ["v", "type", "session_id"]
-    private static let resultFields = baseFields.union(["device_id", "boot_id", "seq", "result_id", "gesture", "confidence"])
+    // Protocol version 3: request_id is always present (null except for command echoes).
+    private static let resultFields = baseFields.union(["device_id", "boot_id", "seq", "request_id", "result_id", "gesture", "confidence"])
 
     /// Returns a complete wire frame, including its four-byte big-endian prefix.
     public static func subscribe(session: String) throws -> [UInt8] {
@@ -33,34 +45,45 @@ public enum CommsProtocol {
         try header(fields, kind: "SUBSCRIBED", session: session, allowed: baseFields)
     }
 
+    /// Accepts only a version 3 GESTURE_RESULT. SUBSCRIBE and SUBSCRIBED stay at version 1.
     public static func result(_ body: [UInt8], session: String) throws -> GestureResult {
         let (json, fields) = try parse(body)
-        let version = try integer(fields["v"])
-        let allowed = version == 2 ? resultFields.union(["request_id"]) : resultFields
-        try header(fields, kind: "GESTURE_RESULT", session: session, allowed: allowed, versions: [1, 2])
+        try header(fields, kind: "GESTURE_RESULT", session: session, allowed: resultFields, versions: [3])
         let device = try integer(fields["device_id"])
         let boot = try integer(fields["boot_id"])
         let seq = try integer(fields["seq"])
         let resultID = try string(fields["result_id"])
         let gesture = try string(fields["gesture"])
         var requestID: UInt32?
-        if version == 2 {
-            if case .null = fields["request_id"] { requestID = nil }
-            else {
-                requestID = try integer(fields["request_id"])
-                guard requestID == seq, seq > 0 else { throw CommsProtocolError.invalidSchema }
-            }
+        if case .null = fields["request_id"] { requestID = nil }
+        else {
+            requestID = try integer(fields["request_id"])
+            guard requestID == seq, seq > 0 else { throw CommsProtocolError.invalidSchema }
         }
         let expectedID = (requestID == nil ? "" : "cmd:") + "\(device):\(boot):\(seq)"
-        let gestures = ["REST", "FIST", "OPEN", "POINT"]
+        // Confidence comes from the lexical number token; FlatJSON never turns
+        // true, false, a string or null into a number.
         guard device == 1 || device == 2,
-              resultID == expectedID,
-              version == 1 ? gesture == gestures[Int(seq % 4)] : gestures.contains(gesture),
+              resultID.unicodeScalars.elementsEqual(expectedID.unicodeScalars),
+              validGesture(gesture),
               case .number(let token) = fields["confidence"],
-              let confidence = Double(token), confidence.isFinite, confidence == 1 else {
+              let confidence = Double(token), confidence.isFinite, (0...1).contains(confidence) else {
             throw CommsProtocolError.invalidSchema
         }
-        return GestureResult(json: json, resultID: resultID, gesture: gesture, seq: seq, deviceID: device, bootID: boot, requestID: requestID)
+        return GestureResult(json: json, resultID: resultID, gesture: gesture, confidence: confidence, seq: seq, deviceID: device, bootID: boot, requestID: requestID)
+    }
+
+    /// 1...32 Unicode scalars, each an ASCII letter, digit, "_" or "-": the same rule
+    /// as the Python and C# receivers. Scalars, not Characters, so a composed or
+    /// combining sequence never passes as one character.
+    private static func validGesture(_ gesture: String) -> Bool {
+        let scalars = gesture.unicodeScalars
+        return (1...maximumGestureLength).contains(scalars.count) && scalars.allSatisfy { scalar in
+            switch scalar.value {
+            case 48...57, 65...90, 97...122, 45, 95: return true
+            default: return false
+            }
+        }
     }
 
     private static func validateSession(_ session: String) throws {
@@ -157,7 +180,7 @@ private enum JSONAtom {
     case null
 }
 
-/// The schemas are flat. Only v2 request_id permits null; validators reject it
+/// The schemas are flat. Only request_id permits null; validators reject it
 /// in other fields. Lexical numbers preserve the distinction between 42 and 42.0.
 private struct FlatJSON {
     private let input: [Unicode.Scalar]
@@ -175,7 +198,7 @@ private struct FlatJSON {
         } else {
             while true {
                 let key = try string()
-                // V2 adds one correlation field. Check decoded keys before insertion.
+                // A version 3 GESTURE_RESULT has exactly ten keys. Check decoded keys before insertion.
                 guard fields[key] == nil, fields.count < 10 else { throw CommsProtocolError.invalidSchema }
                 space()
                 try take(58)

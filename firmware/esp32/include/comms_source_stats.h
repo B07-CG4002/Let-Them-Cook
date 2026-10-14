@@ -8,6 +8,7 @@
 namespace comms {
 
 constexpr size_t kSourceStatsSize = 24;
+static_assert(kPacketVersion == 3, "update the LCS3 source statistics marker");
 
 struct SourceStats {
   uint32_t bootId;
@@ -37,10 +38,12 @@ inline bool serializeSourceStats(uint8_t* output, size_t capacity,
     return false;
   }
 
+  // LCS3 follows the packet version, so an audited laptop bridge refuses a
+  // board still running version 2 firmware (LCS1) before it subscribes.
   output[0] = 'L';
   output[1] = 'C';
   output[2] = 'S';
-  output[3] = '1';
+  output[3] = '3';
   output[4] = deviceId;
   output[5] = 0;
   output[6] = 0;

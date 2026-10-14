@@ -16,15 +16,21 @@ from ultra96.server import ResultQueue, CommsServer
 
 
 def sensor(seq, device=1):
-    return dict(v=1, type="SENSOR_BATCH", session_id="ltc-comms",
+    return dict(v=3, type="SENSOR_BATCH", session_id="ltc-comms",
                 device_id=device, boot_id=7, seq=seq, uptime_ms=seq * 100,
-                values=[seq % 2000 - 1000 + 10 * i for i in range(8)])
+                values=[(seq + 10 * i) % 32768 for i in range(11)], request_id=None)
 
 
 def result(seq):
-    return dict(v=1, type="GESTURE_RESULT", session_id="ltc-comms",
-                device_id=1, boot_id=7, seq=seq, result_id="1:7:" + str(seq),
+    return dict(v=3, type="GESTURE_RESULT", session_id="ltc-comms",
+                device_id=1, boot_id=7, seq=seq, request_id=None, result_id="1:7:" + str(seq),
                 gesture=("REST", "FIST", "OPEN", "POINT")[seq % 4], confidence=1.0)
+
+
+def started(server):
+    """_ingest is driven directly here, so start the model as CommsServer.start() would."""
+    server.model_start_seconds = server.model.start(asyncio.get_running_loop())
+    return server
 
 
 def reader_for(*messages, eof=False):
@@ -67,7 +73,7 @@ class Writer:
 
 def observed_server(events):
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    return CommsServer(context, observer=lambda event, **fields: events.append((event, fields)))
+    return started(CommsServer(context, observer=lambda event, **fields: events.append((event, fields))))
 
 
 def fates(events):
@@ -179,7 +185,7 @@ def test_observer_exception_does_not_change_ack_or_delivery():
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         def broken(event, **fields):
             raise RuntimeError("sink failed")
-        server = CommsServer(context, observer=broken)
+        server = started(CommsServer(context, observer=broken))
         reader = reader_for(sensor(0), eof=True)
         writer = Writer()
         with pytest.raises(asyncio.IncompleteReadError):
@@ -247,9 +253,13 @@ def test_result_expiring_after_dequeue_has_stale_fate_without_write():
     asyncio.run(check())
 
 
-def test_default_metrics_schema_is_unchanged():
+def test_default_metrics_schema_has_model_counters_and_no_observer_errors():
     server = CommsServer(ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER))
     assert "observer_errors" not in server.metrics
+    for key in ("model_samples", "model_errors", "model_slow_calls", "model_results",
+                "model_results_rejected", "model_results_duplicate", "model_results_late"):
+        assert server.metrics[key] == 0
+    assert server.metrics["model_max_call_ms"] == 0.0
 
 
 def test_cli_exposes_opt_in_event_directory():
@@ -327,7 +337,7 @@ def test_real_sink_accepts_server_events_and_finalizes_exact_safe_ledger(tmp_pat
                 written_count += 1
                 if written_count == 2:
                     complete.set()
-        server = CommsServer(ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER), observer=observer)
+        server = started(CommsServer(ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER), observer=observer))
         reader = reader_for(dict(v=1, type="SUBSCRIBE", session_id="ltc-comms"))
         phone = Writer(reader)
         gateway = asyncio.create_task(server._gateway(reader, phone))
@@ -346,8 +356,9 @@ def test_real_sink_accepts_server_events_and_finalizes_exact_safe_ledger(tmp_pat
     assert state["complete"], state
     events = [json.loads(line) for line in (tmp_path / "new-log" / "events.jsonl").read_text().splitlines()]
     accepted = [(item["device_id"], item["seq"]) for item in events if item["event"] == "result_accepted"]
+    modelled = [(item["device_id"], item["seq"]) for item in events if item["event"] == "model_result"]
     written = [(item["device_id"], item["seq"]) for item in events if item["event"] == "result_write_complete"]
-    assert accepted == written == [(1, 0), (2, 0)]
+    assert accepted == modelled == written == [(1, 0), (2, 0)]
     assert all(item["phone_receipt_confirmed"] is False for item in events
                if item["event"] == "result_write_complete")
     assert all("values" not in item and "gesture" not in item for item in events)
