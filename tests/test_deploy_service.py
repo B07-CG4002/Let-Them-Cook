@@ -14,7 +14,7 @@ from tools import deploy_service
 from tools.generate_comms_pki import generate_pki, renew_server_identity
 
 ROOT = Path(__file__).resolve().parents[1]
-OLD_SERVICE_COMMIT = "c42b386"
+OLD_SERVICE_COMMIT = "5a004c6"
 
 
 def test_source_files_are_exactly_what_the_board_runs():
@@ -119,8 +119,8 @@ def test_remote_program_on_linux(tmp_path):
     for folder in ("common", "ultra96"):
         shutil.copytree(ROOT / folder, material / "new" / folder,
                         ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
-    # The running service on the board is the version-2 code of 28 September; c42b386 is
-    # the last commit before version 3 (same service code as the team main 5a004c6).
+    # The running service on the board is version-2 code; the team main 5a004c6 (the last
+    # team commit before version 3, also in every clone of the team repository) has it.
     archive = subprocess.run(["git", "-C", str(ROOT), "archive", OLD_SERVICE_COMMIT, "common", "ultra96"],
                              capture_output=True, timeout=60)
     if archive.returncode:
@@ -138,3 +138,13 @@ def test_remote_program_on_linux(tmp_path):
     output = result.stdout.decode("utf-8", "replace").replace("\0", "")
     assert result.returncode == 0, output[-4000:]
     assert "RESULT pass=27 fail=0" in output
+
+
+def test_ssh_errors_end_in_a_failed_line(monkeypatch, tmp_path, capsys):
+    paramiko = pytest.importorskip("paramiko")
+
+    def refuse(*_args):
+        raise paramiko.AuthenticationException("Authentication failed.")
+    monkeypatch.setattr(deploy_service, "_connect", refuse)
+    assert deploy_service.main([]) == 2
+    assert "FAILED: AuthenticationException: Authentication failed." in capsys.readouterr().err

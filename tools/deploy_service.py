@@ -434,6 +434,9 @@ def main(argv=None):
     except (OSError, ValueError, RuntimeError) as exc:
         print(f"FAILED: {exc}", file=sys.stderr)
         return 2
+    except Exception as exc:  # paramiko's own errors: unknown host key, wrong password, ...
+        print(f"FAILED: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":
