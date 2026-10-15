@@ -238,6 +238,11 @@ class Bridge:
         self.observation_received = 0
         self.observation_max_silence = 0.0
         self._observation_last = None
+        # The board counts its send ticks (sent or skipped) only while sensor
+        # notifications are on: from the first subscription to the snapshot
+        # that proves they stopped. A gated board's coverage is judged over it.
+        self.source_ticking_since = None
+        self.source_ticking_until = None
         self.goodput = GoodputMeter()
         self.evidence = evidence
         self.negotiated_mtu = None
@@ -773,6 +778,8 @@ class Bridge:
                     self.enqueue(gen, data)
                 await self._bounded(client.start_notify(SENSOR_UUID, notification), self.config.connect_timeout)
                 subscribed = True
+                if self.source_ticking_since is None:
+                    self.source_ticking_since = self.clock()
                 self.metrics.ble_connections += 1
                 self.log("BLE_connected", direction="ESP<->laptop", generation=current,
                          mtu=client.mtu_size, authenticated=not self.config.diagnostic_unprotected)
@@ -807,7 +814,7 @@ class Bridge:
                 if client is not None:
                     cleanup_cancellation = None
                     source_deadline = self.clock() + self.config.connect_timeout
-                    quiesced_snapshot = None
+                    quiesced_snapshot = quiesced_at = None
                     remote_stop_task = None
                     if controls_subscribed and client.is_connected:
                         try:
@@ -834,6 +841,7 @@ class Bridge:
                                 quiesced_snapshot = parse_source_stats(await self._bounded(
                                     client.read_gatt_char(SOURCE_STATS_UUID, use_cached=False), remaining),
                                     expected_device_id=self.config.expected_device_id)
+                                quiesced_at = self.clock()
                                 start = self.source_audit.start_stats
                                 if start is None or quiesced_snapshot.boot_id != start.boot_id:
                                     raise ProtocolError("quiesced source boot changed")
@@ -893,6 +901,10 @@ class Bridge:
                                                     remaining),
                                 expected_device_id=self.config.expected_device_id)
                             self.source_audit.finish(final)
+                            # The quiesce read, or else this read after stop-notify,
+                            # is the barrier after which the board stopped ticking.
+                            self.source_ticking_until = (
+                                quiesced_at if quiesced_at is not None else self.clock())
                             if quiesced_snapshot is not None and final != quiesced_snapshot:
                                 raise ProtocolError("source changed after notifications were quiesced")
                             if quiesced_snapshot is not None:
@@ -956,6 +968,8 @@ class Bridge:
         seq = 0
         if self.source_audit is not None and self.source_audit.start_stats is None:
             self.source_audit.start(SourceStats(device_id, boot_id, 0, 0, 0))
+        if self.source_ticking_since is None:
+            self.source_ticking_since = self.clock()
         active_event.set()
         try:
             while stop_event is None or not stop_event.is_set():
@@ -972,6 +986,7 @@ class Bridge:
         finally:
             if self.source_audit is not None and self.source_audit.end_stats is None:
                 self.source_audit.finish(SourceStats(device_id, boot_id, seq, seq, 0))
+                self.source_ticking_until = self.clock()
             self.inbox.deactivate(preserve=True)
             active_event.clear()
 
@@ -997,6 +1012,10 @@ class Bridge:
                     callback_received=self.callback_received,
                     observation_received=self.observation_received,
                     observation_max_silence=self.observation_max_silence,
+                    source_ticking_seconds=(
+                        self.source_ticking_until - self.source_ticking_since
+                        if self.source_ticking_since is not None
+                        and self.source_ticking_until is not None else None),
                     sensor_goodput=self.goodput.report(self.clock()),
                     commands=self.commands.summary() if self.commands is not None else None,
                     controls=self.control.summary() if self.control is not None else None,

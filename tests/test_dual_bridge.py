@@ -11,7 +11,7 @@ import pytest
 
 from common.sensor import DUMMY_FIXTURES, SensorPacket, encode_packet
 from laptop.bridge import Bridge, BridgeConfig, SENSOR_UUID, SERVICE_UUID
-from laptop.dual_bridge import DualBridge
+from laptop.dual_bridge import DualBridge, _write_progress, board_coverage
 from laptop.source_audit import SOURCE_STATS_MAGIC, SOURCE_STATS_UUID, SourceStats
 
 
@@ -34,9 +34,10 @@ def fixture(seq):
     return DUMMY_FIXTURES[seq % len(DUMMY_FIXTURES)]
 
 
-def source_bytes(device, boot, next_seq, submitted, failures=0):
-    return struct.pack("<4sB3xIIII", SOURCE_STATS_MAGIC, device, boot, next_seq,
-                       submitted, failures)
+def source_bytes(device, boot, next_seq, submitted, failures=0, *, gated=False, idle=0,
+                 unread=0, refused=0):
+    return struct.pack("<4sBB2xIIIIIII", SOURCE_STATS_MAGIC, device, int(gated), boot,
+                       next_seq, submitted, failures, idle, unread, refused)
 
 
 def config(device, *, address=None, capacity=64, freshness=2.0):
@@ -233,6 +234,207 @@ async def test_final_quiet_tail_is_included_in_silence_verdict():
         assert report["devices"][device]["sustained_coverage"] is True
         assert report["devices"][device]["silence_ok"] is False
     assert report["clean"] is False
+
+
+def ticking_source(*, gated, rate, moving_ticks, quiet_ticks, delay=0.0, ticking_for=None):
+    """A board that ticks at a fixed rate and sends only on its moving ticks.
+
+    A gated board counts its quiet ticks as idle; an ungated board can only
+    miss a tick when a read fails, so it counts them as unread. Ticks follow
+    the loop clock, so a coarse timer cannot make the board look slow. The
+    board subscribes after delay seconds, and with ticking_for its loop stalls
+    that many seconds after it subscribed (it stays connected).
+    """
+    async def source(self, _rate, *, stop_event, active_event):
+        device = self.config.expected_device_id
+        boot = 500 + device
+        clock = asyncio.get_running_loop().time
+        counts = {"ticks": 0, "seq": 0, "quiet": 0}
+        if delay:
+            try:
+                await asyncio.wait_for(stop_event.wait(), delay)
+            except asyncio.TimeoutError:
+                pass
+        self.inbox.activate(1)
+        self.source_audit.start(SourceStats(device, boot, 0, 0, 0, gated=gated))
+        started = clock()
+        self.source_ticking_since = self.clock()
+
+        def catch_up():
+            elapsed = clock() - started
+            if ticking_for is not None:
+                elapsed = min(elapsed, ticking_for)
+            due = int(elapsed * rate)
+            while counts["ticks"] < due:
+                tick = counts["ticks"]
+                if tick % (moving_ticks + quiet_ticks) < moving_ticks:
+                    seq = counts["seq"]
+                    self.enqueue(1, encode_packet(SensorPacket(
+                        device, boot, seq, tick * 1000 // rate, fixture(seq))))
+                    counts["seq"] += 1
+                else:
+                    counts["quiet"] += 1
+                counts["ticks"] += 1
+
+        active_event.set()
+        while not stop_event.is_set():
+            catch_up()
+            try:
+                await asyncio.wait_for(stop_event.wait(), 0.005)
+            except asyncio.TimeoutError:
+                pass
+        catch_up()
+        skipped = {"idle" if gated else "unread": counts["quiet"]}
+        self.source_audit.finish(SourceStats(device, boot, counts["seq"], counts["seq"], 0,
+                                             gated=gated, **skipped))
+        self.source_ticking_until = self.clock()
+        self.inbox.deactivate(preserve=True)
+        active_event.clear()
+    return source
+
+
+@async_test
+async def test_gated_board_idle_half_the_time_passes_and_ungated_board_keeps_old_rules():
+    # 100 Hz, 0.25 s moving then 0.25 s quiet: half the ticks send nothing, and
+    # every quiet span is longer than the 0.1 s freshness limit.
+    left = Bridge(config(1, freshness=0.1))
+    right = Bridge(config(2, freshness=0.1))
+    install_ack_transport(left)
+    install_ack_transport(right)
+    left.dummy_loop = MethodType(
+        ticking_source(gated=True, rate=100, moving_ticks=25, quiet_ticks=25), left)
+    right.dummy_loop = MethodType(
+        ticking_source(gated=False, rate=100, moving_ticks=25, quiet_ticks=25), right)
+    progress = []
+    report = await DualBridge(
+        left, right, expected_rate=100, startup_timeout=1, drain_timeout=1).run(
+            duration=1.0, mock=True, progress_interval=0.05,
+            progress_callback=lambda phase, mode, snapshots: progress.append((phase, snapshots)))
+
+    gated, ungated = report["devices"]["1"], report["devices"]["2"]
+    assert gated["gated"] is True and gated["source"]["gated"] is True
+    assert gated["source_idle"] == gated["source"]["source_idle"] > 0
+    source = gated["source"]
+    assert source["clean"] is True
+    assert source["generated"] == gated["received"] == gated["acked"]
+    # Fewer than 90% of the expected samples were sent, but the board kept ticking.
+    assert gated["observation_received"] < 0.9 * gated["expected_samples"]
+    assert source["generated"] + source["source_idle"] >= 0.9 * gated["expected_samples"]
+    assert source["source_ticks"] == (source["generated"] + source["source_idle"]
+                                      + source["source_unread"] + source["source_refused"])
+    assert gated["observation_max_silence"] > 0.1
+    assert gated["sustained_coverage"] is True
+    # Judged over the time its notifications were on, not the common window.
+    assert gated["coverage_expected"] == pytest.approx(gated["source_ticking_seconds"] * 100)
+    assert gated["coverage_ratio"] >= 0.9
+    assert gated["silence_ok"] is True
+    assert gated["clean"] is True
+
+    assert ungated["gated"] is False and ungated["source_idle"] == 0
+    assert ungated["source"]["source_unread"] > 0
+    assert ungated["source"]["clean"] is True
+    assert ungated["sustained_coverage"] is False
+    assert ungated["silence_ok"] is False
+    assert ungated["clean"] is False
+    assert report["clean"] is False
+
+    # The start snapshot carries the flag, so it is known from the observation on.
+    observed = [item for phase, snapshots in progress if phase == "observation"
+                for item in snapshots]
+    assert {item["gated"] for item in observed if item["device_id"] == 1} == {True}
+    assert {item["gated"] for item in observed if item["device_id"] == 2} == {False}
+
+
+def coverage_item(*, gated, generated, idle, received, silence, ticking=2.0):
+    return {"source": {"gated": gated, "generated": generated, "source_idle": idle},
+            "observation_received": received, "observation_max_silence": silence,
+            "source_ticking_seconds": ticking}
+
+
+# Common window: 100 expected samples. Rate 50 Hz, so 2 s of ticking is 100 ticks.
+@pytest.mark.parametrize("item,expected", [
+    # Gated: idle ticks count toward coverage, and silence is expected once idle.
+    (coverage_item(gated=True, generated=50, idle=50, received=50, silence=0.5),
+     (100, 100.0, True, True)),
+    (coverage_item(gated=True, generated=40, idle=40, received=40, silence=0.5),
+     (80, 100.0, False, True)),
+    # Gated but never idle: the ordinary silence rule applies.
+    (coverage_item(gated=True, generated=100, idle=0, received=100, silence=0.5),
+     (100, 100.0, True, False)),
+    # The same 100 ticks over 6 s of notifications (the board subscribed long
+    # before the other one): the expectation covers the counters' interval.
+    (coverage_item(gated=True, generated=50, idle=50, received=50, silence=0.5, ticking=6.0),
+     (100, 300.0, False, True)),
+    # No ticking interval (no final snapshot): nothing to judge the ticks against.
+    (coverage_item(gated=True, generated=50, idle=50, received=50, silence=0.5, ticking=None),
+     (100, None, False, True)),
+    # No same-boot source counts: nothing proves the board kept ticking.
+    (coverage_item(gated=True, generated=None, idle=None, received=100, silence=0.0),
+     (0, 100.0, False, True)),
+    # Ungated: unchanged, judged on samples received in the common window.
+    (coverage_item(gated=False, generated=100, idle=0, received=50, silence=0.5),
+     (50, 100.0, False, False)),
+    (coverage_item(gated=False, generated=100, idle=0, received=95, silence=0.05, ticking=6.0),
+     (95, 100.0, True, True)),
+    (coverage_item(gated=None, generated=None, idle=None, received=0, silence=0.0),
+     (0, 100.0, False, True)),
+])
+def test_board_coverage_rules_for_gated_and_ungated_boards(item, expected):
+    assert board_coverage(item, 100.0, 0.1, 50.0) == expected
+
+
+@async_test
+@pytest.mark.parametrize("stalls", [False, True])
+async def test_gated_board_that_subscribed_early_is_judged_over_its_own_ticking_interval(stalls):
+    # LEFT (gated) subscribes 0.6 s before RIGHT, so the common window starts
+    # about 0.6 s into LEFT's counters. When LEFT's loop stalls at 0.7 s it has
+    # about 70 ticks, more than 90% of the window's 40 expected samples, yet it
+    # ticked through only about 70% of the time its notifications were on.
+    left = Bridge(config(1))
+    right = Bridge(config(2))
+    install_ack_transport(left)
+    install_ack_transport(right)
+    left.dummy_loop = MethodType(ticking_source(
+        gated=True, rate=100, moving_ticks=5, quiet_ticks=5,
+        ticking_for=0.7 if stalls else None), left)
+    right.dummy_loop = MethodType(ticking_source(
+        gated=False, rate=100, moving_ticks=1, quiet_ticks=0, delay=0.6), right)
+    report = await DualBridge(
+        left, right, expected_rate=100, startup_timeout=2, drain_timeout=1).run(
+            duration=0.4, mock=True)
+
+    item = report["devices"]["1"]
+    source = item["source"]
+    assert item["gated"] is True and source["clean"] is True
+    assert item["source_idle"] > 0 and item["silence_ok"] is True
+    assert item["source_ticking_seconds"] >= 0.9
+    assert item["coverage_expected"] == pytest.approx(item["source_ticking_seconds"] * 100)
+    covered = source["generated"] + source["source_idle"]
+    assert item["coverage_ratio"] == pytest.approx(covered / item["coverage_expected"])
+    if stalls:
+        # The old rule compared these ticks with the window alone and passed.
+        assert covered >= 0.9 * item["expected_samples"]
+        assert item["observation_received"] < 0.9 * item["expected_samples"]
+        assert item["coverage_ratio"] < 0.9
+        assert item["sustained_coverage"] is False
+        assert item["clean"] is False
+        assert report["clean"] is False
+    else:
+        assert item["coverage_ratio"] >= 0.9
+        assert item["sustained_coverage"] is True
+        assert item["clean"] is True
+        assert report["devices"]["2"]["coverage_expected"] == item["expected_samples"]
+
+
+def test_progress_line_names_whether_each_board_is_gated(capsys):
+    goodput = {"rolling_kbps": 0.0, "average_kbps": 0.0}
+    snapshots = [dict(device_id=device, gated=gated, received=0, processed=0, acked=0,
+                      queue=0, drops=0, errors=0, sensor_goodput=goodput)
+                 for device, gated in ((1, True), (2, None))]
+    _write_progress("observation", "physical", snapshots)
+    lines = capsys.readouterr().err.splitlines()
+    assert "device=1 gated=yes " in lines[0]
+    assert "device=2 gated=unknown " in lines[1]
 
 
 @async_test

@@ -176,3 +176,13 @@ def test_help_runs_outside_repository_without_hardware(tmp_path):
                             input="", text=True, capture_output=True, timeout=10)
     assert result.returncode == 0, result.stderr
     assert all(flag in result.stdout for flag in ("--ports", "--pair", "--monitor"))
+
+
+def test_glove_option_checks_the_module_copies_then_flashes_the_glove_environments(monkeypatch):
+    module, commands, _ = environment(monkeypatch)
+    assert module.main(["--glove"]) == 0
+    assert commands[1][1:] == ["-m", "tools.sync_glove_module", "--check"]
+    assert commands[2][-2:] == ["-e", "firebeetle32-left-glove"]
+    assert commands[3][-2:] == ["-e", "firebeetle32-right-glove"]
+    assert uploads(commands)[0][-5:] == ["firebeetle32-left-glove", "-t", "upload", "--upload-port", "COM4"]
+    assert uploads(commands)[1][-5:] == ["firebeetle32-right-glove", "-t", "upload", "--upload-port", "COM7"]

@@ -266,6 +266,21 @@ def test_report_reads_saved_evidence_without_starting_capture(
     assert "Phone expected increase: 1240" in output
 
 
+def test_report_table_shows_gating_and_idle_ticks_without_changing_the_verdict(
+        tmp_path, capsys):
+    payload = physical_report()
+    payload["devices"]["1"]["source"].update(gated=True, source_idle=275)
+    payload["devices"]["2"]["source"].update(gated=False, source_idle=0)
+    capture = saved_capture(tmp_path, payload=payload)
+    assert demo.main(["report", str(capture)]) == 0
+    output = capsys.readouterr().out
+    assert "MissingACK  Gated  Idle" in output
+    rows = [line.split() for line in output.splitlines() if line.split()[:1] in (["1"], ["2"])]
+    assert rows[0][-2:] == ["yes", "275"] and rows[1][-2:] == ["no", "0"]
+    assert "CAPTURE PASSED" in output
+    assert "Phone expected increase: 1240" in output
+
+
 @pytest.mark.parametrize("latest_kind", ["missing", "corrupt", "incomplete"])
 def test_report_uses_the_latest_directory_even_when_an_older_capture_passed(
         tmp_path, capsys, latest_kind):

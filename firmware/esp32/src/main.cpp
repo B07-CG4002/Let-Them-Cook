@@ -10,8 +10,10 @@
 #include <mbedtls/sha256.h>
 #include <vector>
 #include "comms_packet.h"
-// Compiled into the board build now; the sensor module will call scaleSample
-// and allocate a sequence number only after it succeeds.
+// The glove module (built-in dummy or external, COMMS_GLOVE_MODULE) supplies
+// physical samples and the IDLE/MOVING decision; prepareSample scales them and
+// a sequence number is allocated only for a sample that is sent.
+#include "comms_glove.h"
 #include "comms_sample.h"
 #include "comms_source_stats.h"
 #include "comms_security.h"
@@ -50,6 +52,9 @@ constexpr size_t kMtuProbePayloadCapacity = ESP_GATT_MAX_MTU_SIZE - 3;
 
 uint32_t bootId = 0, aliveSequence = 0, notificationCounter = 0;
 comms::SourceStats sensorStats = {};
+// Written only by loop(), under the mutex; the source statistics read them.
+comms::SampleCounters sampleCounters = {};
+uint32_t sampleRaceDropped = 0;
 uint32_t sensorMtuSuppressed = 0, securitySuppressed = 0;
 uint32_t submissionErrors = 0, lastReportMs = 0, lastNotificationUs = 0;
 bool clientConnected = false, authenticated = false;
@@ -81,17 +86,6 @@ uint32_t controlQueueRejected = 0;
 
 bool sha256File(const uint8_t* data, size_t length, uint8_t* digest) {
   return mbedtls_sha256_ret(data, length, digest, 0) == 0;
-}
-
-uint32_t fixtureRandomWord() {
-#ifdef COMMS_FIXTURE_SEED
-  // A reproducible build mode, independent of boot identity and sample sequence.
-  static uint32_t state = static_cast<uint32_t>(COMMS_FIXTURE_SEED);
-  state = state * 1664525u + 1013904223u;
-  return state >> 8;
-#else
-  return esp_random();
-#endif
 }
 
 // Called with the mutex held. IDF send enqueues work without waiting for receipt.
@@ -222,12 +216,15 @@ class CccdCallbacks final : public BLEDescriptorCallbacks {
 class SourceStatsCallbacks final : public BLECharacteristicCallbacks {
   void onRead(BLECharacteristic* characteristic) override {
     comms::SourceStats snapshot;
+    comms::SampleCounters samples;
     xSemaphoreTake(connectionStateMutex, portMAX_DELAY);
     snapshot = sensorStats;
+    samples = sampleCounters;
     xSemaphoreGive(connectionStateMutex);
 
     uint8_t payload[comms::kSourceStatsSize];
-    if (comms::serializeSourceStats(payload, sizeof(payload), kDeviceId, snapshot)) {
+    if (comms::serializeSourceStats(payload, sizeof(payload), kDeviceId, comms::kGloveGated,
+                                    snapshot, samples)) {
       characteristic->setValue(payload, sizeof(payload));
     }
   }
@@ -398,10 +395,50 @@ BLECharacteristic* addNotify(BLEService* service, const char* uuid, BLE2902** de
   characteristic->addDescriptor(*descriptor);
   return characteristic;
 }
+
+// One sensor tick, called WITHOUT the mutex: the glove module may take
+// milliseconds and BLE callbacks must not wait for it. The tick is committed
+// (its counters, and for a sample to send its seq) only if the laptop is
+// still ready under the mutex. So once the laptop has turned notifications
+// off, nothing in the source statistics changes (the bridge checks that).
+void produceSample() {
+  float values[comms::kChannelCount];
+  for (float& value : values) value = NAN;  // a channel the module leaves unwritten is refused
+  const bool readOk = gloveRead(values);
+  const bool moving = readOk && gloveShouldSend();
+  const uint32_t sampleMs = millis();
+  int16_t scaled[comms::kChannelCount] = {};
+  comms::SampleCounters counters = sampleCounters;  // only loop() writes it
+  const comms::SampleOutcome outcome = comms::prepareSample(readOk, moving, values, scaled, counters);
+
+  xSemaphoreTake(connectionStateMutex, portMAX_DELAY);
+  if (canNotify(sensorNotificationsEnabled) && comms::sensorFitsMtu(negotiatedMtu)) {
+    sampleCounters = counters;
+    if (outcome == comms::SampleSend) {
+      uint8_t payload[comms::kPacketSize];
+      const uint32_t sampleSequence = comms::allocateSampleSequence(sensorStats);
+      const bool serialized = comms::serializePacket(payload, sizeof(payload), kDeviceId,
+          bootId, sampleSequence, sampleMs, scaled);
+      const bool submitted = serialized &&
+          submitNotification(sensorCharacteristic, payload, sizeof(payload));
+      comms::recordSensorSubmission(sensorStats, submitted);
+    }
+  } else {
+    // The link changed during the read: nothing is counted, no seq is taken.
+    ++sampleRaceDropped;
+  }
+  xSemaphoreGive(connectionStateMutex);
+}
 }  // namespace
 
 void setup() {
   Serial.begin(115200);
+  // Before BLE: the glove module may calibrate for seconds (glove held still)
+  // and the board advertises only after it returns. A glove that reports no
+  // sensor still advertises; its ticks then count as unread.
+  const bool gloveReady = gloveBegin();
+  Serial.printf("glove_begin ok=%u module=%s gated=%u\n", gloveReady, comms::kGloveModuleName,
+      comms::kGloveGated);
   bootId = esp_random();
   sensorStats.bootId = bootId;
   lastReportMs = millis();
@@ -446,15 +483,18 @@ void setup() {
   advertising->setScanResponse(true);
   advertising->start();
   bleReady = true;
-  Serial.printf("comms_ready device_id=%u packet_bytes=%u packet_version=%u rate_hz=%u protected=%u control_version=1 file_max_bytes=%lu\n",
+  Serial.printf("comms_ready device_id=%u packet_bytes=%u packet_version=%u rate_hz=%u protected=%u control_version=1 file_max_bytes=%lu glove=%s gated=%u\n",
       kDeviceId, static_cast<unsigned>(comms::kPacketSize), comms::kPacketVersion, controls->rateHz(),
-      !kDiagnostic, static_cast<unsigned long>(comms::kControlMaxFile));
+      !kDiagnostic, static_cast<unsigned long>(comms::kControlMaxFile), comms::kGloveModuleName,
+      comms::kGloveGated);
 }
 
 void loop() {
   const uint32_t nowMs = millis();
   if (!bleReady) { delay(1); return; }
   readSerialCommand();
+  // The glove module's own pace (filters, movement windows), connected or not.
+  gloveUpdate();
   bool shouldRestartAdvertising = false;
   xSemaphoreTake(connectionStateMutex, portMAX_DELAY);
   if (erasingBonds && bondEraseStarted && bondErasePending == 0) {
@@ -483,8 +523,9 @@ void loop() {
   controls->expire(nowMs);
   const uint32_t nowUs = micros();
   const uint32_t intervalUs = 1000000u / controls->rateHz();
-  if (static_cast<uint32_t>(nowUs - lastNotificationUs) >= intervalUs) {
-    lastNotificationUs = nowUs;
+  bool sampleDue = false;
+  // A slow pass (gloveUpdate) delays one tick, not the rate (comms_sample.h).
+  if (comms::sendTickDue(lastNotificationUs, nowUs, intervalUs)) {
     if (clientConnected && !authenticated && !kDiagnostic) ++securitySuppressed;
     if (canNotify(notificationsEnabled)) {
       uint8_t payload[4];
@@ -498,17 +539,14 @@ void loop() {
     }
     if (canNotify(sensorNotificationsEnabled)) {
       if (!comms::sensorFitsMtu(negotiatedMtu)) ++sensorMtuSuppressed;
-      else {
-        uint8_t payload[comms::kPacketSize];
-        const uint32_t sampleSequence = comms::allocateSampleSequence(sensorStats);
-        const bool serialized = comms::serializeFixturePacket(payload, sizeof(payload), kDeviceId,
-            bootId, sampleSequence, nowMs, fixtureRandomWord());
-        const bool submitted = serialized &&
-            submitNotification(sensorCharacteristic, payload, sizeof(payload));
-        comms::recordSensorSubmission(sensorStats, submitted);
-      }
+      else sampleDue = true;
     }
   }
+  xSemaphoreGive(connectionStateMutex);
+  // The glove module never runs under the mutex; produceSample re-checks.
+  if (sampleDue) produceSample();
+
+  xSemaphoreTake(connectionStateMutex, portMAX_DELAY);
   // Bound bulk work to one command/chunk per loop. Sensor deadlines get the
   // first opportunity to run; callbacks only copy into a four-entry queue.
   if (controlQueueCount != 0 && canNotify(responseNotificationsEnabled)) {
@@ -548,11 +586,14 @@ void loop() {
     lastReportMs = nowMs;
     Serial.printf("alive boot_id=%lu sequence=%lu uptime_ms=%lu\n", static_cast<unsigned long>(bootId),
         static_cast<unsigned long>(aliveSequence++), static_cast<unsigned long>(nowMs));
-    Serial.printf("comms_stats protected=%u authenticated=%u sensor_submitted=%lu next_seq=%lu mtu=%u mtu_suppressed=%lu security_suppressed=%lu submission_errors=%lu rate_hz=%u control_queue_rejected=%lu\n",
+    Serial.printf("comms_stats protected=%u authenticated=%u sensor_submitted=%lu next_seq=%lu mtu=%u mtu_suppressed=%lu security_suppressed=%lu submission_errors=%lu rate_hz=%u control_queue_rejected=%lu unread=%lu idle=%lu refused=%lu clamped=%lu race_dropped=%lu\n",
         !kDiagnostic, observedAuthenticated, static_cast<unsigned long>(sensorStats.submitted),
         static_cast<unsigned long>(sensorStats.nextSequence), observedMtu, static_cast<unsigned long>(sensorMtuSuppressed),
         static_cast<unsigned long>(securitySuppressed), static_cast<unsigned long>(submissionErrors),
-        controls->rateHz(), static_cast<unsigned long>(controlQueueRejected));
+        controls->rateHz(), static_cast<unsigned long>(controlQueueRejected),
+        static_cast<unsigned long>(sampleCounters.unread), static_cast<unsigned long>(sampleCounters.idle),
+        static_cast<unsigned long>(sampleCounters.refused), static_cast<unsigned long>(sampleCounters.clamped),
+        static_cast<unsigned long>(sampleRaceDropped));
   }
   delay(1);
 }

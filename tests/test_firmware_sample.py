@@ -1,4 +1,4 @@
-"""Compile and execute the portable sensor scaling helper under both policies."""
+"""Compile and execute the portable sensor scaling and tick policy under both policies."""
 
 from pathlib import Path
 import shutil
@@ -28,4 +28,4 @@ def test_sample_scaling_rounding_limits_and_refusals(tmp_path, policy, defines):
     result = subprocess.run([str(executable)], capture_output=True, text=True)
     assert result.returncode == 0, result.stdout + result.stderr
     assert result.stdout.strip() == (
-        "PASS sample scaling, rounding, limits and refusals ({} policy)".format(policy))
+        "PASS sample scaling, rounding, limits, refusals and tick outcomes ({} policy)".format(policy))

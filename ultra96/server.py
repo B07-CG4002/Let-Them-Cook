@@ -9,6 +9,7 @@ from collections import OrderedDict
 import errno
 import json
 import logging
+import math
 import os
 import random
 import signal
@@ -29,6 +30,21 @@ from ultra96.protocol import (DUMMY_GESTURES, result_identity, trace_fields, val
 LOG = logging.getLogger(__name__)
 _EXPECTED_ERRORS = (ProtocolError, asyncio.IncompleteReadError, asyncio.TimeoutError,
                     ConnectionError, OSError, ssl.SSLError)
+# How long an ingest connection may wait for the next frame to begin. A gated
+# glove sends nothing while the player is still, and closing its stream would
+# lose the first samples after the pause to a TLS reconnect. Once a frame has
+# begun, the rest of it must still arrive within the usual five seconds.
+INGEST_IDLE_TIMEOUT = 600.0
+INGEST_IDLE_TIMEOUT_RANGE = (5.0, 86400.0)
+# Both listeners share eight client slots. When they are all taken, the ingest
+# connection that has waited longest for its next frame is closed to admit the
+# new client, provided it has waited at least this long (the old idle limit).
+# The SSH tunnel's sshd can hold the socket of a laptop that vanished for many
+# minutes. A live glove that is only still reconnects when it next sends, and
+# loses the frames then in flight, as it did under the old five-second limit.
+# Connections that are streaming are never displaced; then the client is refused.
+MAX_CLIENTS = 8
+INGEST_EVICTABLE_AFTER = 5.0
 
 
 async def _close_writer(writer):
@@ -95,10 +111,15 @@ class ResultQueue:
 
 class CommsServer:
     def __init__(self, ssl_context, session_id="ltc-comms", ingest_port=8888, gateway_port=9999,
-                 *, observer=None, rng=None, max_namespaces=128, max_commands=4096, model=None):
+                 *, observer=None, rng=None, max_namespaces=128, max_commands=4096, model=None,
+                 ingest_idle_timeout=INGEST_IDLE_TIMEOUT):
         if (not isinstance(ssl_context, ssl.SSLContext)
                 or ssl_context.minimum_version < ssl.TLSVersion.TLSv1_2):
             raise ValueError("server requires TLS >=1.2")
+        if (not isinstance(ingest_idle_timeout, (int, float)) or isinstance(ingest_idle_timeout, bool)
+                or not math.isfinite(ingest_idle_timeout) or ingest_idle_timeout <= 0):
+            raise ValueError("ingest idle timeout must be positive finite seconds")
+        self.ingest_idle_timeout = float(ingest_idle_timeout)
         self.ssl_context = ssl_context
         self.session_id = validate_session(session_id)
         self.ingest_port = ingest_port
@@ -108,6 +129,8 @@ class CommsServer:
         self._sockets = set()
         self._tasks = set()
         self._writers = set()
+        # Ingest client task -> monotonic time it began waiting for its next frame.
+        self._waiting_ingest = {}
         self._subscriber = None
         self.observer = observer
         self._subscriber_generation = 0
@@ -132,7 +155,7 @@ class CommsServer:
         self.metrics = {"accepted": 0, "duplicates": 0, "rejected": 0,
                         "subscribers": 0, "replaced": 0, "disconnected_results": 0,
                         "result_drops": 0, "result_stale": 0, "client_limit": 0,
-                        "accept_retries": 0, "accept_failures": 0}
+                        "idle_evicted": 0, "accept_retries": 0, "accept_failures": 0}
         if observer is not None:
             self.metrics["observer_errors"] = 0
         self.model = ModelPort(DummyModel(self._rng) if model is None else model,
@@ -194,7 +217,13 @@ class CommsServer:
                 continue
             retry_delay = 0.1
             connection.setblocking(False)
-            if self._closing or len(self._sockets) >= 8:
+            if not self._closing and len(self._sockets) >= MAX_CLIENTS:
+                try:
+                    await self._evict_idle_ingest()
+                except BaseException:
+                    connection.close()
+                    raise
+            if self._closing or len(self._sockets) >= MAX_CLIENTS:
                 self.metrics["client_limit"] += 1
                 connection.close()
                 continue
@@ -203,6 +232,22 @@ class CommsServer:
             task = asyncio.create_task(self._client(connection, gateway))
             self._tasks.add(task)
             task.add_done_callback(self._tasks.discard)
+
+    async def _evict_idle_ingest(self):
+        """Close the ingest connection that has waited longest for a frame, if one may go."""
+        now = time.monotonic()
+        idle = [(since, task) for task, since in self._waiting_ingest.items()
+                if now - since >= INGEST_EVICTABLE_AFTER and not task.done()]
+        if not idle:
+            return
+        since, task = min(idle, key=lambda item: item[0])
+        del self._waiting_ingest[task]
+        self.metrics["idle_evicted"] += 1
+        LOG.warning("client slots full; closing an ingest connection idle for %.1f s",
+                    now - since)
+        task.cancel()
+        # Its cleanup closes TLS within about a second and frees the slot.
+        await asyncio.wait({task}, timeout=2.0)
 
     def _accept_done(self, task):
         if task.cancelled():
@@ -260,8 +305,15 @@ class CommsServer:
                         self._sockets.discard(connection)
 
     async def _ingest(self, reader, writer):
+        task = asyncio.current_task()
         while not self._closing:
-            message = validate_message(await read_frame(reader), "SENSOR_BATCH", self.session_id)
+            # While it waits for a frame, a full server may close this connection.
+            self._waiting_ingest[task] = time.monotonic()
+            try:
+                frame = await read_frame(reader, idle_timeout=self.ingest_idle_timeout)
+            finally:
+                self._waiting_ingest.pop(task, None)
+            message = validate_message(frame, "SENSOR_BATCH", self.session_id)
             trace = (message["device_id"], message["boot_id"], message["seq"])
             duplicate = self._duplicate(message)
             if duplicate:
@@ -482,7 +534,9 @@ async def _run_service(args, observer=None):
         raise
     service = CommsServer(server_context(args.cert, args.key), session_id=args.session_id,
                           ingest_port=args.ingest_port, gateway_port=args.gateway_port,
-                          observer=observer, model=model)
+                          observer=observer, model=model,
+                          ingest_idle_timeout=getattr(args, "ingest_idle_timeout",
+                                                      INGEST_IDLE_TIMEOUT))
     try:
         await service.start()
     except ModelStartError as exc:
@@ -522,7 +576,20 @@ async def _run_service(args, observer=None):
                 loop.remove_signal_handler(signal.SIGTERM)
 
 
-def main():
+def _ingest_idle_timeout(value):
+    low, high = INGEST_IDLE_TIMEOUT_RANGE
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError) as exc:
+        raise argparse.ArgumentTypeError(
+            "ingest idle timeout must be {:g}..{:g} seconds".format(low, high)) from exc
+    if not math.isfinite(parsed) or not low <= parsed <= high:
+        raise argparse.ArgumentTypeError(
+            "ingest idle timeout must be {:g}..{:g} seconds".format(low, high))
+    return parsed
+
+
+def _parser():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cert", required=True)
     parser.add_argument("--key", required=True)
@@ -535,7 +602,15 @@ def main():
                              "default: the built-in dummy model")
     parser.add_argument("--model-path", metavar="DIR",
                         help="directory put first on the import path before loading --model")
-    args = parser.parse_args()
+    parser.add_argument("--ingest-idle-timeout", metavar="SECONDS", type=_ingest_idle_timeout,
+                        default=INGEST_IDLE_TIMEOUT,
+                        help="how long an ingest connection may wait for its next frame "
+                             "(5..86400, default 600); a gated glove is silent while idle")
+    return parser
+
+
+def main():
+    args = _parser().parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     try:
         asyncio.run(_run(args))

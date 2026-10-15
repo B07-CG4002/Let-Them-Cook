@@ -1,6 +1,13 @@
 import Foundation
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+// Linux test builds only: swift-crypto offers the same SHA256 API.
+import Crypto
+#endif
+#if canImport(Security)
 import Security
+#endif
 
 // These are PUBLIC, previously enrolled trust values from the Phone runbooks.
 // Rotation requires independent verification and an explicit source update.
@@ -47,8 +54,11 @@ enum AuthorityImport {
         let begin = "-----BEGIN CERTIFICATE-----", end = "-----END CERTIFICATE-----"
         guard trimmed.hasPrefix(begin), trimmed.hasSuffix(end) else { throw SetupError.certificate }
         let encoded = trimmed.dropFirst(begin.count).dropLast(end.count).filter { !$0.isWhitespace }
-        guard let der = Data(base64Encoded: String(encoded)),
-              SecCertificateCreateWithData(nil, der as CFData) != nil else { throw SetupError.certificate }
+        guard let der = Data(base64Encoded: String(encoded)) else { throw SetupError.certificate }
+        #if canImport(Security)
+        guard SecCertificateCreateWithData(nil, der as CFData) != nil else { throw SetupError.certificate }
+        #endif
+        // Without Security (Linux test builds) the fingerprint check below still admits only the enrolled CA.
         let fingerprint = SHA256.hash(data: der).map { String(format: "%02x", $0) }.joined()
         guard fingerprint == EnrolledTrust.caSHA256 else { throw SetupError.wrongAuthority }
         return trimmed + "\n"

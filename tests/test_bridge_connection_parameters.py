@@ -64,7 +64,7 @@ async def capture(mode="normal", cleanup_error=False):
             if mode == "source_error":
                 stop.set()
                 raise OSError("synthetic source read error")
-            return struct.pack("<4sB3xIIII", SOURCE_STATS_MAGIC, 1, 7, 0, 0, 0)
+            return struct.pack("<4sBB2xIIIIIII", SOURCE_STATS_MAGIC, 1, 0, 7, 0, 0, 0, 0, 0, 0)
 
         async def start_notify(self, uuid, callback):
             order.append("response_subscribe" if uuid == RESPONSE_UUID else "sensor_subscribe")

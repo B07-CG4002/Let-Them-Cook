@@ -178,12 +178,16 @@ def show_report(path, *, save_readable=False):
             json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     print(f"Exit={exit_code}  clean={report.get('clean')}  mock_input={report.get('mock_input')}"
           f"  report_saved={report.get('report_saved')}")
-    print("Device  Generated  Received  ACKed  MissingBLE  MissingACK")
+    # A gated glove sends only while moving; Idle counts the send ticks it skipped.
+    print("Device  Generated  Received  ACKed  MissingBLE  MissingACK  Gated  Idle")
     for identity, _, source in _device_rows(report):
         values = [source.get(name) for name in
-                  ("generated", "received", "acked", "missing_received", "missing_acked")]
+                  ("generated", "received", "acked", "missing_received", "missing_acked",
+                   "source_idle")]
         text = [str(value) if type(value) is int else "N/A" for value in values]
-        print(f"{identity:>6}  {text[0]:>9}  {text[1]:>8}  {text[2]:>5}  {text[3]:>10}  {text[4]:>10}")
+        gated = {True: "yes", False: "no"}.get(source.get("gated"), "N/A")
+        print(f"{identity:>6}  {text[0]:>9}  {text[1]:>8}  {text[2]:>5}  {text[3]:>10}  {text[4]:>10}"
+              f"  {gated:>5}  {text[5]:>4}")
     goodput = report.get("sensor_goodput")
     if isinstance(goodput, dict):
         print("Measured combined BLE sensor goodput at laptop reception: "

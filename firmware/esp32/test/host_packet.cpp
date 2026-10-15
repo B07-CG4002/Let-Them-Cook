@@ -27,7 +27,9 @@ int main() {
   assert(!comms::serializePacket(output, 38, 3, 0, 0, 0, extremes));
   assert(!comms::serializePacket(nullptr, 38, 1, 0, 0, 0, extremes));
 
-  // The board's send path: the random word selects a whole fixture row.
+  // The fixture packet: the random word selects a whole fixture row. The
+  // board's dummy glove module reaches the same bytes through physical floats
+  // and scaleSample (host_glove.cpp checks that).
   uint8_t direct[38] = {};
   for (uint32_t word = 0; word < 2 * comms::kDummyFixtureCount; ++word) {
     const size_t index = word % comms::kDummyFixtureCount;

@@ -46,13 +46,19 @@ def encode_frame(message):
     return struct.pack("!I", len(body)) + body
 
 
-async def read_frame(reader, timeout=5.0):
-    """Read exactly one frame with one deadline for both header and body."""
-    async def receive():
+async def read_frame(reader, timeout=5.0, idle_timeout=None):
+    """Read exactly one frame.
+
+    Without idle_timeout one deadline covers both header and body. With
+    idle_timeout the first header byte may take up to idle_timeout seconds (a
+    quiet peer between frames); once it arrives, the rest of the header and the
+    body must arrive within timeout.
+    """
+    async def receive(first=b""):
         try:
-            header = await reader.readexactly(4)
+            header = first + await reader.readexactly(4 - len(first))
         except asyncio.IncompleteReadError as exc:
-            if exc.partial:
+            if exc.partial or first:
                 raise ProtocolError("incomplete frame header") from exc
             raise  # Clean EOF between frames, distinguishable by consumers.
         length = struct.unpack("!I", header)[0]
@@ -70,7 +76,11 @@ async def read_frame(reader, timeout=5.0):
         if not isinstance(message, dict):
             raise ProtocolError("frame must contain a JSON object")
         return message
-    return await asyncio.wait_for(receive(), timeout=timeout)
+    if idle_timeout is None:
+        return await asyncio.wait_for(receive(), timeout=timeout)
+    # A clean EOF here is still IncompleteReadError with no partial bytes.
+    first = await asyncio.wait_for(reader.readexactly(1), timeout=idle_timeout)
+    return await asyncio.wait_for(receive(first), timeout=timeout)
 
 
 async def write_frame(writer, message, timeout=5.0):

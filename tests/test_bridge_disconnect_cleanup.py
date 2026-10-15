@@ -182,7 +182,7 @@ class DisconnectCleanupTests(unittest.IsolatedAsyncioTestCase):
                 clients.append(self)
 
             async def read_gatt_char(self, uuid):
-                return struct.pack("<4sB3xIIII", SOURCE_STATS_MAGIC, 1, 7, 0, 0, 0)
+                return struct.pack("<4sBB2xIIIIIII", SOURCE_STATS_MAGIC, 1, 0, 7, 0, 0, 0, 0, 0, 0)
 
             async def disconnect(self):
                 self.disconnect_calls += 1

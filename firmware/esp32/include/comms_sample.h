@@ -64,4 +64,53 @@ inline bool scaleSample(const float* in, int16_t* out, SampleScaleStats& stats) 
   return true;
 }
 
+// The send tick, checked once per main-loop pass. The next deadline is one
+// interval after the previous deadline, not after the pass that noticed it,
+// so a slow pass (a glove module that takes milliseconds per update) delays
+// one tick without lowering the rate. A tick owed more than one interval late
+// restarts from now: the ticks a long stall covered are dropped, never sent
+// as a burst. Unsigned differences keep it right when micros() wraps.
+inline bool sendTickDue(uint32_t& lastTickUs, uint32_t nowUs, uint32_t intervalUs) {
+  if (static_cast<uint32_t>(nowUs - lastTickUs) < intervalUs) return false;
+  lastTickUs += intervalUs;
+  if (static_cast<uint32_t>(nowUs - lastTickUs) >= intervalUs) lastTickUs = nowUs;
+  return true;
+}
+
+// What one send tick produced. Only SampleSend takes a sequence number; the
+// other outcomes send nothing, so they show as a longer uptime_ms step.
+enum SampleOutcome : uint8_t {
+  SampleSend = 0, SampleUnread = 1, SampleIdle = 2, SampleRefused = 3
+};
+
+// Totals since boot. unread, idle and refused go into the source statistics.
+struct SampleCounters {
+  uint32_t unread;   // the glove module had no valid sample (gloveRead false)
+  uint32_t idle;     // the glove module said IDLE (gloveShouldSend false)
+  uint32_t refused;  // scaleSample refused the sample (NaN, infinity, drop policy)
+  uint32_t clamped;  // channel values clamped in samples that were sent
+};
+
+// The policy for one tick, after gloveRead (readOk) and, only when it
+// succeeded, gloveShouldSend (moving). An unread sample ignores moving; an IDLE
+// sample is never scaled, so its values are neither checked nor counted.
+inline SampleOutcome prepareSample(bool readOk, bool moving, const float* values,
+                                   int16_t* out, SampleCounters& counters) {
+  if (!readOk) {
+    ++counters.unread;
+    return SampleUnread;
+  }
+  if (!moving) {
+    ++counters.idle;
+    return SampleIdle;
+  }
+  SampleScaleStats stats = {0, 0};
+  if (!scaleSample(values, out, stats)) {
+    ++counters.refused;
+    return SampleRefused;
+  }
+  counters.clamped += stats.clamped;
+  return SampleSend;
+}
+
 }  // namespace comms

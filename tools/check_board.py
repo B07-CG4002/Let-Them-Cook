@@ -168,14 +168,23 @@ def main(argv=None):
     if args.report:
         Path(args.report).write_text(text + "\n", encoding="utf-8")
     print(text)
-    source = summary.get("source") or {}
-    print("{} {} (device {}): generated={} received={} acked={} commands={}/{}".format(
-        "CHECK PASSED" if not failed else "CHECK FAILED", args.board.upper(), device_id,
-        source.get("generated"), summary.get("received"), summary.get("acked"),
-        summary.get("command_results"), args.commands))
+    print(summary_line(summary, args.board, device_id, args.commands, failed))
     for reason in failed:
         print("  - " + reason)
     return 0 if not failed else 1
+
+
+def summary_line(summary, board, device_id, commands, failed):
+    """One line for the terminal. Idle, unread and refused ticks sent nothing;
+    a gated board's idle ticks are expected and do not fail the check."""
+    source = summary.get("source") or {}
+    gated = {True: "yes", False: "no"}.get(source.get("gated"), "unknown")
+    return ("{} {} (device {}): generated={} received={} acked={} commands={}/{} "
+            "gated={} idle={} unread={} refused={}").format(
+        "CHECK PASSED" if not failed else "CHECK FAILED", board.upper(), device_id,
+        source.get("generated"), summary.get("received"), summary.get("acked"),
+        summary.get("command_results"), commands, gated, source.get("source_idle"),
+        source.get("source_unread"), source.get("source_refused"))
 
 
 if __name__ == "__main__":

@@ -134,7 +134,7 @@ def test_command_is_available_after_the_statistics_read_before_first_sensor(monk
 
             async def read_gatt_char(self, uuid, **kwargs):
                 assert uuid == SOURCE_STATS_UUID
-                return struct.pack("<4sB3xIIII", SOURCE_STATS_MAGIC, 1, 7, 0, 0, 0)
+                return struct.pack("<4sBB2xIIIIIII", SOURCE_STATS_MAGIC, 1, 0, 7, 0, 0, 0, 0, 0, 0)
 
             async def start_notify(self, uuid, callback):
                 if uuid == RESPONSE_UUID:

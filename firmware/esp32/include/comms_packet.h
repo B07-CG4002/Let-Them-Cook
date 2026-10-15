@@ -45,7 +45,9 @@ inline bool serializePacket(uint8_t* output, size_t capacity, uint8_t deviceId,
 }
 
 // Dummy data: an editable fixture row chosen independently of the sequence.
-// The version byte says nothing about the data source.
+// The version byte says nothing about the data source. The board's dummy
+// glove module (src/dummy_glove.cpp) produces the same bytes through the
+// sensor path; host tests keep this helper as the reference.
 inline bool serializeFixturePacket(uint8_t* output, size_t capacity,
                                    uint8_t deviceId, uint32_t bootId, uint32_t seq,
                                    uint32_t uptimeMs, uint32_t randomWord) {

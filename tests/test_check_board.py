@@ -1,4 +1,4 @@
-from tools.check_board import verdict
+from tools.check_board import summary_line, verdict
 
 
 def _summary(**overrides):
@@ -36,3 +36,20 @@ def test_each_failure_is_named():
     ]
     for summary in cases:
         assert verdict(summary, rate=50, commands=3), summary
+
+
+def test_summary_line_names_gating_and_skipped_ticks():
+    source = {"clean": True, "complete": True, "generated": 100, "gated": True,
+              "source_idle": 40, "source_unread": 1, "source_refused": 0}
+    line = summary_line(_summary(source=source), "right", 2, 3, [])
+    assert line.startswith("CHECK PASSED RIGHT (device 2): generated=100 received=100 acked=100")
+    assert line.endswith("commands=3/3 gated=yes idle=40 unread=1 refused=0")
+    line = summary_line(_summary(), "left", 1, 3, ["x"])
+    assert line.startswith("CHECK FAILED LEFT")
+    assert line.endswith("gated=unknown idle=None unread=None refused=None")
+
+
+def test_verdict_ignores_idle_ticks_of_a_gated_board():
+    source = {"clean": True, "complete": True, "generated": 100, "gated": True,
+              "source_idle": 400, "source_unread": 0, "source_refused": 0}
+    assert verdict(_summary(source=source), rate=50, commands=3) == []

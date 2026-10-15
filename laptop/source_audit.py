@@ -9,11 +9,17 @@ from common.sensor import SensorPacket
 
 
 SOURCE_STATS_UUID = "6e1c0006-7a45-4dc4-b678-3f2d5a9c1001"
-_SOURCE_STATS = struct.Struct("<4sB3xIIII")
+# 'LCS3', device ID, flags, two reserved zero bytes, then seven uint32 totals
+# since boot: boot ID, next sequence, submitted, failures, idle, unread, refused.
+_SOURCE_STATS = struct.Struct("<4sBB2xIIIIIII")
 # LCS3 follows sensor packet version 3. A board still running version 2
 # firmware reports LCS1, so an audited bridge refuses it before subscribing.
 SOURCE_STATS_MAGIC = b"LCS3"
+SOURCE_STATS_SIZE = _SOURCE_STATS.size
+# Flag bit 0: the board sends only while its glove module reports movement.
+SOURCE_FLAG_GATED = 0x01
 _UINT32_MASK = 0xFFFFFFFF
+_COUNTERS = ("boot_id", "next_seq", "submitted", "failures", "idle", "unread", "refused")
 
 
 def _delta32(end: int, start: int) -> int:
@@ -27,33 +33,49 @@ class SourceStats:
     next_seq: int
     submitted: int
     failures: int
+    # A gated board skips the send ticks its glove module calls idle. idle,
+    # unread and refused count send ticks that produced no packet and took
+    # no sequence number.
+    gated: bool = False
+    idle: int = 0
+    unread: int = 0
+    refused: int = 0
 
     def __post_init__(self):
         if type(self.device_id) is not int or self.device_id not in (1, 2):
             raise ValueError("source statistics device ID must be 1 or 2")
-        for name in ("boot_id", "next_seq", "submitted", "failures"):
+        if type(self.gated) is not bool:
+            raise ValueError("source statistics gated must be a bool")
+        for name in _COUNTERS:
             value = getattr(self, name)
             if type(value) is not int or not 0 <= value <= _UINT32_MASK:
                 raise ValueError(f"source statistics {name} must be uint32")
 
 
 def parse_source_stats(data: bytes, *, expected_device_id: Optional[int] = None) -> SourceStats:
-    """Parse the exact protected 24-byte source-statistics value."""
+    """Parse the exact protected 36-byte source-statistics value."""
     if (expected_device_id is not None
             and (type(expected_device_id) is not int
                  or expected_device_id not in (1, 2))):
         raise ValueError("expected device ID must be 1 or 2")
     if not isinstance(data, (bytes, bytearray, memoryview)) or len(data) != _SOURCE_STATS.size:
-        raise ValueError("source statistics must contain exactly 24 bytes")
+        # The earlier 24-byte LCS3 and the version 2 LCS1 values both end here.
+        raise ValueError("source statistics must contain exactly 36 bytes; "
+                         "flash this board with the current firmware")
     raw = bytes(data)
-    if raw[5:8] != b"\0\0\0":
+    if raw[6:8] != bytes(2):
         raise ValueError("source statistics reserved bytes must be zero")
-    magic, device_id, boot_id, next_seq, submitted, failures = _SOURCE_STATS.unpack(raw)
+    (magic, device_id, flags, boot_id, next_seq, submitted, failures,
+     idle, unread, refused) = _SOURCE_STATS.unpack(raw)
     if magic != SOURCE_STATS_MAGIC:
         raise ValueError("invalid source statistics magic; flash this board with the current firmware")
+    if flags & ~SOURCE_FLAG_GATED:
+        raise ValueError("source statistics flags contain unknown bits")
     if expected_device_id is not None and device_id != expected_device_id:
         raise ValueError("source statistics device identity mismatch")
-    return SourceStats(device_id, boot_id, next_seq, submitted, failures)
+    return SourceStats(device_id, boot_id, next_seq, submitted, failures,
+                       gated=bool(flags & SOURCE_FLAG_GATED), idle=idle, unread=unread,
+                       refused=refused)
 
 
 # A descriptive alias for callers that use codec-style naming.
@@ -155,6 +177,12 @@ class SourceAudit:
         generated = _delta32(end.next_seq, start.next_seq) if same_boot else None
         submitted = _delta32(end.submitted, start.submitted) if same_boot else None
         failures = _delta32(end.failures, start.failures) if same_boot else None
+        idle = _delta32(end.idle, start.idle) if same_boot else None
+        unread = _delta32(end.unread, start.unread) if same_boot else None
+        refused = _delta32(end.refused, start.refused) if same_boot else None
+        # Every send tick while the laptop listened: a packet or a skipped tick.
+        ticks = generated + idle + unread + refused if same_boot else None
+        latest = end if end is not None else start
         source_consistent = bool(same_boot and generated == submitted + failures)
         missing_received = (max(0, generated - self.received_count)
                             if generated is not None else None)
@@ -179,6 +207,12 @@ class SourceAudit:
             "source_submitted": submitted,
             "source_failures": failures,
             "source_consistent": source_consistent,
+            # Idle ticks are expected on a gated board and never affect clean.
+            "gated": latest.gated if latest is not None else None,
+            "source_idle": idle,
+            "source_unread": unread,
+            "source_refused": refused,
+            "source_ticks": ticks,
             "received": self.received_count,
             "acked": self.acked_count,
             "missing_received": missing_received,
