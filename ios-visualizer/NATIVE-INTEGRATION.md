@@ -4,7 +4,7 @@
 
 ## Test the source on a Mac
 
-Use a Mac with Xcode, iOS support and SwiftPM network access. From the repository root:
+Use a Mac with Xcode (Swift 6.1 or newer), iOS support and SwiftPM network access. Swift 6.1 is the minimum: `Package.swift` declares tools version 5.10, but the pinned dependencies need 6.1. From the repository root:
 
 ```sh
 swift test --package-path ios-visualizer/CommsNative
@@ -23,9 +23,24 @@ xcodebuild -project ios-visualizer/NativePreview/CommsNativePreview.xcodeproj \
   -jobs 4 test
 ```
 
-Choose a simulator installed with that Mac's Xcode if the example device name differs. The generated PKI is isolated test material under ignored `.comms-local/CommsFixturePKI`; it is not the production CA. The preview tests exercise the native source against local peers. They do not establish a Unity build, physical BLE/Ultra96/iPhone delivery, signing, or ARKit behavior. This workflow requires Xcode and XcodeGen and has not been verified on Windows.
+Choose a simulator installed with that Mac's Xcode if the example device name differs. The generated PKI is isolated test material under ignored `.comms-local/CommsFixturePKI`; it is not the production CA. The preview tests exercise the native source against local peers. They do not establish a Unity build, physical BLE/Ultra96/iPhone delivery, signing, or ARKit behavior. This workflow requires Xcode and XcodeGen and has not been verified on Windows. The preview app links the `CommsNative` product for iOS, so building it also builds the package's iOS-only code.
 
-**Status of the protocol version 3 changes (2026-10-14): written, not compiled.** Result validation (version 3, the label and confidence rules), `GestureResult.confidence`, the display text, the per-result queue, `CommsNextResult` and their tests were written without a Swift toolchain. Run `swift test` first and fix any build error before integrating. Only two parts were checked, on Windows: the Python half of `PythonBoardTests` ran against the real Python board service, and a Python copy of the package's JSON parser ran the `ProtocolTests` vectors.
+**Status (2026-10-15): compiled and tested on Linux; not yet built for iOS.** Result validation (version 3, the label and confidence rules), `GestureResult.confidence`, the display text, the per-result queue, `CommsNextResult` and their tests compiled with Swift 6.1 on Linux, and all 72 tests passed (`ConfigurationTests` 6, `DisplayMailboxTests` 4, `DisplayStateTests` 15, `ProtocolTests` 13, `TransportTests` 26, `TrustTests` 8). Not compiled or run there: the `#if os(iOS)` code (`IntegrationController`, `SetupViewController`, the iOS branches of `CommsStart` and `CommsStop`, file protection), the Apple branches of `Configuration.swift` (the CryptoKit and Security imports and the `SecCertificateCreateWithData` check, rewritten on 2026-10-15), the iOS test fixtures in `LocalPeers.swift` and the macOS-only `PythonBoardTests`, whose Python half ran earlier on Windows against the real Python board service. On a Mac, `swift test` compiles the Apple branches and runs `PythonBoardTests`; building the preview for an iOS simulator compiles the iOS-only code. Do both first and fix any build error before integrating.
+
+## Test the source on Linux
+
+Linux has no iOS SDK, so this checks only the platform-independent code. Use Swift 6.1 or newer, for example the official `swift:6.1` Docker image, with network access for the pinned packages. Two `ConfigurationTests` read a certificate in `ios-visualizer/reference`, so mount both folders read-only and build in a copy inside the container (the Linux build output stays out of the checkout). From the repository root:
+
+```sh
+docker run --rm -v "$PWD/ios-visualizer/CommsNative:/src/CommsNative:ro" \
+  -v "$PWD/ios-visualizer/reference:/src/reference:ro" swift:6.1 \
+  bash -c 'cp -r /src /work && cd /work/CommsNative && swift build --build-tests && swift test'
+```
+
+Two source differences make the Linux build possible. Apple builds should be unchanged (checked by reading; not yet compiled with an Apple SDK):
+
+- `Sources/CommsBridge/Configuration.swift` imports CryptoKit and Security only where they exist. Without CryptoKit it takes the same `SHA256` API from swift-crypto's `Crypto`, which `Package.swift` links into `CommsBridge` on Linux only.
+- Without Security, the CA import skips the certificate parse (`SecCertificateCreateWithData`). The SHA-256 fingerprint check that follows still admits only the enrolled CA.
 
 ## Integrate with the team's Unity export
 
@@ -35,7 +50,7 @@ New integrations should call `CommsStart`, `CommsCopyDisplay` and `CommsStop`, a
 
 ## C functions for Unity
 
-The C functions are exported by `Sources/CommsBridge/DisplayMailbox.swift`. They exist only in the iOS build, so the C# declarations (derived from the C signatures, not yet compiled in Unity) go inside a platform guard:
+The C functions are exported by `Sources/CommsBridge/DisplayMailbox.swift`. In a Unity app they exist only in the iOS player, where the package is linked (the package also compiles them on macOS and Linux for its own tests), so the C# declarations (derived from the C signatures, not yet compiled in Unity) go inside a platform guard:
 
 ```csharp
 #if UNITY_IOS && !UNITY_EDITOR
@@ -58,9 +73,9 @@ The C functions are exported by `Sources/CommsBridge/DisplayMailbox.swift`. They
 
   The label is the received text; the confidence is the received number in Swift's text form of a `Double` (a received `1` shows as `1.0`). The version-2 source showed a fixed `DUMMY inference` header and `confidence 1.0`. Line 3 holds only the latest result and the next result overwrites it, so results that arrive between two polls can be missed; it is a status display, not game input. `Subscribed` means only that the subscription handshake succeeded.
 - `CommsStop`: call only when the app stops using Communications. It ends the session, clears the passwords and removes the button. Do not call it on a scene change or when going to the background.
-- `CommsNextResult` (**written, not compiled, 2026-10-14**): the game input. It takes out the oldest waiting result as one compact UTF-8 JSON object with a terminating 0, keys in this order, for example `{"result_id":"1:305419896:42","gesture":"CHOP","confidence":0.93,"device_id":1}`, and returns the number of bytes written (without the 0). It returns 0 when nothing waits. When the buffer is null or smaller than the bytes plus the 0, it writes nothing, leaves the result queued and returns minus (bytes + 1), the capacity needed. It never blocks. Call it on the main thread each frame, in a loop while it returns a positive number; a 512-byte buffer holds any valid result, because labels are at most 32 characters.
+- `CommsNextResult` (**compiled and tested on Linux, 2026-10-15; not yet built for iOS**): the game input. It takes out the oldest waiting result as one compact UTF-8 JSON object with a terminating 0, keys in this order, for example `{"result_id":"1:305419896:42","gesture":"CHOP","confidence":0.93,"device_id":1}`, and returns the number of bytes written (without the 0). It returns 0 when nothing waits. When the buffer is null or smaller than the bytes plus the 0, it writes nothing, leaves the result queued and returns minus (bytes + 1), the capacity needed. It never blocks. Call it on the main thread each frame, in a loop while it returns a positive number; a 512-byte buffer holds any valid result, because labels are at most 32 characters.
 
-What `CommsNextResult` promises: results wait in arrival order, de-duplicated by `result_id`, and each result that is not dropped can be taken out at most once. It does not promise that every result arrives: results lost before the phone (board drops, reconnects, no subscriber) never reach it. Provisional limits, revisited once the model's result rate is known: at most 32 results wait, and when the queue is full the oldest is dropped; a result still waiting 2 s after it reached the phone is dropped, also while only `CommsCopyDisplay` is polled. The display snapshot counts both drops (`pendingDropped`, `pendingExpired`, with `pendingCount` for the results waiting); a new Connect resets them. The queue is emptied, without counting, when the session stops (Disconnect, the app becoming inactive, `CommsStop`) and when a new Connect starts. An automatic reconnect keeps it, and so does a session ended by a verification error; its entries still expire after 2 s. A `result_id` starting with `cmd:` comes only from command tests on the laptop.
+What `CommsNextResult` promises: results wait in arrival order, de-duplicated by `result_id`, and each result that is not dropped can be taken out at most once. It does not promise that every result arrives: results lost before the phone (board drops, reconnects, no subscriber) never reach it. Results can also pause while the player is still: the glove firmware sends samples only while the glove's movement detector reports movement (built, not yet run on hardware). Provisional limits, revisited once the model's result rate is known: at most 32 results wait, and when the queue is full the oldest is dropped; a result still waiting 2 s after it reached the phone is dropped, also while only `CommsCopyDisplay` is polled. The display snapshot counts both drops (`pendingDropped`, `pendingExpired`, with `pendingCount` for the results waiting); a new Connect resets them. The queue is emptied, without counting, when the session stops (Disconnect, the app becoming inactive, `CommsStop`) and when a new Connect starts. An automatic reconnect keeps it, and so does a session ended by a verification error; its entries still expire after 2 s. A `result_id` starting with `cmd:` comes only from command tests on the laptop.
 
 Rules for the caller: one object polls `CommsCopyDisplay` (each call reports only the change since the previous one), the same object calls `CommsNextResult`, and that object survives scene changes. Use `result_id`, not the label text, to tell results apart. Which game action a label maps to, cooldowns and repeats are the game's decision.
 

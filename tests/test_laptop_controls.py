@@ -360,6 +360,21 @@ def test_bad_and_duplicate_ble_response_cannot_forward_an_unverified_command(fai
     asyncio.run(run())
 
 
+def test_workspace_provenance_covers_the_glove_module_copies(tmp_path):
+    from laptop.reporting import source_provenance
+    module = tmp_path / "firmware" / "esp32" / "lib" / "glove_sensor" / "src"
+    module.mkdir(parents=True)
+    (module / "glove_sensor.cpp").write_text("first", encoding="utf-8")
+    params = tmp_path / "firmware" / "esp32" / "movement_model_params.h"
+    params.write_text("weights", encoding="utf-8")
+    first = source_provenance(tmp_path)["workspace_source_sha256"]
+    (module / "glove_sensor.cpp").write_text("changed", encoding="utf-8")
+    second = source_provenance(tmp_path)["workspace_source_sha256"]
+    params.write_text("retrained", encoding="utf-8")
+    third = source_provenance(tmp_path)["workspace_source_sha256"]
+    assert len({first, second, third}) == 3
+
+
 def test_workspace_provenance_records_dirty_state_and_content_fingerprint(tmp_path):
     from laptop.reporting import source_provenance
     (tmp_path / "laptop").mkdir()

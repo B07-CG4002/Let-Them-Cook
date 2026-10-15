@@ -14,9 +14,10 @@ def source_provenance(repository: Path) -> dict:
     """Fingerprint relevant workspace source, including uncommitted implementation."""
     repository = Path(repository)
     digest = hashlib.sha256()
-    candidates = [repository / "demo.py", repository / "firmware/esp32/platformio.ini"]
+    candidates = [repository / "demo.py", repository / "firmware/esp32/platformio.ini",
+                  repository / "firmware/esp32/movement_model_params.h"]
     for folder in ("common", "laptop", "ultra96", "phone", "tools",
-                   "firmware/esp32/include", "firmware/esp32/src",
+                   "firmware/esp32/include", "firmware/esp32/src", "firmware/esp32/lib",
                    "ios-visualizer/CommsNative/Sources"):
         directory = repository / folder
         if directory.is_dir():
