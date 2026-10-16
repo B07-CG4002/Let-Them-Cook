@@ -3,7 +3,8 @@ using System.Text;
 using UnityEngine;
 using UnityEngine.Events;
 
-// The pot on the stove marker. GestureButtonController calls TryAdd on a Drop with the hand at the pot.
+// The pot, starting on the stove marker. It can be grabbed and carried (Grabbable, type Pot); see PotStation.
+// GestureButtonController calls TryAdd on a Drop with the hand at the pot.
 // The first ingredient picks the dish; the pot then only takes what that dish still needs. When a stage has all its
 // ingredients it cooks, then a burn countdown starts (the curry's next ingredient must go in before it ends).
 // The soup surface (a child plane) rises one step per ingredient. Timers run in Update; no per-frame searches.
@@ -60,6 +61,10 @@ public class Pot : MonoBehaviour
     [Tooltip("Seconds after the food burns before the fire starts. 0 = straight away (the game design suggests 8).")]
     [SerializeField] private float fireDelay = 0f;
 
+    [Tooltip("Burner flame on the stove (in the Stove prefab), Play On Awake off. Plays while the pot is on the stove with all its ingredients in "
+        + "(cooking, cooked or burnt); stops when the pot is emptied or taken off the stove.")]
+    [SerializeField] private ParticleSystem stoveFire;
+
     [Header("Events (sounds)")]
     public UnityEvent onCooked;
     public UnityEvent onWarning;
@@ -71,6 +76,9 @@ public class Pot : MonoBehaviour
     public bool IsReadyToPlate => State == PotState.Cooked && IsLastStage;
     public bool IsBurnt => State == PotState.Burnt;
     public bool IsOnFire { get; private set; }
+    private bool stoveFireOn;
+    // The stove/sink it's sitting on; null while held or put down elsewhere. Set by PotStation.
+    public PotStation Station { get; set; }
 
     private Recipe recipe;
     private int stageIndex;
@@ -119,6 +127,7 @@ public class Pot : MonoBehaviour
 
         if (bar == null) bar = GetComponentInChildren<ChopProgressBar>(true);
         StopFire(); // in case Play On Awake was left on
+        if (stoveFire != null) stoveFire.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
     }
 
     // In Start, not Awake: the bar sets itself up in its own Awake, which may run after this one.
@@ -179,27 +188,7 @@ public class Pot : MonoBehaviour
     }
 
     // True if `worldPos` appears on screen inside the pot's outline (its meshes' bounds, projected). Only called on a drop.
-    public bool CoversOnScreen(Vector3 worldPos, Camera cam)
-    {
-        Vector3 p = cam.WorldToScreenPoint(worldPos);
-        if (p.z <= 0f) return false;
-
-        var renderers = GetComponentsInChildren<Renderer>();
-        if (renderers.Length == 0) return false;
-        Bounds b = renderers[0].bounds;
-        foreach (var r in renderers) b.Encapsulate(r.bounds);
-
-        Vector2 min = new Vector2(float.PositiveInfinity, float.PositiveInfinity), max = -min;
-        for (int i = 0; i < 8; i++)
-        {
-            Vector3 corner = b.center + Vector3.Scale(b.extents, new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1));
-            Vector3 s = cam.WorldToScreenPoint(corner);
-            if (s.z <= 0f) return false; // pot partly behind the camera
-            min = Vector2.Min(min, s);
-            max = Vector2.Max(max, s);
-        }
-        return p.x >= min.x && p.x <= max.x && p.y >= min.y && p.y <= max.y;
-    }
+    public bool CoversOnScreen(Vector3 worldPos, Camera cam) => ScreenBounds.Covers(transform, worldPos, cam);
 
     // Back to an empty pot. Plating and grabbing burnt food out will call this.
     public void Clear()
@@ -219,6 +208,7 @@ public class Pot : MonoBehaviour
 
     void Update()
     {
+        UpdateStoveFire();
         if (surfaceT < 1f)
         {
             surfaceT = riseDuration > 0f ? surfaceT + Time.deltaTime / riseDuration : 1f;
@@ -297,6 +287,16 @@ public class Pot : MonoBehaviour
         IsOnFire = true;
         if (fire != null) fire.Play(true); // true = child particle systems (smoke, sparks) too
         Debug.Log("[Pot] On fire");
+    }
+
+    private void UpdateStoveFire()
+    {
+        bool on = (State == PotState.Cooking || State == PotState.Cooked || State == PotState.Burnt) && Station != null && Station.Kind == PotStationKind.Stove;
+        if (on == stoveFireOn) return;
+        stoveFireOn = on;
+        if (stoveFire == null) return;
+        if (on) stoveFire.Play(true);
+        else stoveFire.Stop(true, ParticleSystemStopBehavior.StopEmitting); // last flames fade out
     }
 
     private void StopFire()

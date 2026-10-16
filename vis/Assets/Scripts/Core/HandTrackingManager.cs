@@ -19,12 +19,17 @@ public class HandTrackingManager : MonoBehaviour
     [Tooltip("Passed to MediaPipe's ImageProcessingOptions - it rotates internally instead of a manual CPU loop.")]
     [SerializeField] private int rotationDegrees = 0; // set in the Inspector: 270 on our headset
 
+    [Tooltip("Landmarks that count for touching an item (grab, drop into pot, menu hover). An item is touched when ANY of them " +
+        "is within its radius. Default: wrist + the base of each finger (the palm). Add 8 to also count the index fingertip.")]
+    [SerializeField] private int[] touchLandmarks = { 0, 1, 5, 9, 13, 17 };
+
     private HandLandmarker handLandmarker;
     private Texture2D cameraTexture;
     private List<HandInteractable> interactables = new List<HandInteractable>();
 
     private List<Vector2> latestLandmarkPoints = new List<Vector2>();
     private List<Vector2> latestFingertips = new List<Vector2>();
+    private List<Vector2> latestTouchPoints = new List<Vector2>(); // primary hand's touchLandmarks
     private List<Vector2> latestHandCenters = new List<Vector2>();
     private int lastDetectedHandCount = 0;
     private readonly object landmarkLock = new object();
@@ -104,6 +109,7 @@ public class HandTrackingManager : MonoBehaviour
         var points = new List<Vector2>();
         var fingertips = new List<Vector2>();
         var handCenters = new List<Vector2>();
+        var touchPoints = new List<Vector2>();
         int handCount = result.handLandmarks?.Count ?? 0;
 
         if (result.handLandmarks != null)
@@ -126,6 +132,13 @@ public class HandTrackingManager : MonoBehaviour
                         sum += new Vector2(hand.landmarks[i].x, hand.landmarks[i].y);
                     handCenters.Add(sum / HandCenterLandmarks.Length);
                 }
+
+                if (touchPoints.Count == 0) // primary hand only, like the fingertip and hand centre getters
+                {
+                    foreach (int i in touchLandmarks)
+                        if (i >= 0 && i < hand.landmarks.Count)
+                            touchPoints.Add(new Vector2(hand.landmarks[i].x, hand.landmarks[i].y));
+                }
             }
         }
 
@@ -134,6 +147,7 @@ public class HandTrackingManager : MonoBehaviour
             latestLandmarkPoints = points;
             latestFingertips = fingertips;
             latestHandCenters = handCenters;
+            latestTouchPoints = touchPoints;
             lastDetectedHandCount = handCount;
         }
     }
@@ -165,7 +179,7 @@ public class HandTrackingManager : MonoBehaviour
     }
 
     // Centre of the primary hand in screen pixels (bottom-left origin, like WorldToScreenPoint).
-    // Used for crate spawns, since a grab gesture closes the hand and the fingertip no longer marks where the hand is.
+    // Held items and crate spawns use it, since a grab gesture closes the hand and the fingertip no longer marks where the hand is.
     public bool TryGetPrimaryHandCenterScreenPos(out Vector2 screenPos)
     {
         lock (landmarkLock)
@@ -182,7 +196,7 @@ public class HandTrackingManager : MonoBehaviour
         return false;
     }
 
-    // Uses the AR camera's pixel size so fingertip positions match WorldToScreenPoint.
+    // Uses the AR camera's pixel size so landmark positions match WorldToScreenPoint.
     void Update()
     {
         if (arCameraManager == null)
@@ -197,21 +211,21 @@ public class HandTrackingManager : MonoBehaviour
         if (interactables.Count == 0)
             return;
 
-        List<Vector2> fingertips;
+        List<Vector2> touchPoints;
         lock (landmarkLock)
         {
-            fingertips = new List<Vector2>(latestFingertips);
+            touchPoints = new List<Vector2>(latestTouchPoints);
         }
 
         Camera arCamera = arCameraManager.GetComponent<Camera>();
         var pixelRect = new UnityEngine.Rect(0, 0, arCamera.pixelWidth, arCamera.pixelHeight);
 
-        var fingertipLocalPoints = new List<Vector2>();
-        foreach (var fingertip in fingertips)
+        var touchScreenPoints = new List<Vector2>();
+        foreach (var point in touchPoints)
         {
-            fingertipLocalPoints.Add(new Vector2(
-                fingertip.x * pixelRect.width,
-                (1f - fingertip.y) * pixelRect.height
+            touchScreenPoints.Add(new Vector2(
+                point.x * pixelRect.width,
+                (1f - point.y) * pixelRect.height
             ));
         }
 
@@ -220,11 +234,12 @@ public class HandTrackingManager : MonoBehaviour
             Vector3 objectScreenPos = arCamera.WorldToScreenPoint(interactable.transform.position);
             float minDist = float.PositiveInfinity;
 
+            // Nearest palm landmark counts, so the item is touched if any of them is within its radius.
             if (objectScreenPos.z > 0f)
             {
-                foreach (var fingertipLocal in fingertipLocalPoints)
+                foreach (var touchPoint in touchScreenPoints)
                 {
-                    float dist = Vector2.Distance(fingertipLocal, objectScreenPos);
+                    float dist = Vector2.Distance(touchPoint, objectScreenPos);
                     if (dist < minDist)
                         minDist = dist;
                 }

@@ -21,12 +21,25 @@ public class GestureButtonController : MonoBehaviour
     [SerializeField] private float maxDepthSpeed = 0.5f;
     
 
+    [Header("Drop fall")]
+    [Tooltip("A dropped item that doesn't land on a board, pot or station falls to the table (the nearest anchored " +
+        "QR marker's height). Untick to leave it where the hand let go.")]
+    [SerializeField] private bool fallWhenDropped = true;
+    [Tooltip("Downward acceleration of the fall (m/s^2). 9.81 = real gravity.")]
+    [SerializeField] private float fallGravity = 9.81f;
+    [Tooltip("Only falls if an anchored marker is within this many meters sideways; otherwise it stays put.")]
+    [SerializeField] private float fallReach = 1f;
+    [Tooltip("Bounce on landing: 0 = none, 0.2 = a small hop.")]
+    [SerializeField, Range(0f, 0.6f)] private float fallBounce = 0.2f;
+
     private Transform heldItem;
     private Grabbable heldGrabbable;
     private float heldItemDepth;
-    private Vector2 heldScreenOffset; // item's on-screen offset from the fingertip; zero for normal grabs
+    private Vector2 heldScreenOffset; // item's on-screen offset from the palm centre; zero for normal grabs
 
     public GrabbableType? CurrentlyHeldType => heldGrabbable != null ? heldGrabbable.ItemType : (GrabbableType?)null;
+    // The pot in the hand, or null (for pouring).
+    public Pot HeldPot { get; private set; }
     
     // The public On...Pressed methods are wired to the on-screen buttons' OnClick(); Ultra96 gestures will call them later.
     public void OnSelectPressed()
@@ -54,6 +67,7 @@ public class GestureButtonController : MonoBehaviour
         }
 
         // Grab at a burnt pot takes the burnt food out. Until the bin is built it just disappears.
+        // Otherwise the pot is picked up (if it has a Grabbable).
         var pot = touched.GetComponent<Pot>();
         if (pot != null)
         {
@@ -62,13 +76,17 @@ public class GestureButtonController : MonoBehaviour
                 pot.Clear();
                 Debug.Log("[Pot] Burnt food taken out (thrown away; no bin yet).");
             }
+            else GrabPot(pot);
             return;
         }
 
         var grabbable = touched.GetComponent<Grabbable>();
         if (grabbable == null) return;
 
-        StartHolding(grabbable, Vector2.zero); // zero offset: sits on the fingertip
+        // Held by its reach point (e.g. the knife handle) rather than its pivot; no reach point = pivot sits on the palm.
+        Vector2 offset = (Vector2)arCamera.WorldToScreenPoint(grabbable.transform.position)
+                       - (Vector2)arCamera.WorldToScreenPoint(touched.ReachPosition);
+        StartHolding(grabbable, offset);
     }
 
     // Grab at a crate: spawn a fresh ingredient beside the hand (around the fist, not inside it) and hold it.
@@ -90,9 +108,22 @@ public class GestureButtonController : MonoBehaviour
             return;
         }
 
-        // Keep the ingredient where it spawned relative to the hand, instead of jumping onto the fingertip.
+        // Keep the ingredient where it spawned relative to the hand, instead of jumping onto the palm.
         Vector2 itemScreen = arCamera.WorldToScreenPoint(item.transform.position);
-        StartHolding(grabbable, itemScreen - handTrackingManager.GetPrimaryFingertipScreenPos());
+        StartHolding(grabbable, itemScreen - handCenter);
+    }
+
+    // The pot keeps its on-screen offset from the hand (it's big, so it doesn't jump onto the palm and cover the hand).
+    private void GrabPot(Pot pot)
+    {
+        var grabbable = pot.GetComponent<Grabbable>();
+        if (grabbable == null) return; // not movable in this scene
+        if (!handTrackingManager.TryGetPrimaryHandCenterScreenPos(out Vector2 handCenter)) return;
+
+        Vector2 potScreen = arCamera.WorldToScreenPoint(pot.transform.position);
+        StartHolding(grabbable, potScreen - handCenter);
+        HeldPot = pot;
+        if (pot.Station != null) pot.Station.Remove(pot);
     }
 
     private void StartHolding(Grabbable grabbable, Vector2 screenOffset)
@@ -101,6 +132,7 @@ public class GestureButtonController : MonoBehaviour
         heldGrabbable = grabbable;
         grabbable.isHeld = true;
         heldScreenOffset = screenOffset;
+        FallToSurface.Cancel(heldItem); // caught mid-fall
 
         // Picked up, so no longer on the board. Children too: a bunch's pieces each have their own state.
         ChoppingBoard leftBoard = null;
@@ -125,7 +157,18 @@ public class GestureButtonController : MonoBehaviour
     {
         if (heldItem == null) return;
 
-        if (heldGrabbable.ItemType == GrabbableType.Ingredient)
+        bool placed = false; // landed on a station or board; otherwise it falls to the table below
+
+        if (HeldPot != null)
+        {
+            // Over a free stove/sink: snaps onto it. Anywhere else: falls to the table.
+            var station = PotStation.FindFor(HeldPot, arCamera);
+            if (station != null) station.Place(HeldPot);
+            placed = station != null;
+            Debug.Log($"[Pot] {HeldPot.name} put down {(station != null ? "on " + station.name : "off any station")}");
+            HeldPot = null;
+        }
+        else if (heldGrabbable.ItemType == GrabbableType.Ingredient)
         {
             // Hand at the pot, or the item over it on screen: the pot gets it or it stays in hand; the boards aren't tried.
             var pot = PotForDrop();
@@ -148,6 +191,7 @@ public class GestureButtonController : MonoBehaviour
                 state.OnChoppingBoard = board != null;
                 state.Board = board;
             }
+            placed = board != null;
 
             if (board != null)
             {
@@ -162,6 +206,9 @@ public class GestureButtonController : MonoBehaviour
             }
             Debug.Log($"[BoardDrop] {heldItem.name} dropped, onChoppingBoard={board != null}");
         }
+
+        if (!placed && fallWhenDropped)
+            FallToSurface.Begin(heldItem, QrCodeItemSpawner.Anchors, fallReach, fallGravity, fallBounce);
 
         heldGrabbable.isHeld = false;
         heldItem = null;
@@ -341,7 +388,7 @@ public class GestureButtonController : MonoBehaviour
     }
 
     // Empty parent for one ingredient's pieces, placed at the uncut ingredient's visual centre (not its pivot):
-    // hand proximity is measured from here, and it's the point that follows the fingertip while held.
+    // hand proximity is measured from here, and it's the point that follows the palm while held.
     private ChoppedIngredient CreateChoppedIngredient(IngredientState whole, Transform parent)
     {
         var go = new GameObject($"Chopped {whole.name}");
@@ -357,9 +404,10 @@ public class GestureButtonController : MonoBehaviour
 
     void Update()
     {
-        if (heldItem != null)
+        // Held items follow the palm centre (it barely moves when the hand closes). Hand lost: the item stays put.
+        if (heldItem != null && handTrackingManager.TryGetPrimaryHandCenterScreenPos(out Vector2 handCenter))
         {
-            Vector2 targetScreenPos = handTrackingManager.GetPrimaryFingertipScreenPos() + heldScreenOffset;
+            Vector2 targetScreenPos = handCenter + heldScreenOffset;
             // Follow the real hand depth when LiDAR has a reading; otherwise keep the last depth we had.
             if (handDepth != null && handDepth.HasDepth)
             {

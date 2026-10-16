@@ -1,6 +1,7 @@
 using UnityEngine;
 
-public enum GrabbableType { Knife, Ingredient }
+// Pot is last so existing prefabs keep their Knife/Ingredient setting.
+public enum GrabbableType { Knife, Ingredient, Pot }
 
 public class Grabbable : MonoBehaviour
 {
