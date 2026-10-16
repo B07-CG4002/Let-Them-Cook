@@ -23,8 +23,9 @@ public class HandDepthEstimator : MonoBehaviour
     [SerializeField] private bool flipY = false;
 
     [Header("Sampling")]
-    [Tooltip("MediaPipe landmarks to sample. 5-8 = index finger, knuckle to tip. The tip alone often lands on the background at this resolution.")]
-    [SerializeField] private int[] sampleLandmarks = { 5, 6, 7, 8 };
+    [Tooltip("MediaPipe landmarks to sample. Default = the palm (wrist, thumb base, finger knuckles), the same points held items follow, " +
+        "so closing the hand doesn't change the depth. The old default 5-8 was the index finger, knuckle to tip.")]
+    [SerializeField] private int[] sampleLandmarks = { 0, 1, 5, 9, 13, 17 };
     [Tooltip("Depth pixels around each landmark to sample. 1 = a 3x3 patch.")]
     [SerializeField] private int patchRadius = 1;
     [Tooltip("Skip LiDAR readings ARKit marks as low confidence (common on hand edges).")]

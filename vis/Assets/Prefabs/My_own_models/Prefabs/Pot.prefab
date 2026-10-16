@@ -283,7 +283,7 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 3745640723876935571, guid: c7159d12fbf48498ab2627ec3724edc5, type: 3}
       propertyPath: m_Name
-      value: FIre
+      value: Fire
       objectReference: {fileID: 0}
     - target: {fileID: 3941375212076056863, guid: c7159d12fbf48498ab2627ec3724edc5, type: 3}
       propertyPath: m_LocalPosition.x

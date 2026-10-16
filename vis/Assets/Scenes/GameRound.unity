@@ -987,7 +987,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -600, y: -410}
+  m_AnchoredPosition: {x: -900, y: -410}
   m_SizeDelta: {x: 100, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &523093487
@@ -1120,7 +1120,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -600, y: 100}
+  m_AnchoredPosition: {x: -900, y: 100}
   m_SizeDelta: {x: 100, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &643280771
@@ -1253,7 +1253,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -600, y: 350}
+  m_AnchoredPosition: {x: -900, y: 350}
   m_SizeDelta: {x: 100, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &712696777
@@ -1658,7 +1658,7 @@ Transform:
   m_GameObject: {fileID: 1032314318}
   serializedVersion: 2
   m_LocalRotation: {x: 0.40821788, y: -0.23456968, z: 0.10938163, w: 0.8754261}
-  m_LocalPosition: {x: 0, y: 3, z: 0}
+  m_LocalPosition: {x: 0.84, y: 1.59, z: -1.45}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1733,9 +1733,15 @@ MonoBehaviour:
     localOffset: {x: 0, y: 0.05, z: 0}
     localScale: {x: 1, y: 1, z: 1}
   - imageName: stove
-    prefab: {fileID: 5950389263101728883, guid: f3cd301ac1aa0456fb93d12e00c3850d, type: 3}
+    prefab: {fileID: 9128669928729175032, guid: c466ce2edca554cd1ab30798e5680dbe, type: 3}
     localOffset: {x: 0, y: 0.07, z: 0}
     localScale: {x: 1, y: 1, z: 1}
+  settleTime: 0.5
+  maxSettleTime: 3
+  stillDistance: 0.01
+  stillAngle: 3
+  useArAnchor: 1
+  stopTrackingWhenAllAnchored: 1
 --- !u!4 &1336859942
 Transform:
   m_ObjectHideFlags: 0
@@ -2157,6 +2163,10 @@ MonoBehaviour:
   holdInFrontOfHand: 0.02
   minHoldDepth: 0.1
   maxDepthSpeed: 0.5
+  fallWhenDropped: 1
+  fallGravity: 9.81
+  fallReach: 1
+  fallBounce: 0.1
 --- !u!114 &1853393845
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2206,7 +2216,7 @@ Canvas:
   m_GameObject: {fileID: 1853393843}
   m_Enabled: 1
   serializedVersion: 3
-  m_RenderMode: 1
+  m_RenderMode: 0
   m_Camera: {fileID: 442059758}
   m_PlaneDistance: 0.2
   m_PixelPerfect: 0
@@ -2219,7 +2229,7 @@ Canvas:
   m_AdditionalShaderChannelsFlag: 25
   m_UpdateRectTransformForStandalone: 0
   m_SortingLayerID: 0
-  m_SortingOrder: 0
+  m_SortingOrder: 1
   m_TargetDisplay: 0
 --- !u!224 &1853393848
 RectTransform:
@@ -2303,7 +2313,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -600, y: -150}
+  m_AnchoredPosition: {x: -900, y: -150}
   m_SizeDelta: {x: 100, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1972057154
@@ -2553,6 +2563,7 @@ GameObject:
   - component: {fileID: 2128067850}
   - component: {fileID: 2128067849}
   - component: {fileID: 2128067856}
+  - component: {fileID: 2128067857}
   m_Layer: 0
   m_Name: XR Origin (Mobile AR)
   m_TagString: Untagged
@@ -2593,6 +2604,7 @@ MonoBehaviour:
   arCameraManager: {fileID: 442059753}
   mirrorImage: 0
   rotationDegrees: 270
+  touchLandmarks: 000000000100000005000000090000000d0000001100000008000000
 --- !u!114 &2128067851
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2691,7 +2703,7 @@ MonoBehaviour:
   landmarksAlreadyUnrotated: 1
   flipX: 0
   flipY: 0
-  sampleLandmarks: 05000000060000000700000008000000
+  sampleLandmarks: 000000000100000005000000090000000d0000001100000008000000
   patchRadius: 1
   skipLowConfidence: 1
   percentile: 0.25
@@ -2701,6 +2713,22 @@ MonoBehaviour:
   maxAge: 0.3
   showDebugView: 0
   debugViewHeight: 300
+--- !u!114 &2128067857
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2128067848}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 728ad7fae8e460a4ba41265c7308d757, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.XR.ARFoundation::UnityEngine.XR.ARFoundation.ARAnchorManager
+  <trackablesChanged>k__BackingField:
+    m_PersistentCalls:
+      m_Calls: []
+  m_AnchorPrefab: {fileID: 0}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
