@@ -170,8 +170,18 @@ final class SetupViewController: UIViewController, UIDocumentPickerDelegate {
             try onConnect?(config, ca, password, jumpPassword.text ?? "")
             clearPasswords(); dismiss(animated: true)
         } catch {
-            notice.text = (error as? SetupError)?.localizedDescription ?? "Could not save the public setup. Try again while the iPhone is unlocked."
+            notice.text = (error as? SetupError)?.localizedDescription ?? "Could not save the public setup. Try again while the iPhone is unlocked. (\(Self.describe(error)))"
         }
+    }
+
+    // File-system errors carry a path and a code, never the passwords.
+    private static func describe(_ error: Error) -> String {
+        let ns = error as NSError
+        var text = "\(ns.domain) \(ns.code): \(ns.localizedDescription)"
+        if let underlying = ns.userInfo[NSUnderlyingErrorKey] as? NSError {
+            text += " [\(underlying.domain) \(underlying.code)]"
+        }
+        return text
     }
 }
 #endif
