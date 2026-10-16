@@ -15,7 +15,8 @@ import threading
 import time
 from typing import Any, Optional
 
-from common.sensor import decode_packet, dummy_values, choose_fixture, SensorPacket, encode_packet
+from common.sensor import (decode_packet, choose_fixture, SensorPacket, encode_packet, PACKET_SIZE,
+                           SENSOR_MTU_FLOOR)
 from common.control import CONTROL_UUID, RESPONSE_UUID
 from common.tls import client_context, TLS_SERVER_NAME
 from common.wire import read_frame, write_frame, ProtocolError
@@ -237,6 +238,11 @@ class Bridge:
         self.observation_received = 0
         self.observation_max_silence = 0.0
         self._observation_last = None
+        # The board counts its send ticks (sent or skipped) only while sensor
+        # notifications are on: from the first subscription to the snapshot
+        # that proves they stopped. A gated board's coverage is judged over it.
+        self.source_ticking_since = None
+        self.source_ticking_until = None
         self.goodput = GoodputMeter()
         self.evidence = evidence
         self.negotiated_mtu = None
@@ -257,7 +263,7 @@ class Bridge:
         if self.control is None:
             return False
         packet = SensorPacket(self.config.expected_device_id, self.control.boot_id or 0,
-                              self.control.next_id(), 0, choose_fixture(self.rng), version=2)
+                              self.control.next_id(), 0, choose_fixture(self.rng))
         return self.commands.submit(packet)
 
     async def forward_command(self, packet, request_id):
@@ -374,9 +380,8 @@ class Bridge:
 
     def _check_ack(self, ack, packet, request_id=None):
         expected = dict(v=packet.version, type="INGEST_ACK", session_id=self.config.session_id,
-                        device_id=packet.device_id, boot_id=packet.boot_id, seq=packet.seq)
-        if packet.version == 2:
-            expected["request_id"] = request_id
+                        device_id=packet.device_id, boot_id=packet.boot_id, seq=packet.seq,
+                        request_id=request_id)
         if not isinstance(ack, dict) or set(ack) != set(expected) | {"status"}:
             raise ProtocolError("malformed ingestion acknowledgement")
         for key, value in expected.items():
@@ -405,8 +410,6 @@ class Bridge:
                     and packet.device_id != self.config.expected_device_id):
                 self.metrics.identity_mismatches += 1
                 return
-            if packet.version == 1 and tuple(packet.values) != tuple(dummy_values(packet.seq)):
-                raise ValueError("not a B07 Communications deterministic packet")
         except (ValueError, TypeError):
             self.metrics.malformed += 1
             return
@@ -716,8 +719,8 @@ class Bridge:
                 characteristic = service.get_characteristic(SENSOR_UUID) if service else None
                 if characteristic is None or "notify" not in characteristic.properties:
                     raise ValueError("B07 Communications sensor Notify characteristic missing")
-                if client.mtu_size < 35:
-                    raise ValueError("current ATT MTU cannot carry 32-byte sensor packet")
+                if client.mtu_size < SENSOR_MTU_FLOOR:
+                    raise ValueError("current ATT MTU cannot carry {}-byte sensor packet".format(PACKET_SIZE))
                 self.negotiated_mtu = client.mtu_size
                 if not self.config.diagnostic_unprotected:
                     from laptop.windows_pairing import require_authenticated_bond
@@ -775,6 +778,8 @@ class Bridge:
                     self.enqueue(gen, data)
                 await self._bounded(client.start_notify(SENSOR_UUID, notification), self.config.connect_timeout)
                 subscribed = True
+                if self.source_ticking_since is None:
+                    self.source_ticking_since = self.clock()
                 self.metrics.ble_connections += 1
                 self.log("BLE_connected", direction="ESP<->laptop", generation=current,
                          mtu=client.mtu_size, authenticated=not self.config.diagnostic_unprotected)
@@ -809,7 +814,7 @@ class Bridge:
                 if client is not None:
                     cleanup_cancellation = None
                     source_deadline = self.clock() + self.config.connect_timeout
-                    quiesced_snapshot = None
+                    quiesced_snapshot = quiesced_at = None
                     remote_stop_task = None
                     if controls_subscribed and client.is_connected:
                         try:
@@ -836,6 +841,7 @@ class Bridge:
                                 quiesced_snapshot = parse_source_stats(await self._bounded(
                                     client.read_gatt_char(SOURCE_STATS_UUID, use_cached=False), remaining),
                                     expected_device_id=self.config.expected_device_id)
+                                quiesced_at = self.clock()
                                 start = self.source_audit.start_stats
                                 if start is None or quiesced_snapshot.boot_id != start.boot_id:
                                     raise ProtocolError("quiesced source boot changed")
@@ -895,6 +901,10 @@ class Bridge:
                                                     remaining),
                                 expected_device_id=self.config.expected_device_id)
                             self.source_audit.finish(final)
+                            # The quiesce read, or else this read after stop-notify,
+                            # is the barrier after which the board stopped ticking.
+                            self.source_ticking_until = (
+                                quiesced_at if quiesced_at is not None else self.clock())
                             if quiesced_snapshot is not None and final != quiesced_snapshot:
                                 raise ProtocolError("source changed after notifications were quiesced")
                             if quiesced_snapshot is not None:
@@ -958,11 +968,13 @@ class Bridge:
         seq = 0
         if self.source_audit is not None and self.source_audit.start_stats is None:
             self.source_audit.start(SourceStats(device_id, boot_id, 0, 0, 0))
+        if self.source_ticking_since is None:
+            self.source_ticking_since = self.clock()
         active_event.set()
         try:
             while stop_event is None or not stop_event.is_set():
                 self.enqueue(1, encode_packet(SensorPacket(device_id, boot_id, seq,
-                    int(seq * 1000 / rate) & 0xffffffff, choose_fixture(self.rng), version=2)))
+                    int(seq * 1000 / rate) & 0xffffffff, choose_fixture(self.rng))))
                 seq = (seq + 1) & 0xffffffff
                 if stop_event is None:
                     await asyncio.sleep(1.0 / rate)
@@ -974,6 +986,7 @@ class Bridge:
         finally:
             if self.source_audit is not None and self.source_audit.end_stats is None:
                 self.source_audit.finish(SourceStats(device_id, boot_id, seq, seq, 0))
+                self.source_ticking_until = self.clock()
             self.inbox.deactivate(preserve=True)
             active_event.clear()
 
@@ -999,6 +1012,10 @@ class Bridge:
                     callback_received=self.callback_received,
                     observation_received=self.observation_received,
                     observation_max_silence=self.observation_max_silence,
+                    source_ticking_seconds=(
+                        self.source_ticking_until - self.source_ticking_since
+                        if self.source_ticking_since is not None
+                        and self.source_ticking_until is not None else None),
                     sensor_goodput=self.goodput.report(self.clock()),
                     commands=self.commands.summary() if self.commands is not None else None,
                     controls=self.control.summary() if self.control is not None else None,

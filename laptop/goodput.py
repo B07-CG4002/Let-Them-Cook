@@ -7,7 +7,7 @@ from collections import deque
 import math
 import threading
 
-from common.sensor import PACKET_SIZE, SensorPacket, dummy_values
+from common.sensor import PACKET_SIZE, SensorPacket
 
 
 def _time(value):
@@ -45,8 +45,6 @@ class GoodputMeter:
     def record(self, packet, received_at):
         received_at = _time(received_at)
         if not isinstance(packet, SensorPacket):
-            return False
-        if packet.version == 1 and packet.values != dummy_values(packet.seq):
             return False
         with self._lock:
             key = packet.device_id, packet.boot_id

@@ -20,7 +20,9 @@ let package = Package(
             .product(name: "NIOSSH", package: "swift-nio-ssh"),
             .product(name: "NIOSSL", package: "swift-nio-ssl"),
             .product(name: "Crypto", package: "swift-crypto")]),
-        .target(name: "CommsBridge", dependencies: ["CommsCore", "CommsTransport"]),
+        // Crypto stands in for CryptoKit only where CryptoKit is missing (Linux test builds).
+        .target(name: "CommsBridge", dependencies: ["CommsCore", "CommsTransport",
+            .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux]))]),
         .testTarget(name: "CommsCoreTests", dependencies: ["CommsCore"]),
         .testTarget(name: "CommsBridgeTests", dependencies: ["CommsBridge"]),
         .testTarget(name: "CommsTransportTests", dependencies: ["CommsTransport", "CommsCore",

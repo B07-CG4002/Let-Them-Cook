@@ -48,7 +48,7 @@ final class SetupViewController: UIViewController, UIDocumentPickerDelegate {
             if small { label.textColor = .secondaryLabel }
             return label
         }
-        stack.addArrangedSubview(label("DUMMY gestures · session ltc-comms"))
+        stack.addArrangedSubview(label("session ltc-comms"))
         stack.addArrangedSubview(label("The iPhone connects through its own SSH session. Keep the app in the foreground. Leaving the app stops reception and clears passwords.", small: true))
         stack.addArrangedSubview(label("Board: \(EnrolledTrust.boardHost)", small: true))
         func field(_ field: UITextField, name: String, value: String = "", secret: Bool = false) {

@@ -1,10 +1,10 @@
 # Native iOS Communications integration
 
-`CommsNative` is the checked-in Swift package for the iPhone result client. It provides `CommsCore`, `CommsTransport` and `CommsBridge`; `NativePreview` uses the same modules for source-level checks. The exported Unity Xcode project and its generated app inputs are **not included here**. To build the deployed Unity visualizer, obtain the team's matching export and integrate this package in that project; these commands alone do not produce the Unity app.
+`CommsNative` is the checked-in Swift package for the iPhone result client. It provides `CommsCore`, `CommsTransport` and `CommsBridge`; `NativePreview` uses the same modules for source-level checks. The exported Unity Xcode project and its generated app inputs are **not included in the team repository**. To build the deployed Unity visualizer, obtain the team's matching export and integrate this package in that project; these commands alone do not produce the Unity app.
 
 ## Test the source on a Mac
 
-Use a Mac with Xcode, iOS support and SwiftPM network access. From the repository root:
+Use a Mac with Xcode (Swift 6.1 or newer), iOS support and SwiftPM network access. Swift 6.1 is the minimum: `Package.swift` declares tools version 5.10, but the pinned dependencies need 6.1. From the repository root:
 
 ```sh
 swift test --package-path ios-visualizer/CommsNative
@@ -16,6 +16,9 @@ For the optional simulator preview, install XcodeGen and generate disposable tes
 python3 ios-visualizer/NativePreview/tools/generate_test_pki.py
 xcodegen generate --spec ios-visualizer/NativePreview/project.yml
 xcodebuild -project ios-visualizer/NativePreview/CommsNativePreview.xcodeproj \
+  -scheme CommsNativePreview -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  -jobs 4 build
+xcodebuild -project ios-visualizer/NativePreview/CommsNativePreview.xcodeproj \
   -scheme CommsNativeTransport -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
   -jobs 4 -parallel-testing-enabled NO test
 xcodebuild -project ios-visualizer/NativePreview/CommsNativePreview.xcodeproj \
@@ -23,19 +26,67 @@ xcodebuild -project ios-visualizer/NativePreview/CommsNativePreview.xcodeproj \
   -jobs 4 test
 ```
 
-Choose a simulator installed with that Mac's Xcode if the example device name differs. The generated PKI is isolated test material under ignored `.comms-local/CommsFixturePKI`; it is not the production CA. The preview tests exercise the native source against local peers. They do not establish a Unity build, physical BLE/Ultra96/iPhone delivery, signing, or ARKit behavior. This workflow requires Xcode and XcodeGen and has not been verified on Windows.
+Choose a simulator installed with that Mac's Xcode if the example device name differs. The generated PKI is isolated test material under ignored `.comms-local/CommsFixturePKI`; it is not the production CA. The preview tests exercise the native source against local peers. They do not establish a Unity build, physical BLE/Ultra96/iPhone delivery, signing, or ARKit behavior. This workflow requires Xcode and XcodeGen and has not been verified on Windows. The preview app links the `CommsNative` product for iOS, so building it also builds the package's iOS-only code.
+
+**Status (2026-10-16): built and tested on a Mac for macOS and for the iOS Simulator; not yet signed, installed or run on a phone.** On an Apple silicon Mac with Xcode 26.2 (Swift 6.2.3), `swift test` built the package for macOS and all 73 tests passed: the 72 of the Linux run (`ConfigurationTests` 6, `DisplayMailboxTests` 4, `DisplayStateTests` 15, `ProtocolTests` 13, `TransportTests` 26, `TrustTests` 8) and the macOS-only `PythonBoardTests` 1, which starts the real Python board service and checks 100 unique results through both SSH hops. That build compiled the Apple branches of `Configuration.swift` (the CryptoKit and Security imports and the `SecCertificateCreateWithData` check, rewritten on 2026-10-15). The preview commands above then ran as written (XcodeGen 2.46.0). The `build` line built the preview app for the iOS Simulator, which compiled the `#if os(iOS)` code (`IntegrationController`, `SetupViewController`, the iOS branches of `CommsStart` and `CommsStop`, file protection) with no error or warning in those files; this was the first iOS build of that code since the version-3 changes of 2026-10-14. On an iPhone 17 Pro simulator with iOS 26.3, the `CommsNativeTransport` test run passed 34 tests (`TransportTests` 26, `TrustTests` 8, with the iOS test fixtures in `LocalPeers.swift`) and the `CommsNativePreview` test run passed its 1 UI test (`SetupTests`, which drives the setup form). The macOS and simulator builds used the versions pinned in `CommsNative/Package.resolved`. The same day the package also built for an iOS device (arm64) inside olsonwangyj's (the Communications owner's) copy of the Week 7 Unity export, unsigned: the app's `UnityFramework` defines the `Comms*` functions, `CommsNextResult` included, and the `Week7*` wrappers, and the export's `Week7*` calls resolve to the wrappers; nothing in that export calls `CommsNextResult`. None of this signed or installed an app or checked BLE, Ultra96 or iPhone delivery, or ARKit. Before that, on 2026-10-15, the package compiled with Swift 6.1 on Linux and its 72 tests passed there (next section).
+
+## Test the source on Linux
+
+Linux has no iOS SDK, so this checks only the platform-independent code. Use Swift 6.1 or newer, for example the official `swift:6.1` Docker image, with network access for the pinned packages. Two `ConfigurationTests` read a certificate in `ios-visualizer/reference`, so mount both folders read-only and build in a copy inside the container (the Linux build output stays out of the checkout). From the repository root:
+
+```sh
+docker run --rm -v "$PWD/ios-visualizer/CommsNative:/src/CommsNative:ro" \
+  -v "$PWD/ios-visualizer/reference:/src/reference:ro" swift:6.1 \
+  bash -c 'cp -r /src /work && cd /work/CommsNative && swift build --build-tests && swift test'
+```
+
+Two source differences make the Linux build possible. On Apple platforms the code still uses CryptoKit and Security; that path compiled for macOS, the iOS Simulator and an iOS device on 2026-10-16, and `ConfigurationTests` passed on macOS (status above):
+
+- `Sources/CommsBridge/Configuration.swift` imports CryptoKit and Security only where they exist. Without CryptoKit it takes the same `SHA256` API from swift-crypto's `Crypto`, which `Package.swift` links into `CommsBridge` on Linux only.
+- Without Security, the CA import skips the certificate parse (`SecCertificateCreateWithData`). The SHA-256 fingerprint check that follows still admits only the enrolled CA.
 
 ## Integrate with the team's Unity export
 
-In the separate exported Unity Xcode project, link the `CommsNative` package product into the Unity framework, retain the reviewed native C bridge calls from the generated receiver, and build/sign with the team's own Apple development settings. The exported project, generated receiver hook, Unity assets, and signing configuration must be supplied separately. The source handoff cannot verify that an arbitrary export contains those hooks or produce a deployable app by itself.
+In the separate exported Unity Xcode project, link the `CommsNative` package product into the Unity framework and build/sign with the team's own Apple development settings. Xcode records the app's dependency versions in the export's own `Package.resolved` (in the project's workspace), not in `CommsNative/Package.resolved`. When that file's origin hash does not match the current package graph, Xcode treats it as out of date and resolves again, which can choose newer versions: on 2026-10-16, in olsonwangyj's (the Communications owner's) copy of the Week 7 export, the file already pinned the tested versions but still carried the origin hash of the package graph the Week 7 export was first built with (when this package was named `Week7Native`), so Xcode chose swift-asn1 1.7.3 and swift-collections 1.7.3 instead of 1.7.2 and 1.6.0. Replacing only the origin hash with the one Xcode computes for the current graph kept the tested versions. The tested versions are those pinned in `CommsNative/Package.resolved`. `Package.swift` fixes swift-nio, swift-nio-ssh, swift-nio-ssl and swift-crypto exactly; only the transitive swift-asn1, swift-atomics, swift-collections and swift-system can move, and a new export has no such file yet, so its first resolution can choose newer ones. After Xcode has resolved the packages (for example with `xcodebuild -resolvePackageDependencies`), compare the export's file (in a standard Unity export, `Unity-iPhone.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved`) with `CommsNative/Package.resolved`. If a version differs, copy that pin's `version` and `revision` from `CommsNative/Package.resolved`, keep the `originHash` Xcode wrote, and resolve again; the file should then stay unchanged, which is the state that kept the tested versions on 2026-10-16. For the game's own export (the current plan), the game's C# calls the C functions below directly; no generated code is patched. Only the old Week 7 export relied on patched native bridge calls in its generated receiver. The exported project, Unity assets and signing configuration must be supplied separately (the old Week 7 export also needs its patched generated receiver). The source handoff cannot verify that an export calls these functions or produce a deployable app by itself.
 
-New integrations should call `CommsStart`, `CommsCopyDisplay` and `CommsStop`. The deployed export calls legacy `Week7*` C bridge symbols; this package keeps wrappers for that ABI so the existing export can link without a generated-code change. Preserve the wrappers while that export is in service. Do not substitute the optional preview app for Unity device acceptance.
+New integrations should call `CommsStart`, `CommsCopyDisplay` and `CommsStop`, and take game input from `CommsNextResult` (next section). The deployed export calls legacy `Week7*` C bridge symbols; this package keeps wrappers for that ABI so the existing export can link without a generated-code change. The wrappers cover `Week7Start`, `Week7CopyDisplay` and `Week7Stop` only; there is no `Week7*` form of `CommsNextResult`. Preserve the wrappers while that export is in service. Do not substitute the optional preview app for Unity device acceptance.
+
+## C functions for Unity
+
+The C functions are exported by `Sources/CommsBridge/DisplayMailbox.swift`. In a Unity app they exist only in the iOS player, where the package is linked (the package also compiles them on macOS and Linux for its own tests), so the C# declarations (derived from the C signatures, not yet compiled in Unity) go inside a platform guard:
+
+```csharp
+#if UNITY_IOS && !UNITY_EDITOR
+[DllImport("__Internal")] static extern void CommsStart();
+[DllImport("__Internal")] static extern int  CommsCopyDisplay(byte[] buffer, int capacity);
+[DllImport("__Internal")] static extern void CommsStop();
+[DllImport("__Internal")] static extern int  CommsNextResult(byte[] buffer, int capacity);
+#endif
+```
+
+- `CommsStart`: call once at start-up. It places the **Communications Connect** button in the top-right corner and does not connect by itself; a person taps it, enters the jump-host and board credentials and imports the CA.
+- `CommsCopyDisplay`: call once per frame on the main thread with a 2048-byte buffer. When the text changed and fits, it writes the UTF-8 text and a terminating 0 and returns the byte count (without the 0); otherwise, or when the buffer is null or too small, it returns 0 and writes nothing, and the caller keeps the text it has. It never returns a negative number. The four lines are:
+
+  ```text
+  Communications
+  <status>
+  <gesture>  |  <result_id>  |  confidence <received confidence>     (No live result when none is current)
+  Received: <N>
+  ```
+
+  The label is the received text; the confidence is the received number in Swift's text form of a `Double` (a received `1` shows as `1.0`). The version-2 source showed a fixed `DUMMY inference` header and `confidence 1.0`. Line 3 holds only the latest result and the next result overwrites it, so results that arrive between two polls can be missed; it is a status display, not game input. `Subscribed` means only that the subscription handshake succeeded.
+- `CommsStop`: call only when the app stops using Communications. It ends the session, clears the passwords and removes the button. Do not call it on a scene change or when going to the background.
+- `CommsNextResult` (**tested on Linux on 2026-10-15 and on macOS on 2026-10-16; built for iOS on 2026-10-16; not yet called from Unity or run on a phone**): the game input. It takes out the oldest waiting result as one compact UTF-8 JSON object with a terminating 0, keys in this order, for example `{"result_id":"1:305419896:42","gesture":"CHOP","confidence":0.93,"device_id":1}`, and returns the number of bytes written (without the 0). It returns 0 when nothing waits. When the buffer is null or smaller than the bytes plus the 0, it writes nothing, leaves the result queued and returns minus (bytes + 1), the capacity needed. It never blocks. Call it on the main thread each frame, in a loop while it returns a positive number; a 512-byte buffer holds any valid result, because labels are at most 32 characters.
+
+What `CommsNextResult` promises: results wait in arrival order, de-duplicated by `result_id`, and each result that is not dropped can be taken out at most once. It does not promise that every result arrives: results lost before the phone (board drops, reconnects, no subscriber) never reach it. Results can also pause while the player is still: the glove firmware sends samples only while the glove's movement detector reports movement (built, not yet run on hardware). Provisional limits, revisited once the model's result rate is known: at most 32 results wait, and when the queue is full the oldest is dropped; a result still waiting 2 s after it reached the phone is dropped, also while only `CommsCopyDisplay` is polled. The display snapshot counts both drops (`pendingDropped`, `pendingExpired`, with `pendingCount` for the results waiting); a new Connect resets them. The queue is emptied, without counting, when the session stops (Disconnect, the app becoming inactive, `CommsStop`) and when a new Connect starts. An automatic reconnect keeps it, and so does a session ended by a verification error; its entries still expire after 2 s. A `result_id` starting with `cmd:` comes only from command tests on the laptop.
+
+Rules for the caller: one object polls `CommsCopyDisplay` (each call reports only the change since the previous one), the same object calls `CommsNextResult`, and that object survives scene changes. Use `result_id`, not the label text, to tell results apart. Which game action a label maps to, cooldowns and repeats are the game's decision.
 
 ## Configure and observe the installed app
 
-The installed Unity app needs the verified **public** Communications CA, the institutional VPN route if required, and authorized SSH credentials for the campus jump host and Ultra96. No CA/server private key belongs in the app. In its setup view, import the trusted CA, enter the host credentials, and tap **Week 7 Connect** in the already deployed app. The source-only `CommsNative` UI uses **Communications Connect** for a future build. Wait for **Subscribed** before starting the Windows capture. Keep the app foregrounded; after locking or backgrounding, reconnect manually and enter credentials again. Its `Received` count is a phone observation and should be compared with the same run's Ultra96 accepted-result evidence.
+The installed Unity app needs the verified **public** Communications CA, the institutional VPN route if required, and authorized SSH credentials for the campus jump host and Ultra96. No CA/server private key belongs in the app. In its setup view, import the trusted CA, enter the host credentials, and tap **Communications Connect** in an app built from this source (the app installed for Week 7 shows **Week 7 Connect**). Wait for **Subscribed** before starting the Windows capture. Keep the app foregrounded; after locking or backgrounding, reconnect manually and enter credentials again. Its `Received` count is a phone observation and should be compared with the same run's Ultra96 accepted-result evidence (the laptop's `Phone expected increase`, which holds only while the board runs its built-in dummy model).
 
-The phone owns its SSH connection to Ultra96 TCP 22 and a nested stream to board loopback `127.0.0.1:9999`. TLS inside that route verifies the CA and `ultra96.week7.internal`. New source sends `SUBSCRIBE` for `ltc-comms`, requires `SUBSCRIBED`, and validates framed results. The app installed for Week 7 uses `week7-demo`, so it only works with a server started with that session; a rebuilt app and a server started from this source both use `ltc-comms`. Firmware emits BLE packet magic `LC`, and the laptop accepts only `LC`, so both boards must run current firmware. Exported `Week7*` bridge wrappers and the pinned TLS service name remain until their dependent Unity export and certificate trust are migrated.
+The phone owns its SSH connection to Ultra96 TCP 22 and a nested stream to board loopback `127.0.0.1:9999`. TLS inside that route verifies the CA and `ultra96.week7.internal`. New source sends `SUBSCRIBE` (version 1) for `ltc-comms`, requires `SUBSCRIBED`, and accepts only version-3 `GESTURE_RESULT` frames with exactly 10 keys, a label of 1 to 32 characters from `A–Z a–z 0–9 _ -` and a confidence that is a finite number from 0 to 1; a result that fails validation ends the session and clears the passwords. The app installed for Week 7 uses `week7-demo` and accepts only older results with the four dummy labels and confidence 1, so it cannot read results from a version-3 service (a version-3 result ends its session); rebuild it from this source, which uses `ltc-comms` like the server. Firmware emits version-3 BLE packets (marker `LC`, 38 bytes), and the laptop accepts only those, so both boards must run current firmware. Exported `Week7*` bridge wrappers and the pinned TLS service name remain until their dependent Unity export and certificate trust are migrated.
 
 New app builds write public settings and the verified public CA under `Application Support/Comms` (`comms-ca.pem`). They can read the corresponding files from the old `Application Support/Week7` directory when no new file exists; saving settings writes only to the new directory. Passwords remain in memory only.
 

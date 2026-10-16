@@ -31,6 +31,7 @@ def test_report_prints_matching_packets_without_input_or_phone_observation_files
     output = capsys.readouterr().out
     assert "Matched identity:" in output and "Sensor:" in output and "ACK:" in output
     assert "Phone expected increase: 7" in output
+    assert "built-in dummy model" in output
     assert "camera" in output.lower() and "not checked" in output
     assert "MATCH:" not in output
     assert {path.name for path in folder.iterdir()} == before

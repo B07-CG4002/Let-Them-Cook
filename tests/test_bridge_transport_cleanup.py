@@ -4,7 +4,7 @@ import logging
 
 import pytest
 
-from common.sensor import SensorPacket, dummy_values, encode_packet
+from common.sensor import DUMMY_FIXTURES, SensorPacket, encode_packet
 from laptop.bridge import Bridge, BridgeConfig
 
 
@@ -79,7 +79,7 @@ def test_writer_cancelled_during_fault_cleanup_stops_without_second_cancel():
             raise ConnectionResetError("synthetic failed tunnel")
         bridge._write_frame = failed_write
         bridge.inbox.activate(1)
-        packet = SensorPacket(1, 7, 0, 0, dummy_values(0))
+        packet = SensorPacket(1, 7, 0, 0, DUMMY_FIXTURES[0])
         bridge.inbox.put(1, encode_packet(packet), bridge.clock())
         worker = asyncio.create_task(bridge.writer_loop())
         try:

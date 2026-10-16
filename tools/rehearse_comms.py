@@ -1,6 +1,7 @@
 """Rehearse BLE or synthetic input through local TLS and an independent subscriber.
 
 This intentionally does not establish SSH or claim real Ultra96/Phone evidence.
+The server runs its built-in dummy model, so every accepted sample yields one result.
 """
 import argparse
 import asyncio

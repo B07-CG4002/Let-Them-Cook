@@ -13,15 +13,37 @@ final class DisplayMailbox {
         let snapshot = state.snapshot()
         let live: String
         if let result = snapshot.result {
-            live = "\(result.gesture)  |  \(result.resultID)  |  confidence 1.0"
+            live = "\(result.gesture)  |  \(result.resultID)  |  confidence \(result.confidence)"
         } else { live = "No live result" }
-        let text = "Communications • DUMMY inference\n\(snapshot.status)\n\(live)\nReceived: \(snapshot.receivedCount)"
+        let text = "Communications\n\(snapshot.status)\n\(live)\nReceived: \(snapshot.receivedCount)"
         let bytes = Array(text.utf8)
         guard text != delivered, bytes.count < Int(capacity) else { return 0 }
         for (index, byte) in bytes.enumerated() { buffer[index] = CChar(bitPattern: byte) }
         buffer[bytes.count] = 0
         delivered = text
         return Int32(bytes.count)
+    }
+
+    /// CommsNextResult: the oldest waiting result as compact JSON plus a terminating 0.
+    /// Returns its byte count, 0 when nothing waits, or -(bytes + 1) when the buffer
+    /// is null or smaller than bytes + 1; that result then stays queued and nothing
+    /// is written. Takes only the state lock, never the display lock.
+    func nextResult(into buffer: UnsafeMutablePointer<CChar>?, capacity: Int32, now: Double = ProcessInfo.processInfo.systemUptime) -> Int32 {
+        guard let buffer = buffer else {
+            // No room at all: a waiting result is reported, never taken.
+            if case .needs(let needed) = state.takeNext(capacity: 0, now: now) { return -Int32(needed) }
+            return 0
+        }
+        switch state.takeNext(capacity: Int(capacity), now: now) {
+        case .empty:
+            return 0
+        case .needs(let needed):
+            return -Int32(needed)
+        case .taken(let bytes):
+            for (index, byte) in bytes.enumerated() { buffer[index] = CChar(bitPattern: byte) }
+            buffer[bytes.count] = 0
+            return Int32(bytes.count)
+        }
     }
 
     func resetDelivery() { lock.lock(); delivered = nil; lock.unlock() }
@@ -43,6 +65,12 @@ public func commsStart() {
 @_cdecl("CommsCopyDisplay")
 public func commsCopyDisplay(_ buffer: UnsafeMutablePointer<CChar>?, _ capacity: Int32) -> Int32 {
     sharedMailbox.copy(into: buffer, capacity: capacity)
+}
+
+// int32_t CommsNextResult(char* buffer, int32_t capacity); never blocks, safe every frame.
+@_cdecl("CommsNextResult")
+public func commsNextResult(_ buffer: UnsafeMutablePointer<CChar>?, _ capacity: Int32) -> Int32 {
+    sharedMailbox.nextResult(into: buffer, capacity: capacity)
 }
 
 @_cdecl("CommsStop")

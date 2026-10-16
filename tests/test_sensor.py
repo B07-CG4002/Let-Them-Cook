@@ -13,12 +13,24 @@ ROOT = Path(__file__).resolve().parents[1]
 VECTORS = json.loads((FIXTURES / "comms-golden.json").read_text())["vectors"]
 
 
+def test_version_3_layout_constants_match_the_specification():
+    from common import sensor
+
+    assert sensor.VERSION == 3
+    assert sensor.PACKET_SIZE == 38
+    assert sensor.SENSOR_MTU_FLOOR == 41
+    assert sensor.CHANNELS == ("ax", "ay", "az", "gx", "gy", "gz",
+                               "yaw", "pitch", "roll", "flex1", "flex2")
+    assert sensor.SCALES == (10000, 10000, 10000, 100, 100, 100, 100, 100, 100, 10000, 10000)
+    assert sensor.CHANNEL_COUNT == 11
+
+
 def test_encoder_emits_lc_magic():
     from common.sensor import SensorPacket, encode_packet
 
     raw = encode_packet(SensorPacket(**VECTORS[0]["packet"]))
-    assert len(raw) == 32
-    assert raw[:2] == b"LC"
+    assert len(raw) == 38
+    assert raw[:3] == b"LC\x03"
 
 
 @pytest.mark.parametrize("magic", [b"W7", b"WC", b"lc"])
@@ -36,7 +48,7 @@ def test_fixed_vector_decodes_encodes_and_maps_to_wire_message(vector):
     from common.sensor import SensorPacket, decode_packet, encode_packet
 
     raw = (FIXTURES / vector["binary"]).read_bytes()
-    assert len(raw) == 32
+    assert len(raw) == 38
     assert raw.hex() == vector["hex"]
     expected = SensorPacket(**vector["packet"])
     assert decode_packet(raw) == expected
@@ -44,7 +56,7 @@ def test_fixed_vector_decodes_encodes_and_maps_to_wire_message(vector):
     assert expected.to_message("ltc-comms") == vector["message"]
 
 
-@pytest.mark.parametrize("length", [0, 1, 16, 20, 31, 33, 64])
+@pytest.mark.parametrize("length", [0, 1, 16, 20, 31, 32, 33, 37, 39, 64])
 def test_decoder_rejects_truncation_and_trailing_bytes(length):
     from common.sensor import decode_packet
 
@@ -53,7 +65,9 @@ def test_decoder_rejects_truncation_and_trailing_bytes(length):
         decode_packet((raw + bytes(64))[:length])
 
 
-@pytest.mark.parametrize("offset,value", [(0, 0), (1, 0), (2, 0), (2, 3), (3, 0), (3, 3), (3, 255)])
+@pytest.mark.parametrize("offset,value", [
+    (0, 0), (1, 0), (2, 0), (2, 1), (2, 2), (2, 4), (3, 0), (3, 3), (3, 255),
+])
 def test_decoder_rejects_wrong_magic_version_and_device(offset, value):
     from common.sensor import decode_packet
 
@@ -63,15 +77,26 @@ def test_decoder_rejects_wrong_magic_version_and_device(offset, value):
         decode_packet(raw)
 
 
+def test_decoder_rejects_a_version_2_board_packet():
+    from common.sensor import decode_packet
+
+    # The former 32-byte version 2 layout: header and eight int16 channels.
+    raw = bytes.fromhex("4c430202123456782a00000004030201") + bytes(16)
+    assert len(raw) == 32
+    with pytest.raises(ValueError):
+        decode_packet(raw)
+
+
 @pytest.mark.parametrize("field,value", [
     ("device_id", 0), ("device_id", 3), ("device_id", True),
     ("boot_id", -1), ("boot_id", 2**32), ("boot_id", 1.0),
     ("seq", -1), ("seq", 2**32), ("seq", False),
     ("uptime_ms", -1), ("uptime_ms", 2**32), ("uptime_ms", "1"),
-    ("values", [0] * 7), ("values", [0] * 9),
-    ("values", [-32769] + [0] * 7), ("values", [32768] + [0] * 7),
-    ("values", [False] + [0] * 7), ("values", [0.0] * 8),
-    ("values", "12345678"), ("values", None),
+    ("values", [0] * 8), ("values", [0] * 10), ("values", [0] * 12),
+    ("values", [-32769] + [0] * 10), ("values", [32768] + [0] * 10),
+    ("values", [False] + [0] * 10), ("values", [0.0] * 11),
+    ("values", "12345678901"), ("values", None),
+    ("version", 1), ("version", 2), ("version", 4),
 ])
 def test_packet_rejects_invalid_ranges_and_non_integer_inputs(field, value):
     from common.sensor import SensorPacket, encode_packet
@@ -93,25 +118,20 @@ def test_packet_values_do_not_change_when_input_list_is_mutated():
     assert isinstance(packet.values, tuple)
 
 
-@pytest.mark.parametrize("seq,expected", [
-    (0, (-1000, -990, -980, -970, -960, -950, -940, -930)),
-    (42, (-958, -948, -938, -928, -918, -908, -898, -888)),
-    (1999, (999, 1009, 1019, 1029, 1039, 1049, 1059, 1069)),
-    (2000, (-1000, -990, -980, -970, -960, -950, -940, -930)),
-    (4294967295, (295, 305, 315, 325, 335, 345, 355, 365)),
-])
-def test_dummy_values_match_independent_literals_at_wrap_boundaries(seq, expected):
-    from common.sensor import dummy_values
+def test_physical_values_divide_each_channel_by_its_scale():
+    from common.sensor import physical_values
 
-    assert dummy_values(seq) == expected
+    assert physical_values(VECTORS[0]["packet"]["values"]) == (
+        0.12, -0.03, -0.85, 40.0, -20.0, 15.0, 12.5, -30.0, 6.0, 0.6, 0.55)
+    assert physical_values(VECTORS[1]["packet"]["values"])[:4] == (-3.2768, 3.2767, -0.0001, 0.0)
 
 
-@pytest.mark.parametrize("seq", [-1, 2**32, True, 1.0, "1"])
-def test_dummy_values_reject_invalid_sequence(seq):
-    from common.sensor import dummy_values
+@pytest.mark.parametrize("values", [[0] * 10, [0] * 12, [32768] + [0] * 10, [0.5] + [0] * 10, None])
+def test_physical_values_reject_anything_but_eleven_int16(values):
+    from common.sensor import physical_values
 
     with pytest.raises(ValueError):
-        dummy_values(seq)
+        physical_values(values)
 
 
 @pytest.mark.parametrize("session", ["", None, 1, True])

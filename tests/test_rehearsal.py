@@ -12,6 +12,9 @@ class RehearsalTests(unittest.TestCase):
             summary = asyncio.run(rehearse(folder, duration=5, target=10))
         self.assertTrue(summary["passed"], summary)
         self.assertEqual(summary["results"], summary["bridge"]["acked"])
+        # One result per accepted sample comes from the server's built-in dummy model.
+        self.assertEqual(summary["server"]["model_results"], summary["results"])
+        self.assertEqual(summary["server"]["model_errors"], 0)
         self.assertGreaterEqual(summary["results"], 10)
         self.assertEqual(summary["source"], "synthetic")
         self.assertEqual(summary["bridge"]["transport_connections"], 1)

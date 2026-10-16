@@ -9,7 +9,7 @@ import pytest
 
 from common.sensor import SensorPacket, encode_packet
 from laptop.bridge import Bridge, BridgeConfig, SENSOR_UUID, SERVICE_UUID
-from laptop.source_audit import SOURCE_STATS_UUID
+from laptop.source_audit import SOURCE_STATS_MAGIC, SOURCE_STATS_UUID
 
 
 async def capture_tail(mode="delayed"):
@@ -67,11 +67,16 @@ async def capture_tail(mode="delayed"):
                 boot = 8 if mode == "wrong_boot" else 7
                 if "remote_none" in order:
                     assert kwargs.get("use_cached") is False
-            return struct.pack("<4sB3xIIII", b"LCS1", 1, boot, seq, seq, 0)
+            # A gated board counts idle ticks while connected; none after the stop.
+            gated = mode in ("gated", "idle_drift")
+            idle = (5 if self.reads == 1 else 9 + (mode == "idle_drift" and self.reads >= 3)
+                    ) if gated else 0
+            return struct.pack("<4sBB2xIIIIIII", SOURCE_STATS_MAGIC, 1, int(gated), boot, seq, seq,
+                               0, idle, 0, 0)
 
         async def start_notify(self, uuid, callback):
             self.callback = callback
-            callback(None, encode_packet(SensorPacket(1, 7, 0, 0, (0,) * 8, version=2)))
+            callback(None, encode_packet(SensorPacket(1, 7, 0, 0, (0,) * 11)))
 
         async def stop_notify(self, uuid):
             assert not self.remote_pending, "a pending native CCCD stop must not be retried"
@@ -102,7 +107,7 @@ async def capture_tail(mode="delayed"):
             await asyncio.sleep(0 if mode == "budget" else 0.05)
             if client.callback is not None and mode != "lost":
                 order.append("tail_delivered")
-                client.callback(None, encode_packet(SensorPacket(1, 7, 1, 10, (0,) * 8, version=2)))
+                client.callback(None, encode_packet(SensorPacket(1, 7, 1, 10, (0,) * 11)))
         client.tail_task = asyncio.create_task(delayed_tail())
         return True
 
@@ -146,7 +151,22 @@ def test_shutdown_delivers_late_callback_before_handler_removal_and_final_source
     asyncio.run(run())
 
 
-@pytest.mark.parametrize("mode", ["lost", "rejected", "wrong_boot", "drift"])
+def test_gated_board_reconciles_with_idle_ticks_counted_before_the_stop():
+    async def run():
+        bridge, events, order = await capture_tail("gated")
+        source = bridge.summary()["source"]
+        assert source["clean"] is True, source
+        assert source["gated"] is True
+        assert source["generated"] == source["received"] == source["acked"] == 2
+        assert source["source_idle"] == 4
+        assert bridge.metrics.source_stats_errors == 0
+        assert any(kind == "source_final_verified" for kind, _ in events)
+    asyncio.run(run())
+
+
+# idle_drift: the firmware commits a tick only while notifications are on, so
+# even an idle tick counted after the quiesce read is a source change.
+@pytest.mark.parametrize("mode", ["lost", "rejected", "wrong_boot", "drift", "idle_drift"])
 def test_shutdown_cannot_hide_missing_tail_rejected_cccd_or_source_boundary_change(mode):
     async def run():
         bridge, events, order = await capture_tail(mode)

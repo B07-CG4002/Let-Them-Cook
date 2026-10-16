@@ -62,8 +62,8 @@ def packet_lines():
     rows = []
     for device in (1, 2):
         identity = dict(device_id=device, boot_id=7, seq=0)
-        rows.append(dict(identity, type="sensor", direction="ESP->laptop", version=2,
-                         uptime_ms=100, values=list(range(8)), validation="decoded"))
+        rows.append(dict(identity, type="sensor", direction="ESP->laptop", version=3,
+                         uptime_ms=100, values=list(range(11)), validation="decoded"))
         rows.append(dict(identity, type="sensor_ack", direction="Ultra96->laptop",
                          validation="accepted"))
     return "".join(json.dumps(row) + "\n" for row in rows)
@@ -262,6 +262,21 @@ def test_report_reads_saved_evidence_without_starting_capture(
     path = capture if path_kind == "directory" else capture / "report.json"
     assert demo.main(["report", str(path)]) == 0
     output = capsys.readouterr().out
+    assert "CAPTURE PASSED" in output
+    assert "Phone expected increase: 1240" in output
+
+
+def test_report_table_shows_gating_and_idle_ticks_without_changing_the_verdict(
+        tmp_path, capsys):
+    payload = physical_report()
+    payload["devices"]["1"]["source"].update(gated=True, source_idle=275)
+    payload["devices"]["2"]["source"].update(gated=False, source_idle=0)
+    capture = saved_capture(tmp_path, payload=payload)
+    assert demo.main(["report", str(capture)]) == 0
+    output = capsys.readouterr().out
+    assert "MissingACK  Gated  Idle" in output
+    rows = [line.split() for line in output.splitlines() if line.split()[:1] in (["1"], ["2"])]
+    assert rows[0][-2:] == ["yes", "275"] and rows[1][-2:] == ["no", "0"]
     assert "CAPTURE PASSED" in output
     assert "Phone expected increase: 1240" in output
 

@@ -25,42 +25,71 @@ public static class CoreSelfTest
         try { action(); } catch (InvalidDataException) { count++; return; }
         throw new Exception("Accepted invalid input: " + message);
     }
-    private const string Result = "{\"v\":1,\"type\":\"GESTURE_RESULT\",\"session_id\":\"ltc-comms\",\"device_id\":1,\"boot_id\":4294967295,\"seq\":3,\"result_id\":\"1:4294967295:3\",\"gesture\":\"POINT\",\"confidence\":1.0}";
+    // A version-3 model result: request_id null, a model label and a real confidence.
+    private const string Result = "{\"v\":3,\"type\":\"GESTURE_RESULT\",\"session_id\":\"ltc-comms\",\"device_id\":1,\"boot_id\":4294967295,\"seq\":3,\"request_id\":null,\"result_id\":\"1:4294967295:3\",\"gesture\":\"PICKUPHOLD\",\"confidence\":0.73}";
+    // Replace, but fail loudly when the fixture lacks the text, so no negative case
+    // silently equals the valid fixture.
+    private static string Swap(string source, string from, string to)
+    {
+        if (source.IndexOf(from, StringComparison.Ordinal) < 0) throw new Exception("Fixture lacks " + from);
+        return source.Replace(from, to);
+    }
     public static async Task<string> Run()
     {
         var result = PhoneProtocol.ParseResult(Result, "ltc-comms");
-        Check(result.Sequence == 3 && result.Gesture == "POINT", "result fields");
+        Check(result.Sequence == 3 && result.Gesture == "PICKUPHOLD" && result.Confidence == 0.73, "result fields");
+        Check(result.DeviceId == 1 && result.RequestId == null && result.ResultId == "1:4294967295:3" && result.Json == Result, "model result identity");
         Check(result.BootId == UInt32.MaxValue, "uint32 boundary");
         PhoneProtocol.ValidateSubscribed("{\"v\":1,\"type\":\"SUBSCRIBED\",\"session_id\":\"ltc-comms\"}", "ltc-comms");
         Check(PhoneProtocol.Subscribe("ltc-comms") == "{\"v\":1,\"type\":\"SUBSCRIBE\",\"session_id\":\"ltc-comms\"}", "subscribe contract");
         Check(PhoneProtocol.Subscribe(new string('a', 128)).Contains(new string('a', 128)), "128-character session matches server");
-        string randomResult = Result.Replace("\"v\":1", "\"v\":2,\"request_id\":null").Replace("\"POINT\"", "\"REST\"");
-        Check(PhoneProtocol.ParseResult(randomResult, "ltc-comms").Gesture == "REST", "v2 event is independent of sequence");
-        string commandResult = randomResult.Replace("\"request_id\":null", "\"request_id\":3").Replace("\"1:4294967295:3\"", "\"cmd:1:4294967295:3\"");
-        Check(PhoneProtocol.ParseResult(commandResult, "ltc-comms").ResultId == "cmd:1:4294967295:3", "command trace namespace");
-        foreach (string badRequest in new[] { "true", "-1", "3.0", "4294967296", "2", "\"3\"" })
-            Reject(() => PhoneProtocol.ParseResult(commandResult.Replace("\"request_id\":3", "\"request_id\":" + badRequest), "ltc-comms"), "invalid command request identity");
-        Reject(() => PhoneProtocol.ParseResult(randomResult.Replace(",\"request_id\":null", ""), "ltc-comms"), "missing v2 request field");
-        Reject(() => PhoneProtocol.ParseResult(randomResult.Replace("\"REST\"", "\"UNKNOWN\""), "ltc-comms"), "unknown random gesture");
+        foreach (string version in new[] { "2", "3" })
+            Reject(() => PhoneProtocol.ValidateSubscribed("{\"v\":" + version + ",\"type\":\"SUBSCRIBED\",\"session_id\":\"ltc-comms\"}", "ltc-comms"), "subscription envelope stays at version 1");
+        foreach (string gesture in new[] { "PICKUPHOLD", "PLACEDOWN", "CHOP", "WASH", "THROW", "FIREEXT", "REST", "POINT", "a", new string('Z', 32), "left_chop-2" })
+            Check(PhoneProtocol.ParseResult(Swap(Result, "\"PICKUPHOLD\"", "\"" + gesture + "\""), "ltc-comms").Gesture == gesture, "well-formed label " + gesture);
+        string[] confidences = { "0", "1", "0.0", "1.0", "0.5", "7.3e-1", "1e-05", "1E-2", "0.999999" };
+        double[] expected = { 0.0, 1.0, 0.0, 1.0, 0.5, 0.73, 1e-05, 0.01, 0.999999 };
+        for (int i = 0; i < confidences.Length; i++)
+            Check(PhoneProtocol.ParseResult(Swap(Result, "\"confidence\":0.73", "\"confidence\":" + confidences[i]), "ltc-comms").Confidence == expected[i], "confidence " + confidences[i]);
+        string commandResult = Swap(Swap(Result, "\"request_id\":null", "\"request_id\":3"), "\"1:4294967295:3\"", "\"cmd:1:4294967295:3\"");
+        var command = PhoneProtocol.ParseResult(commandResult, "ltc-comms");
+        Check(command.ResultId == "cmd:1:4294967295:3" && command.RequestId == 3, "command trace namespace");
+        foreach (string badRequest in new[] { "true", "0", "-1", "3.0", "4294967296", "2", "\"3\"" })
+            Reject(() => PhoneProtocol.ParseResult(Swap(commandResult, "\"request_id\":3", "\"request_id\":" + badRequest), "ltc-comms"), "invalid command request identity " + badRequest);
+        Reject(() => PhoneProtocol.ParseResult(Swap(commandResult, "\"cmd:1:4294967295:3\"", "\"1:4294967295:3\""), "ltc-comms"), "command result without cmd: prefix");
+        Reject(() => PhoneProtocol.ParseResult(Swap(Result, "\"1:4294967295:3\"", "\"cmd:1:4294967295:3\""), "ltc-comms"), "model result with cmd: prefix");
+        Reject(() => PhoneProtocol.ParseResult(Swap(Result, ",\"request_id\":null", ""), "ltc-comms"), "missing request_id");
+        // The exact version-1 and version-2 dummy results of the earlier protocol.
+        const string OldResult = "{\"v\":1,\"type\":\"GESTURE_RESULT\",\"session_id\":\"ltc-comms\",\"device_id\":1,\"boot_id\":4294967295,\"seq\":3,\"result_id\":\"1:4294967295:3\",\"gesture\":\"POINT\",\"confidence\":1.0}";
+        Reject(() => PhoneProtocol.ParseResult(OldResult, "ltc-comms"), "version-1 result");
+        Reject(() => PhoneProtocol.ParseResult(Swap(OldResult, "\"v\":1", "\"v\":2,\"request_id\":null"), "ltc-comms"), "version-2 result");
+        foreach (string version in new[] { "0", "1", "2", "4" })
+            Reject(() => PhoneProtocol.ParseResult(Swap(Result, "\"v\":3", "\"v\":" + version), "ltc-comms"), "result version " + version);
+        // Escaped newline and tab decode to real control characters; \z must not let them through.
+        foreach (string gesture in new[] { "", new string('A', 33), "PICK UP", "PICK.UP", "PICKUP\\n", "\\nPICKUP", "CHOP\\t", "caf\\u00e9", "\\uff21", "\\u0661" })
+            Reject(() => PhoneProtocol.ParseResult(Swap(Result, "\"PICKUPHOLD\"", "\"" + gesture + "\""), "ltc-comms"), "malformed label " + gesture);
+        foreach (string gesture in new[] { "5", "null", "true" })
+            Reject(() => PhoneProtocol.ParseResult(Swap(Result, "\"PICKUPHOLD\"", gesture), "ltc-comms"), "non-string label " + gesture);
+        foreach (string confidence in new[] { "-0.01", "1.01", "1.5", "-1", "2", "1e999", "-1e999", "NaN", "Infinity", "true", "false", "null", "\"0.5\"", "1000000000000" })
+            Reject(() => PhoneProtocol.ParseResult(Swap(Result, "\"confidence\":0.73", "\"confidence\":" + confidence), "ltc-comms"), "confidence " + confidence);
         string[] bad = {
-            Result.Replace("\"v\":1", "\"v\":1,\"v\":1"),
-            Result.Replace("\"v\":1", "\"v\":true"),
-            Result.Replace("\"v\":1", "\"v\":1.0"),
-            Result.Replace("\"v\":1", "\"v\":01"),
-            Result.Replace("\"v\":1", "\"v\":NaN"),
-            Result.Replace("\"v\":1", "/*comment*/\"v\":1"),
+            Swap(Result, "\"v\":3", "\"v\":3,\"v\":3"),
+            Swap(Result, "\"v\":3", "\"v\":true"),
+            Swap(Result, "\"v\":3", "\"v\":3.0"),
+            Swap(Result, "\"v\":3", "\"v\":03"),
+            Swap(Result, "\"v\":3", "\"v\":NaN"),
+            Swap(Result, "\"v\":3", "/*comment*/\"v\":3"),
             Result.Substring(0, Result.Length - 1) + ",}",
             Result + " {}",
-            Result.Replace("\"v\":1", "'v':1"),
-            Result.Replace("4294967295,", "4294967296,"),
-            Result.Replace("\"confidence\":1.0", "\"confidence\":1e999"),
-            Result.Replace("\"confidence\":1.0", "\"confidence\":0.5"),
-            Result.Replace("\"POINT\"", "\"FIST\""),
-            Result.Replace("\"1:4294967295:3\"", "\"1:2:3\""),
-            Result.Replace("ltc-comms", "other-session"),
-            Result.Replace("\"v\":1", "\"extra\":1,\"v\":1"),
-            Result.Replace("\"v\":1", "\"v\":[]"),
-            Result.Replace("\"POINT\"", "\"PO\nINT\"")
+            Swap(Result, "\"v\":3", "'v':3"),
+            Swap(Result, "4294967295,", "4294967296,"),
+            Swap(Result, "\"device_id\":1", "\"device_id\":3"),
+            Swap(Result, "\"device_id\":1", "\"device_id\":0"),
+            Swap(Result, "\"1:4294967295:3\"", "\"1:2:3\""),
+            Swap(Result, "ltc-comms", "other-session"),
+            Swap(Result, "\"v\":3", "\"extra\":1,\"v\":3"),
+            Swap(Result, "\"v\":3", "\"v\":[]"),
+            Swap(Result, "\"PICKUPHOLD\"", "\"PICKUP\nHOLD\"")
         };
         foreach (string item in bad) Reject(() => PhoneProtocol.ParseResult(item, "ltc-comms"), item);
         var frame = PhoneFrames.Encode(Result);
@@ -195,7 +224,8 @@ public static class CoreSelfTest
                         await tls.AuthenticateAsServerAsync(serverCertificate, false, SslProtocols.Tls12, false);
                         string subscription = await PhoneFrames.ReadAsync(tls, TimeSpan.FromSeconds(2), timeout.Token);
                         if (subscription != PhoneProtocol.Subscribe("ltc-comms")) throw new Exception("wrong actual subscription");
-                        await PhoneFrames.WriteAsync(tls, attempt == 0 ? "{\"v\":2,\"type\":\"SUBSCRIBED\",\"session_id\":\"ltc-comms\"}" : "{\"v\":1,\"type\":\"SUBSCRIBED\",\"session_id\":\"ltc-comms\"}", TimeSpan.FromSeconds(2), timeout.Token);
+                        // SUBSCRIBED stays at version 1; a version-3 envelope forces one reconnect.
+                        await PhoneFrames.WriteAsync(tls, attempt == 0 ? "{\"v\":3,\"type\":\"SUBSCRIBED\",\"session_id\":\"ltc-comms\"}" : "{\"v\":1,\"type\":\"SUBSCRIBED\",\"session_id\":\"ltc-comms\"}", TimeSpan.FromSeconds(2), timeout.Token);
                         if (attempt == 1)
                         {
                             await PhoneFrames.WriteAsync(tls, Result, TimeSpan.FromSeconds(2), timeout.Token);
@@ -214,7 +244,7 @@ public static class CoreSelfTest
                     while (!timeout.IsCancellationRequested && !receiving.IsCompleted)
                     {
                         GestureResult result;
-                        if (queue.TryDequeue(out result)) { delivered = result.Gesture == "POINT"; break; }
+                        if (queue.TryDequeue(out result)) { delivered = result.Gesture == "PICKUPHOLD" && result.Confidence == 0.73; break; }
                         await Task.Delay(10);
                     }
                 }

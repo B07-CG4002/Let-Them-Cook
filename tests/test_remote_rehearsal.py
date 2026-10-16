@@ -31,6 +31,28 @@ def test_correlation_requires_exact_ids_and_bounds_the_ledger():
     assert ledger.summary()["duplicate_acks"] == 1
 
 
+def test_synthetic_source_sends_version_3_fixture_packets():
+    from common.sensor import DUMMY_FIXTURES, VERSION, decode_packet
+    from laptop.bridge import BridgeConfig
+    from tools.rehearse_remote_comms import Correlation, ObservedBridge
+    async def check():
+        bridge = ObservedBridge(BridgeConfig(ca_file="unused", seed=5), Correlation(),
+                                lambda *args, **fields: None)
+        source = asyncio.create_task(bridge.dummy_loop(rate=200.0))
+        while bridge.inbox.size < 3:
+            await asyncio.sleep(0.005)
+        source.cancel()
+        await asyncio.gather(source, return_exceptions=True)
+        packets = [decode_packet((await bridge.inbox.get()).payload) for _ in range(3)]
+        assert [packet.seq for packet in packets] == [0, 1, 2]
+        for packet in packets:
+            assert packet.version == VERSION and packet.device_id == 1
+            assert packet.boot_id == bridge.synthetic_boot_id
+            assert packet.uptime_ms == packet.seq * 100
+            assert packet.values in DUMMY_FIXTURES
+    asyncio.run(check())
+
+
 def test_idle_wait_is_separate_from_partial_frame_deadline():
     from tools.rehearse_remote_comms import read_live_frame
     from common.wire import encode_frame
@@ -89,6 +111,8 @@ def test_external_tls_100_exact_pairs_and_second_run_has_new_boot(pki):
             assert second["passed"], second
             assert first["synthetic_boot_id"] != second["synthetic_boot_id"]
             assert server.metrics["duplicates"] == 0
+            # Exact pairing relies on the built-in dummy model: one result per accepted sample.
+            assert server.metrics["model_results"] == server.metrics["accepted"]
             assert len([item for item in events if item["event"] == "ack"]) == 100
             assert len([item for item in events if item["event"] == "result"]) == 100
             sustained = await rehearse_remote(str(pki[0] / "ca-cert.pem"), duration=1,
@@ -141,12 +165,12 @@ def test_ready_subscription_survives_slow_input_setup(pki, monkeypatch):
 
 @pytest.mark.parametrize("reboot", [False, True])
 def test_silence_or_orderly_reboot_cannot_be_a_clean_pass(pki, monkeypatch, reboot):
-    from common.sensor import SensorPacket, dummy_values, encode_packet
+    from common.sensor import DUMMY_FIXTURES, SensorPacket, encode_packet
     from tools.rehearse_remote_comms import ObservedBridge, rehearse_remote
     async def source(self):
         self.inbox.activate(1)
         for boot in ([123, 124] if reboot else [123]):
-            packet = SensorPacket(1, boot, 0, 0, dummy_values(0))
+            packet = SensorPacket(1, boot, 0, 0, DUMMY_FIXTURES[0])
             self.inbox.put(1, encode_packet(packet), self.clock())
             await asyncio.sleep(0.1)
         await asyncio.Event().wait()
@@ -195,12 +219,13 @@ def test_gateway_disconnect_resubscribes_and_reports_fault_without_clean_pass(pk
 
 
 def test_initial_burst_then_long_silence_fails_even_with_enough_exact_pairs(pki, monkeypatch):
-    from common.sensor import SensorPacket, dummy_values, encode_packet
+    from common.sensor import DUMMY_FIXTURES, SensorPacket, encode_packet
     from tools.rehearse_remote_comms import ObservedBridge, rehearse_remote
     async def burst(self):
         self.inbox.activate(1)
         for seq in range(60):
-            packet = SensorPacket(1, self.synthetic_boot_id, seq, seq * 100, dummy_values(seq))
+            packet = SensorPacket(1, self.synthetic_boot_id, seq, seq * 100,
+                                  DUMMY_FIXTURES[seq % len(DUMMY_FIXTURES)])
             self.inbox.put(1, encode_packet(packet), self.clock())
         await asyncio.Event().wait()
     monkeypatch.setattr(ObservedBridge, "dummy_loop", burst)

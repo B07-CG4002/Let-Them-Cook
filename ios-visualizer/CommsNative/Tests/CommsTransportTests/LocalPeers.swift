@@ -153,7 +153,7 @@ final class FixtureConnections {
 
 final class LocalPeers {
     enum Behavior { case good, idle, partialPrefix, partialBody, resultBeforeAck, malformedResult, closeFirst }
-    static let result = #"{"v":1,"type":"GESTURE_RESULT","session_id":"ltc-comms","device_id":1,"boot_id":7,"seq":42,"result_id":"1:7:42","gesture":"OPEN","confidence":1.0}"#
+    static let result = #"{"v":3,"type":"GESTURE_RESULT","session_id":"ltc-comms","device_id":1,"boot_id":7,"seq":42,"request_id":null,"result_id":"1:7:42","gesture":"WASH","confidence":0.93}"#
     static let ack = #"{"v":1,"type":"SUBSCRIBED","session_id":"ltc-comms"}"#
     let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
     let boardKey = NIOSSHPrivateKey(ed25519Key: Curve25519.Signing.PrivateKey())
@@ -274,7 +274,7 @@ final class FixtureProtocol: ChannelInboundHandler {
             var buffer = context.channel.allocator.buffer(capacity: 1); buffer.writeInteger(UInt8(0)); context.writeAndFlush(NIOAny(buffer), promise: nil)
         case .partialBody:
             var buffer = context.channel.allocator.buffer(capacity: 6); buffer.writeInteger(UInt32(50)); buffer.writeString("{\""); context.writeAndFlush(NIOAny(buffer), promise: nil)
-        case .malformedResult: send(#"{"v":1}"#, context)
+        case .malformedResult: send(#"{"v":3}"#, context)
         case .resultBeforeAck: break
         }
     }

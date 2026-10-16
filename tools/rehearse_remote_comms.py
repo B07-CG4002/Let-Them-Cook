@@ -3,6 +3,8 @@
 Starts no server or SSH process. Default input is synthetic; --ble uses the
 existing protected BLE bridge. Remote provenance is an operator assertion,
 never something a successful connection to a local port establishes.
+The exact one-result-per-accepted-sample correlation holds only while the
+Ultra96 service runs its built-in dummy model.
 """
 import argparse
 import asyncio
@@ -13,7 +15,7 @@ import ssl
 import time
 from types import SimpleNamespace
 
-from common.sensor import SensorPacket, dummy_values, encode_packet
+from common.sensor import SensorPacket, choose_fixture, encode_packet
 from common.tls import TLS_SERVER_NAME, client_context
 from common.wire import STREAM_LIMIT, ProtocolError, read_frame, write_frame
 from laptop.bridge import Bridge, BridgeConfig, StreamTracker
@@ -120,18 +122,19 @@ class ObservedBridge(Bridge):
         self.ledger, self.emit = ledger, emit
         self.synthetic_boot_id = secrets.randbits(32)
 
-    def _check_ack(self, ack, packet):
-        super()._check_ack(ack, packet)
+    def _check_ack(self, ack, packet, request_id=None):
+        super()._check_ack(ack, packet, request_id=request_id)
         trace = "{}:{}:{}".format(packet.device_id, packet.boot_id, packet.seq)
         self.ledger.ack(trace, ack["status"])
         self.emit("ack", result_id=trace, status=ack["status"])
 
     async def dummy_loop(self, rate=10.0):
+        # Version-3 packets carrying the shared dummy fixture rows, like the boards.
         self.inbox.activate(1)
         seq = 0
         while True:
             packet = SensorPacket(1, self.synthetic_boot_id, seq,
-                                  (seq * 100) & 0xffffffff, dummy_values(seq))
+                                  (seq * 100) & 0xffffffff, choose_fixture(self.rng))
             self.inbox.put(1, encode_packet(packet), self.clock())
             seq = (seq + 1) & 0xffffffff
             await asyncio.sleep(1.0 / rate)

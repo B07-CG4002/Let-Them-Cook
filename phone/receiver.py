@@ -9,12 +9,20 @@ from collections import OrderedDict
 import json
 import math
 from pathlib import Path
+import re
 import ssl
 import sys
 
 MAX_FRAME_BYTES = 16384
 TLS_IDENTITY = "ultra96.week7.internal"
-GESTURES = ("REST", "FIST", "OPEN", "POINT")
+# GESTURE_RESULT carries protocol version 3; the subscription envelopes stay at 1.
+RESULT_VERSION = 3
+SUBSCRIPTION_VERSION = 1
+RESULT_FIELDS = frozenset({"v", "type", "session_id", "device_id", "boot_id", "seq", "request_id",
+                           "result_id", "gesture", "confidence"})
+# Any model label of 1..32 characters from A-Z a-z 0-9 _ - (the same rule as the
+# Ultra96 and the iPhone). Used with fullmatch: '$' would also match before "\n".
+GESTURE_PATTERN = re.compile(r"[A-Za-z0-9_-]{1,32}")
 
 
 class ProtocolError(ValueError):
@@ -88,9 +96,9 @@ async def read_frame(reader, timeout=5.0, first_byte_timeout=None, allow_idle=Fa
     return await asyncio.wait_for(read(), timeout)
 
 
-def _header(message, fields, kind, session, versions=(1,)):
+def _header(message, fields, kind, session, version):
     if (not isinstance(message, dict) or set(message) != fields or
-            type(message.get("v")) is not int or message["v"] not in versions or
+            type(message.get("v")) is not int or message["v"] != version or
             message.get("type") != kind or message.get("session_id") != session):
         raise ProtocolError("unexpected schema or session")
     validate_session(message["session_id"])
@@ -104,30 +112,40 @@ def validate_session(session):
 
 
 def validate_subscribed(message, session):
-    _header(message, {"v", "type", "session_id"}, "SUBSCRIBED", session)
+    _header(message, {"v", "type", "session_id"}, "SUBSCRIBED", session, SUBSCRIPTION_VERSION)
+
+
+def valid_gesture(value):
+    return isinstance(value, str) and GESTURE_PATTERN.fullmatch(value) is not None
+
+
+def valid_confidence(value):
+    # A JSON number, never a boolean: type() excludes bool. Integers 0 and 1 are allowed.
+    if type(value) is int:
+        return 0 <= value <= 1
+    return type(value) is float and math.isfinite(value) and 0.0 <= value <= 1.0
 
 
 def validate_result(message, session):
-    fields = {"v", "type", "session_id", "device_id", "boot_id", "seq", "result_id", "gesture", "confidence"}
-    version = message.get("v") if isinstance(message, dict) else None
-    if version == 2:
-        fields.add("request_id")
-    _header(message, fields, "GESTURE_RESULT", session, versions=(1, 2))
+    _header(message, RESULT_FIELDS, "GESTURE_RESULT", session, RESULT_VERSION)
     for field in ("device_id", "boot_id", "seq"):
         if type(message[field]) is not int or not 0 <= message[field] < 2**32:
             raise ProtocolError("invalid uint32 " + field)
+    if message["device_id"] not in (1, 2):
+        raise ProtocolError("invalid device_id")
+    # request_id is null for model results; a command echo carries request_id == seq.
     expected_id = "{}:{}:{}".format(message["device_id"], message["boot_id"], message["seq"])
-    if version == 2 and message["request_id"] is not None:
+    if message["request_id"] is not None:
         request = message["request_id"]
         if type(request) is not int or not 1 <= request < 2**32 or request != message["seq"]:
             raise ProtocolError("invalid request correlation")
         expected_id = "cmd:" + expected_id
-    valid_gesture = (message["gesture"] == GESTURES[message["seq"] % 4]
-                     if version == 1 else message["gesture"] in GESTURES)
-    if (message["device_id"] not in (1, 2) or message["result_id"] != expected_id or
-            not valid_gesture or
-            type(message["confidence"]) not in (int, float) or message["confidence"] != 1.0):
-        raise ProtocolError("invalid dummy result")
+    if message["result_id"] != expected_id:
+        raise ProtocolError("result_id does not match the result identity")
+    if not valid_gesture(message["gesture"]):
+        raise ProtocolError("gesture must be 1..32 characters from A-Z a-z 0-9 _ -")
+    if not valid_confidence(message["confidence"]):
+        raise ProtocolError("confidence must be a finite number in [0, 1]")
     return message
 
 
@@ -154,7 +172,7 @@ async def receive(args, statistics=None):
             reader, writer = await asyncio.wait_for(asyncio.open_connection(
                 "127.0.0.1", args.port, ssl=context, server_hostname=TLS_IDENTITY,
                 ssl_handshake_timeout=5.0, limit=MAX_FRAME_BYTES + 4), 5.0)
-            writer.write(encode_frame(dict(v=1, type="SUBSCRIBE", session_id=args.session)))
+            writer.write(encode_frame(dict(v=SUBSCRIPTION_VERSION, type="SUBSCRIBE", session_id=args.session)))
             await asyncio.wait_for(writer.drain(), 5.0)
             validate_subscribed(await read_frame(reader), args.session)
             print("subscribed session=" + args.session, file=sys.stderr, flush=True)

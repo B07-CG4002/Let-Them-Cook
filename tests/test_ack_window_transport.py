@@ -7,7 +7,7 @@ from contextlib import suppress
 
 import pytest
 
-from common.sensor import SensorPacket, dummy_values, encode_packet
+from common.sensor import DUMMY_FIXTURES, SensorPacket, encode_packet
 from common.tls import TLS_SERVER_NAME, client_context, server_context
 from common.wire import read_frame, write_frame
 from laptop.bridge import Bridge, BridgeConfig
@@ -200,7 +200,8 @@ def test_real_tls_server_processes_window_ahead_of_delayed_acks_and_results_exac
                     await asyncio.sleep(remaining)
                 for device, bridge in bridges.items():
                     packet = SensorPacket(
-                        device, 1000 + device, seq, seq * 100, dummy_values(seq)
+                        device, 1000 + device, seq, seq * 100,
+                        DUMMY_FIXTURES[seq % len(DUMMY_FIXTURES)],
                     )
                     assert bridge.enqueue(1, encode_packet(packet))
                 maximum_server_lead = max(
@@ -251,6 +252,8 @@ def test_real_tls_server_processes_window_ahead_of_delayed_acks_and_results_exac
     )
     assert lead >= 4
     assert metrics["accepted"] == 12
+    # The built-in dummy model answers each accepted sample exactly once.
+    assert metrics["model_results"] == 12
     assert metrics["duplicates"] == metrics["rejected"] == 0
     for device in (1, 2):
         summary = summaries[device]

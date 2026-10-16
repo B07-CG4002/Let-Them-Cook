@@ -57,6 +57,9 @@ class LinuxSignalTests(unittest.TestCase):
                 with selectors.DefaultSelector() as ready:
                     ready.register(process.stdout, selectors.EVENT_READ)
                     self.assertTrue(ready.select(timeout=5), "server did not report startup")
+                ready_line = json.loads(process.stdout.readline())
+                self.assertEqual(ready_line["event"], "model_ready")
+                self.assertEqual(ready_line["model"], "dummy")
                 listening = json.loads(process.stdout.readline())
                 self.assertEqual(listening["event"], "listening")
                 ports = listening["ingest_port"], listening["gateway_port"]
@@ -67,9 +70,9 @@ class LinuxSignalTests(unittest.TestCase):
                 ingest, viewer = connections
                 viewer.sendall(encode_frame(dict(v=1, type="SUBSCRIBE", session_id="ltc-comms")))
                 self.assertEqual(read_message(viewer)["type"], "SUBSCRIBED")
-                ingest.sendall(encode_frame(dict(v=1, type="SENSOR_BATCH", session_id="ltc-comms",
+                ingest.sendall(encode_frame(dict(v=3, type="SENSOR_BATCH", session_id="ltc-comms",
                     device_id=1, boot_id=42, seq=0, uptime_ms=0,
-                    values=[-1000 + 10 * index for index in range(8)])))
+                    values=[-1000 + 10 * index for index in range(11)], request_id=None)))
                 self.assertEqual(read_message(ingest)["status"], "accepted")
                 self.assertEqual(read_message(viewer)["result_id"], "1:42:0")
                 # Include an owned connection stalled before its TLS handshake.
@@ -83,6 +86,7 @@ class LinuxSignalTests(unittest.TestCase):
                 self.assertEqual(len(stopped), 1, (output, errors))
                 self.assertEqual(stopped[0]["event"], "stopped")
                 self.assertEqual(stopped[0]["metrics"]["accepted"], 1)
+                self.assertEqual(stopped[0]["metrics"]["model_results"], 1)
                 self.assertEqual(stopped[0]["metrics"]["subscribers"], 1)
                 self.assertNotIn("Traceback", errors)
                 for connection in connections:
@@ -119,6 +123,8 @@ class SignalFallbackTests(unittest.IsolatedAsyncioTestCase):
             gateway_port = 9999
             metrics = {}
             closed = False
+            model = SimpleNamespace(name="dummy")
+            model_start_seconds = 0.0
 
             async def start(self):
                 pass
@@ -145,5 +151,6 @@ class SignalFallbackTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(asyncio.CancelledError):
                 await asyncio.wait_for(task, 1)
         self.assertTrue(service.closed)
-        self.assertEqual(json.loads(output.getvalue().splitlines()[-1])["event"], "stopped")
+        events = [json.loads(line)["event"] for line in output.getvalue().splitlines()]
+        self.assertEqual(events, ["model_ready", "listening", "stopped"])
         remove.assert_not_called()

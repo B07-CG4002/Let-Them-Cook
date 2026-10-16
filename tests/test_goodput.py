@@ -1,10 +1,10 @@
 import pytest
 
-from common.sensor import SensorPacket, dummy_values
+from common.sensor import DUMMY_FIXTURES, PACKET_SIZE, SensorPacket, encode_packet
 
 
 def packet(seq, *, device=1, boot=4):
-    return SensorPacket(device, boot, seq, 0, dummy_values(seq))
+    return SensorPacket(device, boot, seq, 0, DUMMY_FIXTURES[seq % len(DUMMY_FIXTURES)])
 
 
 def test_goodput_counts_unique_valid_packet_bytes_and_includes_silence():
@@ -15,13 +15,15 @@ def test_goodput_counts_unique_valid_packet_bytes_and_includes_silence():
         assert meter.record(packet(seq), 10 + seq / 10)
     assert not meter.record(packet(99), 20)
     report = meter.report(20)
-    assert report['packet_bytes'] == 3200
+    # Version 3: 38 bytes per packet, so 10 packets/s is 3.04 kbps.
+    assert PACKET_SIZE == 38
+    assert report['packet_bytes'] == 3800
     assert report['packets'] == 100
     assert report['elapsed_seconds'] == 10
-    assert report['average_kbps'] == pytest.approx(2.56)
-    assert report['rolling_kbps'] == pytest.approx(2.56)
+    assert report['average_kbps'] == pytest.approx(3.04)
+    assert report['rolling_kbps'] == pytest.approx(3.04)
     assert meter.report(25)['rolling_kbps'] == 0
-    assert meter.report(25)['average_kbps'] == pytest.approx(3200*8/15/1000)
+    assert meter.report(25)['average_kbps'] == pytest.approx(3800*8/15/1000)
 
 
 def test_observation_excludes_startup_and_drain_and_counts_zero_traffic():
@@ -34,20 +36,20 @@ def test_observation_excludes_startup_and_drain_and_counts_zero_traffic():
     meter.stop(8)
     meter.record(packet(2), 9)
     report = meter.report(20)
-    assert report['packet_bytes'] == 32
+    assert report['packet_bytes'] == 38
     assert report['elapsed_seconds'] == 5
-    assert report['average_kbps'] == pytest.approx(.0512)
+    assert report['average_kbps'] == pytest.approx(.0608)
     empty = GoodputMeter()
     empty.start(0)
     assert empty.report(10)['average_kbps'] == 0
 
 
-def test_goodput_accepts_v2_schema_and_rejects_legacy_bad_values_and_reordering():
+def test_goodput_accepts_any_v3_values_and_rejects_undecoded_bytes_and_reordering():
     from laptop.goodput import GoodputMeter
     meter = GoodputMeter()
     meter.start(0)
-    assert not meter.record(SensorPacket(1, 1, 0, 0, (0,)*8), 1)
-    assert meter.record(SensorPacket(1, 1, 0, 0, (0,)*8, version=2), 2)
+    assert not meter.record(encode_packet(SensorPacket(1, 1, 0, 0, (0,)*11)), 1)
+    assert meter.record(SensorPacket(1, 1, 0, 0, (0,)*11), 2)
     assert meter.record(packet(5), 3)
     assert not meter.record(packet(4), 4)
     assert meter.record(packet(6), 5)

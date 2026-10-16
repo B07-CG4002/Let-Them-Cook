@@ -47,22 +47,23 @@ int main() {
   assert(!comms::canAcceptControl(true, false, true, false, 5, 5));
   assert(!comms::canAcceptControl(false, true, true, false, 5, 5));
   assert(comms::canAcceptControl(true, true, false, true, 5, 5));
-  uint8_t fixturePacket[32] = {};
-  assert(comms::serializeFixturePacket(fixturePacket, 32, 2, 7, 9, 100, 0));
+  uint8_t fixturePacket[38] = {};
+  assert(comms::serializeFixturePacket(fixturePacket, 38, 2, 7, 9, 100, 0));
   assert(fixturePacket[0] == 'L' && fixturePacket[1] == 'C');
-  assert(fixturePacket[2] == 2 && fixturePacket[3] == 2 && fixturePacket[8] == 9);
-  assert(!comms::serializeFixturePacket(fixturePacket, 31, 2, 7, 9, 100, 0));
-  uint8_t nextFixturePacket[32] = {};
-  assert(comms::serializeFixturePacket(nextFixturePacket, 32, 2, 7, 9, 100, 1));
-  assert(std::memcmp(fixturePacket + 16, nextFixturePacket + 16, 16) != 0);
-  assert(comms::serializeFixturePacket(nextFixturePacket, 32, 2, 7, 9, 100,
+  assert(fixturePacket[2] == 3 && fixturePacket[3] == 2 && fixturePacket[8] == 9);
+  assert(!comms::serializeFixturePacket(fixturePacket, 37, 2, 7, 9, 100, 0));
+  uint8_t nextFixturePacket[38] = {};
+  assert(comms::serializeFixturePacket(nextFixturePacket, 38, 2, 7, 9, 100, 1));
+  assert(std::memcmp(fixturePacket + 16, nextFixturePacket + 16, 22) != 0);
+  assert(comms::serializeFixturePacket(nextFixturePacket, 38, 2, 7, 9, 100,
                                       static_cast<uint32_t>(comms::kDummyFixtureCount)));
-  assert(std::memcmp(fixturePacket, nextFixturePacket, 32) == 0);
+  assert(std::memcmp(fixturePacket, nextFixturePacket, 38) == 0);
   comms::ControlEngine engine(2, 0x78563412, hashSix);
   // Literal sensor packet exercises int16 wrap and every identity field.
   std::vector<uint8_t> sensor = {
-    'L','C',2,2,0x12,0x34,0x56,0x78,10,0,0,0,1,0,0,0,
-    0xff,0x7f,0,0x80,0xff,0xff,0,0,1,0,0xff,0,0,1,0,0xff};
+    'L','C',3,2,0x12,0x34,0x56,0x78,10,0,0,0,1,0,0,0,
+    0xff,0x7f,0,0x80,0xff,0xff,0,0,1,0,0xff,0,0,1,0,0xff,
+    0xfe,0x7f,0x34,0x12,0xfe,0xff};
   // Any other packet marker is rejected before the command changes state.
   auto wrongMagic = sensor; wrongMagic[0] = 'W'; wrongMagic[1] = '7'; wrongMagic[8] = 11;
   execute(engine, request(1, 11, 0, wrongMagic), 1);
@@ -72,10 +73,13 @@ int main() {
   execute(engine, request(1, 11, 0, wrongMagic), 1);
   auto command = request(1, 10, 0, sensor);
   auto result = execute(engine, command);
+  // Every one of the 11 channels gains 1; 32767 wraps to -32768.
   const uint8_t expected[] = {
-    'L','C',2,2,0x12,0x34,0x56,0x78,10,0,0,0,0xf4,1,0,0,
-    0,0x80,1,0x80,0,0,1,0,2,0,0,1,1,1,1,0xff};
-  assert(result.size() == 46 && std::memcmp(result.data()+14, expected, 32) == 0);
+    'L','C',3,2,0x12,0x34,0x56,0x78,10,0,0,0,0xf4,1,0,0,
+    0,0x80,1,0x80,0,0,1,0,2,0,0,1,1,1,1,0xff,
+    0xff,0x7f,0x35,0x12,0xff,0xff};
+  assert(sizeof(expected) == 38);
+  assert(result.size() == 52 && std::memcmp(result.data()+14, expected, 38) == 0);
   assert(execute(engine, command, 0, 900) == result);  // Identical replay, not second transform.
   auto conflict = command; conflict.back() ^= 1;
   execute(engine, conflict, 5);
@@ -87,6 +91,18 @@ int main() {
   execute(engine, wrongSequence, 1);
   auto wrongVersion = command; wrongVersion[16] = 1;
   execute(engine, wrongVersion, 1);
+  wrongVersion[16] = 2;
+  execute(engine, wrongVersion, 1);
+  // A version 2 board's 32-byte packet is refused, whatever its version byte,
+  // and so is a version 3 packet with a trailing byte.
+  std::vector<uint8_t> legacy(sensor.begin(), sensor.begin() + 32);
+  legacy[2] = 2;
+  execute(engine, request(1, 10, 0, legacy), 1);
+  legacy[2] = 3;
+  execute(engine, request(1, 10, 0, legacy), 1);
+  auto trailing = sensor; trailing.push_back(0);
+  execute(engine, request(1, 10, 0, trailing), 1);
+  assert(execute(engine, command, 0, 900) == result);  // Refusals left the cache intact.
   for (uint32_t id = 11; id <= 20; ++id) {
     sensor[8] = static_cast<uint8_t>(id);
     execute(engine, request(1, id, 0, sensor));
@@ -147,6 +163,10 @@ int main() {
   assert(engine.process(nullptr, 14, 0, output, sizeof(output)) == 0);
   assert(engine.process(command.data(), 13, 0, output, sizeof(output)) == 0);
   assert(engine.process(command.data(), command.size(), 0, output, 13) == 0);
+  // The output floor is the largest response: a 52-byte COMMAND echo.
+  assert(engine.process(command.data(), command.size(), 0, output, 51) == 0);
+  assert(engine.process(command.data(), command.size(), 500, output, 52) == 52);
+  assert(output[5] == 0 && std::memcmp(output+14, expected, 38) == 0);
   assert(engine.process(command.data(), command.size(), 0, nullptr, 194) == 0);
   auto bad = request(2, 200, 0, {10,0}); bad[0] = 'X';
   assert(engine.process(bad.data(), bad.size(), 0, output, 194) == 0);

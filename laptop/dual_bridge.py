@@ -134,14 +134,18 @@ class DualBridge:
                           + metrics.source_stats_errors + metrics.disconnects
                           + bridge.tracker.gaps + bridge.tracker.duplicates
                           + bridge.tracker.out_of_order + bridge.tracker.new_boots)
+                gated = None
                 if bridge.source_audit is not None:
                     audit = bridge.source_audit
                     errors += (audit.sequence_anomalies
                                + audit.ack_sequence_anomalies
                                + audit.identity_mismatches + audit.boot_mismatches
                                + audit.interruptions + audit.snapshot_errors)
+                    if audit.start_stats is not None:
+                        gated = audit.start_stats.gated
                 snapshots.append({
                     "device_id": device,
+                    "gated": gated,
                     "received": bridge.callback_received,
                     "processed": metrics.received,
                     "acked": metrics.acked,
@@ -336,15 +340,19 @@ class DualBridge:
         )
         for device, bridge in self.bridges.items():
             item = bridge.summary()
-            coverage_ok = (item["observation_received"] > 0
-                           and item["observation_received"] >= 0.9 * expected_samples)
-            silence_ok = item["observation_max_silence"] <= bridge.config.freshness
+            covered, coverage_expected, coverage_ok, silence_ok = board_coverage(
+                item, expected_samples, bridge.config.freshness, self.expected_rate)
             protected_ble = mock or not bridge.config.diagnostic_unprotected
+            source = item["source"] or {}
             item.update({
                 "runtime_failures": failures[device],
+                "gated": source.get("gated"),
+                "source_idle": source.get("source_idle"),
                 "expected_samples": expected_samples,
-                "coverage_ratio": (item["observation_received"] / expected_samples
-                                   if expected_samples else 0.0),
+                # coverage_ratio = covered / coverage_expected, both over one interval.
+                "coverage_expected": coverage_expected,
+                "coverage_ratio": (covered / coverage_expected
+                                   if coverage_expected else 0.0),
                 "sustained_coverage": coverage_ok,
                 "silence_ok": silence_ok,
                 "protected_ble": protected_ble,
@@ -378,6 +386,34 @@ class DualBridge:
             },
             "devices": devices,
         }
+
+
+def board_coverage(item, expected_samples, freshness, expected_rate):
+    """Return (covered, expected, coverage_ok, silence_ok) for one board's summary.
+
+    An ungated board must deliver at least 90% of the expected samples within
+    the common window, with no silence longer than the freshness limit. A gated
+    board sends only while its glove module reports movement: its idle send
+    ticks count toward coverage (the board kept ticking), and silence is not
+    judged once it has reported idle ticks, because a still player is silent.
+    Its source counters cover the whole time its sensor notifications were on,
+    which starts before the common window (while the other board connects) and
+    ends after it (at the quiesce), so its expectation is taken over that same
+    interval: at least 90% of source_ticking_seconds * expected_rate ticks.
+    """
+    source = item.get("source") or {}
+    if source.get("gated"):
+        generated, idle = source.get("generated"), source.get("source_idle")
+        covered = generated + idle if generated is not None and idle is not None else 0
+        ticking = item.get("source_ticking_seconds")
+        expected = ticking * expected_rate if ticking is not None else None
+        silence_ok = bool(idle) or item["observation_max_silence"] <= freshness
+    else:
+        covered = item["observation_received"]
+        expected = expected_samples
+        silence_ok = item["observation_max_silence"] <= freshness
+    coverage_ok = expected is not None and covered > 0 and covered >= 0.9 * expected
+    return covered, expected, coverage_ok, silence_ok
 
 
 def _progress_interval(value):
@@ -547,13 +583,15 @@ def main():
 
 def _write_progress(phase, mode, snapshots):
     for item in snapshots:
+        # A gated board is silent while the player is still; that is not a stall.
+        gated = {True: "yes", False: "no"}.get(item.get("gated"), "unknown")
         print(
-            "progress mode={mode} phase={phase} device={device_id} "
+            "progress mode={mode} phase={phase} device={device_id} gated={gated} "
             "received={received} processed={processed} acked={acked} "
             "queue={queue} drops={drops} errors={errors} "
             "BLE_sensor_kbps_rolling={sensor_goodput[rolling_kbps]:.3f} "
             "BLE_sensor_kbps_average={sensor_goodput[average_kbps]:.3f}".format(
-                mode=mode, phase=phase, **item),
+                mode=mode, phase=phase, **dict(item, gated=gated)),
             file=sys.stderr, flush=True)
     print("progress combined_BLE_sensor_kbps_rolling={:.3f} combined_average_kbps={:.3f} "
           "boundary=laptop_reception bytes=sensor_packet_including_header excludes=BLE_TLS_SSH_controls_files".format(

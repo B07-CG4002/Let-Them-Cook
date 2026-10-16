@@ -24,50 +24,58 @@ namespace LetThemCook.Comms
         public uint? RequestId { get; internal set; }
         public string ResultId { get; internal set; }
         public string Gesture { get; internal set; }
+        public double Confidence { get; internal set; }
         public string Json { get; internal set; }
     }
 
     public static class PhoneProtocol
     {
-        private static readonly string[] Gestures = { "REST", "FIST", "OPEN", "POINT" };
+        // GESTURE_RESULT carries protocol version 3; the subscription envelopes stay at 1.
+        private const uint ResultVersion = 3, SubscriptionVersion = 1;
+        // Any model label of 1..32 characters from A-Z a-z 0-9 _ - (the same rule as the
+        // Ultra96 and the iPhone). \A and \z, because .NET '$' also matches before "\n".
+        private static readonly Regex Label = new Regex(@"\A[A-Za-z0-9_-]{1,32}\z", RegexOptions.CultureInvariant);
         public static string Subscribe(string session)
         { return "{\"v\":1,\"type\":\"SUBSCRIBE\",\"session_id\":" + Quote(session) + "}"; }
 
         public static void ValidateSubscribed(string json, string session)
         {
             var fields = FlatJson.Parse(json);
-            Header(fields, "SUBSCRIBED", session, 3);
+            Header(fields, "SUBSCRIBED", session, 3, SubscriptionVersion);
         }
 
         public static GestureResult ParseResult(string json, string session)
         {
             var fields = FlatJson.Parse(json);
-            uint version = Integer(fields, "v");
-            Header(fields, "GESTURE_RESULT", session, version == 2 ? 10 : 9, true);
+            // Ten distinct keys, and each of the ten is required below: the exact field set.
+            Header(fields, "GESTURE_RESULT", session, 10, ResultVersion);
             uint device = Integer(fields, "device_id"), boot = Integer(fields, "boot_id"), seq = Integer(fields, "seq");
             if (device != 1 && device != 2) throw new InvalidDataException("Invalid device_id");
             string id = Text(fields, "result_id"), gesture = Text(fields, "gesture");
             string expectedId = device.ToString(CultureInfo.InvariantCulture) + ":" + boot.ToString(CultureInfo.InvariantCulture) + ":" + seq.ToString(CultureInfo.InvariantCulture);
+            // request_id is null for model results; a command echo carries request_id == seq.
             uint? requestId = null;
-            if (version == 2 && !Required(fields, "request_id").IsNull)
+            if (!Required(fields, "request_id").IsNull)
             {
                 requestId = Integer(fields, "request_id");
                 if (requestId == 0 || requestId != seq) throw new InvalidDataException("Invalid request correlation");
                 expectedId = "cmd:" + expectedId;
             }
+            if (id != expectedId) throw new InvalidDataException("Invalid result_id");
+            if (!Label.IsMatch(gesture)) throw new InvalidDataException("Invalid gesture");
+            // .NET Core 3.0+ parses 1e999 as Infinity; the explicit checks reject it on every runtime.
             double confidence;
             Atom score = Required(fields, "confidence");
-            if (score.IsString || !Double.TryParse(score.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out confidence) || confidence != 1.0)
-                throw new InvalidDataException("Invalid dummy confidence");
-            bool validGesture = version == 1 ? gesture == Gestures[seq % 4] : Array.IndexOf(Gestures, gesture) >= 0;
-            if (id != expectedId || !validGesture) throw new InvalidDataException("Invalid dummy result");
-            return new GestureResult { DeviceId = device, BootId = boot, Sequence = seq, RequestId = requestId, ResultId = id, Gesture = gesture, Json = json };
+            if (score.IsString || score.IsNull || !Double.TryParse(score.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out confidence) ||
+                Double.IsNaN(confidence) || Double.IsInfinity(confidence) || confidence < 0.0 || confidence > 1.0)
+                throw new InvalidDataException("Invalid confidence");
+            return new GestureResult { DeviceId = device, BootId = boot, Sequence = seq, RequestId = requestId, ResultId = id, Gesture = gesture, Confidence = confidence, Json = json };
         }
 
-        private static void Header(Dictionary<string, Atom> fields, string type, string session, int count, bool allowV2 = false)
+        private static void Header(Dictionary<string, Atom> fields, string type, string session, int count, uint expectedVersion)
         {
             uint version = Integer(fields, "v");
-            if (fields.Count != count || !(version == 1 || (allowV2 && version == 2)) || Text(fields, "type") != type || Text(fields, "session_id") != session || !ValidSession(session))
+            if (fields.Count != count || version != expectedVersion || Text(fields, "type") != type || Text(fields, "session_id") != session || !ValidSession(session))
                 throw new InvalidDataException("Unexpected message schema or session");
         }
         private static Atom Required(Dictionary<string, Atom> fields, string key)
@@ -125,7 +133,7 @@ namespace LetThemCook.Comms
             public string Value;
         }
 
-        // The wire messages are flat. Only v2 request_id permits null; field
+        // The wire messages are flat. Only request_id permits null; field
         // validators reject it elsewhere. Arrays, objects and bool are forbidden.
         private sealed class FlatJson
         {

@@ -20,6 +20,7 @@ _EVENTS = frozenset({
     "result_send_started", "result_write_complete", "result_send_failed",
     "result_send_cancelled", "result_abandoned", "subscriber_claimed",
     "subscriber_replaced", "subscribed_write_complete", "subscriber_ended",
+    "model_result", "model_result_refused",
 })
 _INTEGER_FIELDS = frozenset({
     "device_id", "boot_id", "seq", "subscriber_id", "previous_subscriber_id",

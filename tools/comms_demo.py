@@ -8,19 +8,26 @@ from pathlib import Path
 import sys
 import time
 
-from common.sensor import SensorPacket, decode_packet, dummy_values, encode_packet
+from common.sensor import PACKET_SIZE, VERSION, SensorPacket, decode_packet, encode_packet
 from common.wire import encode_frame
 from laptop.bridge import Bridge, BridgeConfig
 from ultra96.protocol import validate_message, validate_session
 
 
 def packet_example():
-    """A reproducible teaching example, explicitly separate from live evidence."""
-    packet = SensorPacket(1, 7, 42, 4200, dummy_values(42))
+    """A reproducible teaching example, explicitly separate from live evidence.
+
+    The 11 values are int16 in the agreed units (ax..az g x10000, gx..gz deg/s x100,
+    yaw/pitch/roll degrees x100, flex1/flex2 x10000). The result shows what a model
+    may send: any label matching the gesture rule and a confidence in [0, 1].
+    """
+    packet = SensorPacket(1, 7, 42, 4200, (1200, -300, -8500, 4000, -2000, 1500,
+                                           1250, -3000, 600, 6000, 5500))
     batch = packet.to_message("ltc-comms")
-    trace = dict(session_id="ltc-comms", device_id=1, boot_id=7, seq=42)
-    ack = dict(v=1, type="INGEST_ACK", **trace, status="accepted")
-    result = dict(v=1, type="GESTURE_RESULT", **trace, result_id="1:7:42", gesture="OPEN", confidence=1.0)
+    trace = dict(session_id="ltc-comms", device_id=1, boot_id=7, seq=42, request_id=None)
+    ack = dict(v=VERSION, type="INGEST_ACK", **trace, status="accepted")
+    result = dict(v=VERSION, type="GESTURE_RESULT", **trace, result_id="1:7:42", gesture="CHOP",
+                  confidence=0.875)
     messages = dict(sensor_batch=batch, ingest_ack=ack, gesture_result=result,
                     subscribe=dict(v=1, type="SUBSCRIBE", session_id="ltc-comms"),
                     subscribed=dict(v=1, type="SUBSCRIBED", session_id="ltc-comms"))
@@ -31,7 +38,7 @@ def packet_example():
         frames[name] = dict(length_prefix_hex=wire[:4].hex(), body_bytes=len(wire)-4,
                             json_utf8=wire[4:].decode("utf8"))
     return dict(kind="illustrative example; not captured hardware evidence",
-                ble_bytes=32, ble_hex=encode_packet(packet).hex(),
+                ble_bytes=PACKET_SIZE, ble_hex=encode_packet(packet).hex(),
                 sensor_batch=batch, ingest_ack=ack, gesture_result=result, frames=frames)
 
 
@@ -44,8 +51,8 @@ class DemoBridge(Bridge):
         self.first_ack = self.last_ack = None
         self.maximum_ack_gap = 0.0
 
-    def _check_ack(self, ack, packet):
-        super()._check_ack(ack, packet)
+    def _check_ack(self, ack, packet, request_id=None):
+        super()._check_ack(ack, packet, request_id=request_id)
         now = self.clock()
         if self.first_ack is None:
             self.first_ack = now
@@ -166,8 +173,8 @@ def audit_logs(path, *, phone_results=None, minimum_count=100, session_id="ltc-c
         trace = row.get("result_id")
         fields = _trace(trace)
         if event == "ack":
-            validate_message(dict(v=1, type="INGEST_ACK", session_id=session_id,
-                                 **fields, status=row.get("status")))
+            validate_message(dict(v=VERSION, type="INGEST_ACK", session_id=session_id,
+                                 **fields, request_id=None, status=row.get("status")))
             ack_count += 1
             if row["status"] == "duplicate":
                 duplicate_acks += 1
@@ -179,8 +186,9 @@ def audit_logs(path, *, phone_results=None, minimum_count=100, session_id="ltc-c
         elif event == "result":
             if phone_results is not None:
                 raise ValueError("cannot combine desktop subscriber events with a Phone result file")
-            add_result(dict(v=1, type="GESTURE_RESULT", session_id=session_id, **fields,
-                result_id=trace, gesture=row.get("gesture"), confidence=row.get("confidence")))
+            add_result(dict(v=VERSION, type="GESTURE_RESULT", session_id=session_id, **fields,
+                request_id=None, result_id=trace, gesture=row.get("gesture"),
+                confidence=row.get("confidence")))
         elif event == "packet":
             batch = validate_message(row.get("sensor_batch"), "SENSOR_BATCH", session_id)
             packet = decode_packet(bytes.fromhex(row.get("ble_hex", "")))

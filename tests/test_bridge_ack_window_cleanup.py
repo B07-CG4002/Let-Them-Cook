@@ -1,7 +1,7 @@
 import asyncio
 from contextlib import suppress
 
-from common.sensor import SensorPacket, dummy_values, encode_packet
+from common.sensor import DUMMY_FIXTURES, SensorPacket, encode_packet
 from laptop.bridge import Bridge, BridgeConfig
 
 
@@ -43,9 +43,9 @@ def test_cancel_during_transport_close_still_retires_every_attempted_frame():
         async def mismatched_ack(_reader, timeout):
             await all_written.wait()
             first = messages[0]
-            return dict(v=1, type="INGEST_ACK", session_id=first["session_id"],
+            return dict(v=3, type="INGEST_ACK", session_id=first["session_id"],
                         device_id=first["device_id"], boot_id=first["boot_id"],
-                        seq=999, status="accepted")
+                        seq=999, request_id=None, status="accepted")
 
         bridge = Bridge(BridgeConfig(ca_file="unused", ack_window=3),
                         connector=connect)
@@ -54,7 +54,7 @@ def test_cancel_during_transport_close_still_retires_every_attempted_frame():
         bridge.inbox.activate(1)
         for seq in range(3):
             bridge.enqueue(1, encode_packet(SensorPacket(
-                1, 7, seq, seq * 100, dummy_values(seq))))
+                1, 7, seq, seq * 100, DUMMY_FIXTURES[seq % len(DUMMY_FIXTURES)])))
 
         owner = asyncio.create_task(bridge.writer_loop())
         await asyncio.wait_for(close_entered.wait(), 1)

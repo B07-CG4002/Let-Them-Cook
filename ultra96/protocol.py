@@ -1,9 +1,17 @@
 """Exact B07 Communications message schemas, separate from generic JSON framing."""
+import math
+import re
+
+from common.sensor import CHANNEL_COUNT, VERSION
 from common.wire import ProtocolError
 
-GESTURES = ("REST", "FIST", "OPEN", "POINT")
+# Labels of the built-in dummy model and of command echo results. Model labels are
+# not listed here: Communications carries any label that satisfies GESTURE_PATTERN.
+DUMMY_GESTURES = ("REST", "FIST", "OPEN", "POINT")
+MAX_GESTURE_LENGTH = 32
+GESTURE_PATTERN = re.compile(r"[A-Za-z0-9_-]{1,%d}" % MAX_GESTURE_LENGTH)
 _BASE = {"v", "type", "session_id"}
-_TRACE = {"device_id", "boot_id", "seq"}
+_TRACE = {"device_id", "boot_id", "seq", "request_id"}
 _FIELDS = {
     "SENSOR_BATCH": _BASE | _TRACE | {"uptime_ms", "values"},
     "INGEST_ACK": _BASE | _TRACE | {"status"},
@@ -11,10 +19,25 @@ _FIELDS = {
     "SUBSCRIBED": _BASE,
     "GESTURE_RESULT": _BASE | _TRACE | {"result_id", "gesture", "confidence"},
 }
+# Subscription envelopes never changed and stay at version 1.
+_VERSIONS = {"SENSOR_BATCH": VERSION, "INGEST_ACK": VERSION, "GESTURE_RESULT": VERSION,
+             "SUBSCRIBE": 1, "SUBSCRIBED": 1}
 
 
 def _integer(value, low, high):
     return type(value) is int and low <= value <= high
+
+
+def valid_gesture(value):
+    """1..32 characters from [A-Za-z0-9_-]; the same rule on every receiver."""
+    return isinstance(value, str) and GESTURE_PATTERN.fullmatch(value) is not None
+
+
+def valid_confidence(value):
+    """A finite JSON number (not a boolean) in [0, 1]."""
+    if type(value) is int:  # never float() a huge integer
+        return 0 <= value <= 1
+    return type(value) is float and math.isfinite(value) and 0 <= value <= 1
 
 
 def validate_session(session_id):
@@ -26,10 +49,10 @@ def validate_session(session_id):
 
 
 def validate_message(message, expected_type=None, session_id=None):
-    """Validate legacy v1 sentinels or v2 dummy data and request correlation.
+    """Validate one protocol-version-3 message (subscription envelopes are version 1).
 
-    Subscription envelopes stay v1; upgraded subscribers accept both result
-    versions. V2 request_id is required: null for telemetry, uint32 for commands.
+    request_id is always present in data messages: null for samples and model
+    results, uint32 equal to seq for commands.
     """
     if not isinstance(message, dict):
         raise ProtocolError("message must be an object")
@@ -39,12 +62,9 @@ def validate_message(message, expected_type=None, session_id=None):
     if expected_type is not None and kind != expected_type:
         raise ProtocolError("unexpected message type")
     version = message.get("v")
-    if type(version) is not int or version not in (1, 2):
+    if type(version) is not int or version != _VERSIONS[kind]:
         raise ProtocolError("unsupported protocol version")
-    if version == 2 and kind in ("SUBSCRIBE", "SUBSCRIBED"):
-        raise ProtocolError("subscription envelopes require protocol version 1")
-    fields = _FIELDS[kind] | ({"request_id"} if version == 2 else set())
-    if set(message) != fields:
+    if set(message) != _FIELDS[kind]:
         raise ProtocolError("unknown message type or unexpected fields")
     validate_session(message["session_id"])
     if session_id is not None and message["session_id"] != session_id:
@@ -55,7 +75,7 @@ def validate_message(message, expected_type=None, session_id=None):
         for field in ("boot_id", "seq"):
             if not _integer(message[field], 0, 0xFFFFFFFF):
                 raise ProtocolError("invalid " + field)
-        if version == 2 and message["request_id"] is not None:
+        if message["request_id"] is not None:
             if not _integer(message["request_id"], 1, 0xFFFFFFFF):
                 raise ProtocolError("invalid request_id")
             if message["seq"] != message["request_id"]:
@@ -64,31 +84,24 @@ def validate_message(message, expected_type=None, session_id=None):
         if not _integer(message["uptime_ms"], 0, 0xFFFFFFFF):
             raise ProtocolError("invalid uptime_ms")
         values = message["values"]
-        if (not isinstance(values, list) or len(values) != 8
+        if (not isinstance(values, list) or len(values) != CHANNEL_COUNT
                 or any(not _integer(value, -32768, 32767) for value in values)):
-            raise ProtocolError("values must contain exactly eight int16 integers")
-        expected = [message["seq"] % 2000 - 1000 + 10 * i for i in range(8)]
-        if version == 1 and values != expected:
-            raise ProtocolError("wrong B07 Communications dummy sentinels")
+            raise ProtocolError("values must contain exactly eleven int16 integers")
     elif kind == "INGEST_ACK":
         if message["status"] not in ("accepted", "duplicate"):
             raise ProtocolError("invalid acknowledgement status")
     elif kind == "GESTURE_RESULT":
-        trace_id = result_identity(message)
-        valid_gesture = (message["gesture"] == GESTURES[message["seq"] % 4]
-                         if version == 1 else message["gesture"] in GESTURES)
-        if message["result_id"] != trace_id or not valid_gesture:
-            raise ProtocolError("inconsistent dummy result")
-        if type(message["confidence"]) not in (float, int) or message["confidence"] != 1.0:
-            raise ProtocolError("dummy confidence must be 1.0")
+        if message["result_id"] != result_identity(message):
+            raise ProtocolError("result_id does not match the result identity")
+        if not valid_gesture(message["gesture"]):
+            raise ProtocolError("gesture must be 1..32 characters from A-Z a-z 0-9 _ -")
+        if not valid_confidence(message["confidence"]):
+            raise ProtocolError("confidence must be a finite number in [0, 1]")
     return message
 
 
 def trace_fields(message):
-    fields = {key: message[key] for key in ("session_id", "device_id", "boot_id", "seq")}
-    if message.get("v") == 2:
-        fields["request_id"] = message["request_id"]
-    return fields
+    return {key: message[key] for key in ("session_id", "device_id", "boot_id", "seq", "request_id")}
 
 
 def result_identity(message):
