@@ -65,6 +65,61 @@ final class ConfigurationTests: XCTestCase {
         XCTAssertEqual(store.load(), PublicConfiguration())
     }
 
+    func testSavesToCurrentDirectoryWhenItCanBeCreated() throws {
+        let support = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: support) }
+        let current = support.appendingPathComponent("Comms", isDirectory: true)
+        let legacy = support.appendingPathComponent("Week7", isDirectory: true)
+        try FileManager.default.createDirectory(at: legacy, withIntermediateDirectories: true)
+
+        let target = try ConfigurationStore(directory: current, legacyDirectory: legacy).writableTarget()
+        XCTAssertEqual(target.directory, current)
+        XCTAssertEqual(target.ca.lastPathComponent, "comms-ca.pem")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: current.path))
+    }
+
+    func testSavesToLegacyDirectoryWhenParentIsNotWritable() throws {
+        try XCTSkipIf(geteuid() == 0, "root ignores directory permissions")
+        let support = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let current = support.appendingPathComponent("Comms", isDirectory: true)
+        let legacy = support.appendingPathComponent("Week7", isDirectory: true)
+        try FileManager.default.createDirectory(at: legacy, withIntermediateDirectories: true)
+        // As on the iPhone on 2026-10-16: the parent refuses new entries, the legacy folder stays writable.
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: support.path)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: support.path)
+            try? FileManager.default.removeItem(at: support)
+        }
+
+        let store = ConfigurationStore(directory: current, legacyDirectory: legacy)
+        let target = try store.writableTarget()
+        XCTAssertEqual(target.directory, legacy)
+        XCTAssertEqual(target.config.lastPathComponent, "public-settings.json")
+        XCTAssertEqual(target.ca.lastPathComponent, "week7-ca.pem")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: current.path))
+
+        let settings = PublicConfiguration(boardUser: "board-user", jumpUser: "jump-user", useJump: true)
+        try JSONEncoder().encode(settings).write(to: target.config)
+        XCTAssertEqual(store.load(), settings)
+    }
+
+    func testPermissionErrorWithoutLegacyDirectoryIsReported() throws {
+        try XCTSkipIf(geteuid() == 0, "root ignores directory permissions")
+        let support = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: support.path)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: support.path)
+            try? FileManager.default.removeItem(at: support)
+        }
+
+        let store = ConfigurationStore(directory: support.appendingPathComponent("Comms", isDirectory: true),
+                                       legacyDirectory: support.appendingPathComponent("Week7", isDirectory: true))
+        XCTAssertThrowsError(try store.writableTarget()) { error in
+            XCTAssertEqual((error as? CocoaError)?.code, .fileWriteNoPermission)
+        }
+    }
+
     func testLegacyCAStillRequiresEnrolledAuthority() throws {
         let support = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: support) }

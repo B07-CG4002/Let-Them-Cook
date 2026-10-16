@@ -93,15 +93,28 @@ final class ConfigurationStore {
     func save(_ configuration: PublicConfiguration, caPEM: String) throws {
         try configuration.validate()
         let validated = try AuthorityImport.validate(caPEM)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let target = try writableTarget()
         var options: Data.WritingOptions = [.atomic]
         #if os(iOS)
         options.insert(.completeFileProtection)
         #endif
-        try JSONEncoder().encode(configuration).write(to: configURL, options: options)
-        try Data(validated.utf8).write(to: caURL, options: options)
-        var excluded = directory
+        try JSONEncoder().encode(configuration).write(to: target.config, options: options)
+        try Data(validated.utf8).write(to: target.ca, options: options)
+        var excluded = target.directory
         var values = URLResourceValues(); values.isExcludedFromBackup = true
         try excluded.setResourceValues(values)
+    }
+
+    // The current directory, or the legacy one when the current one may not be created.
+    // An upgraded container can hold a root-owned Application Support (mode 0755) whose
+    // Week7 folder stays writable; load() reads legacy files while current ones are missing.
+    func writableTarget() throws -> (directory: URL, config: URL, ca: URL) {
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            return (directory, configURL, caURL)
+        } catch let error as CocoaError where error.code == .fileWriteNoPermission
+                    && FileManager.default.isWritableFile(atPath: legacyDirectory.path) {
+            return (legacyDirectory, legacyConfigURL, legacyCAURL)
+        }
     }
 }
