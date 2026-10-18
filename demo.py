@@ -11,7 +11,7 @@ import subprocess
 import sys
 import uuid
 
-from tools.ssh_tunnel import tunnel_command
+from tools.ssh_tunnel import tunnel_command, windows_ssh
 from laptop.dual_bridge import _source_rate
 from tools.demo_boards import load_boards
 
@@ -40,6 +40,36 @@ def _parser():
     tunnel.add_argument("--jump", default="yanjie@stujump.comp.nus.edu.sg")
     tunnel.add_argument("--target", default="xilinx@makerslab-fpga-35.ddns.comp.nus.edu.sg")
     tunnel.add_argument("--port", type=_port, default=18889)
+    tunnel.add_argument("--monitor-port", type=_port, default=19999,
+                        help="local port forwarded to the Ultra96 gateway 9999 for the board view "
+                             "of 'start --no-tunnel'; default: 19999")
+
+    # One command for a whole run: tunnel, gloves, live view, run log and the final check.
+    start = commands.add_parser(
+        "start", help="tunnel, both gloves, live view and run.log in one command; q or Ctrl+C stops")
+    start.add_argument("--duration", type=_duration,
+                       help="seconds of capture; default: until you press q or Ctrl+C")
+    start.add_argument("--rate", type=_source_rate, default=50,
+                       help="set BOTH gloves to 1..200 Hz; default: 50, the gloves' rate")
+    start.add_argument("--keyboard", action="store_true",
+                       help="keys 1 and 2 send a command to the LEFT or RIGHT glove")
+    start.add_argument("--no-tunnel", action="store_true",
+                       help="use a tunnel that is already open (python demo.py tunnel)")
+    start.add_argument("--jump", default="yanjie@stujump.comp.nus.edu.sg")
+    start.add_argument("--target", default="xilinx@makerslab-fpga-35.ddns.comp.nus.edu.sg")
+    start.add_argument("--port", type=_port, default=18889,
+                       help="local port forwarded to the Ultra96 ingest 8888; default: 18889")
+    start.add_argument("--monitor-port", type=_port, default=19999,
+                       help="local port forwarded to the Ultra96 gateway 9999; default: 19999")
+    start.add_argument("--ca", type=Path, default=Path.home() / ".codex" / "private" /
+                       "cg4002-week7-20260906" / "ca-cert.pem")
+    start.add_argument("--left-address", help="override saved LEFT glove address")
+    start.add_argument("--right-address", help="override saved RIGHT glove address")
+    start.add_argument("--session-id", default=os.environ.get("LTC_COMMS_SESSION", "ltc-comms"),
+                       help="session expected by the Ultra96 server; default: LTC_COMMS_SESSION or ltc-comms")
+    start.add_argument("--output-root", type=Path, default=OUTPUT_ROOT)
+    start.add_argument("--seed", type=int, help="repeat laptop random fixture selection")
+    start.add_argument("--mock", action="store_true", help=argparse.SUPPRESS)  # tests only
 
     # The same capture implementation serves recording and live keyboard demos.
     for mode, seconds, keyboard in (("run", 60.0, False), ("live", 120.0, True)):
@@ -117,9 +147,10 @@ def _console_line(line):
 
 
 def run_tunnel(args):
-    command = tunnel_command(args.jump, args.target, args.port, 8888, batch=False)
-    print(f"Opening SSH tunnel on 127.0.0.1:{args.port}; enter passwords at SSH prompts.",
-          flush=True)
+    command = tunnel_command(args.jump, args.target, args.port, 8888, batch=False,
+                             forwards=((args.monitor_port, 9999),), ssh=windows_ssh())
+    print(f"Opening SSH tunnel on 127.0.0.1:{args.port} (samples) and 127.0.0.1:{args.monitor_port}"
+          " (board view); enter passwords at SSH prompts.", flush=True)
     print("Keep this terminal open. Ctrl+C stops this tunnel.", flush=True)
     child = subprocess.Popen(command, cwd=ROOT)
     try:
@@ -203,7 +234,8 @@ def show_report(path, *, save_readable=False):
     if report.get("file_transfer") is not None:
         print(f"BLE file result: {report['file_transfer']}")
     if not _clean_capture(report, exit_code):
-        print("CAPTURE NOT PASSED: inspect report.json and live.log; do not infer a phone total.")
+        print("CAPTURE NOT PASSED: inspect report.json and the run's log (run.log, or live.log "
+              "for demo.py run); do not infer a phone total.")
         return 1
     # Review this exact run automatically; no separate report script or phone input.
     from tools.video_evidence import show_packet_examples
@@ -286,6 +318,14 @@ def main(argv=None):
     try:
         if args.action == "tunnel":
             return run_tunnel(args)
+        if args.action == "start":
+            if args.left_address is None or args.right_address is None:
+                boards = dict(load_boards())
+                args.left_address = args.left_address or boards['left']
+                args.right_address = args.right_address or boards['right']
+            args.argv = list(argv) if argv is not None else sys.argv[1:]
+            from tools.live_session import main as start_main
+            return start_main(args)
         if args.action in ("run", "live"):
             if args.left_address is None or args.right_address is None:
                 boards = dict(load_boards())

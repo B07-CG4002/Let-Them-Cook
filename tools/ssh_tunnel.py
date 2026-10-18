@@ -9,33 +9,59 @@ import shlex
 import subprocess
 
 
-def tunnel_command(jump, target, local_port, remote_port, identity=None, batch=False):
+def windows_ssh():
+    """Windows' own OpenSSH by absolute path, else "ssh" from PATH.
+
+    Git Bash puts an MSYS ssh first on PATH; the password prompts and the
+    process-group behaviour that demo.py start relies on are Win32-OpenSSH's.
+    """
+    if os.name == "nt":
+        path = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"),
+                            "System32", "OpenSSH", "ssh.exe")
+        if os.path.isfile(path):
+            return path
+    return "ssh"
+
+
+def tunnel_command(jump, target, local_port, remote_port, identity=None, batch=False, *,
+                   forwards=(), ssh="ssh"):
     """Build both hops explicitly; identity applies only to the final target.
 
     Batch mode is required for supervision. Interactive printed commands may
     prompt normally while retaining strict known-host verification on both hops.
     Their target banner deadline also covers time spent entering a proxy password.
     Ultra96 exposes only SSH on TCP 22; application ports are tunnel destinations.
+    forwards adds more (local_port, remote_port) loopback forwards to the same
+    login, after the first one; ssh is the client program for both hops.
     """
     for host in (jump, target):
         if not isinstance(host, str) or not re.fullmatch(r"[A-Za-z0-9_.]+@[A-Za-z0-9][A-Za-z0-9.-]*", host):
             raise ValueError("SSH endpoint must be user@hostname with no options or whitespace")
-    for port in (local_port, remote_port):
-        if type(port) is not int or not 1 <= port <= 65535:
-            raise ValueError("port must be 1..65535")
+    pairs = [(local_port, remote_port)] + [tuple(pair) for pair in forwards]
+    for pair in pairs:
+        if len(pair) != 2:
+            raise ValueError("a forward is a (local_port, remote_port) pair")
+        for port in pair:
+            if type(port) is not int or not 1 <= port <= 65535:
+                raise ValueError("port must be 1..65535")
+    if len({local for local, _ in pairs}) != len(pairs):
+        raise ValueError("each forward needs its own local port")
+    if not isinstance(ssh, str) or not ssh or ssh.startswith("-"):
+        raise ValueError("ssh must name the client program")
     trust_options = ["-o", "StrictHostKeyChecking=yes",
                      "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3",
                      "-o", "BatchMode=" + ("yes" if batch else "no")]
-    proxy = ["ssh"] + trust_options + [
+    proxy = [ssh] + trust_options + [
         "-o", "ConnectTimeout=" + ("10" if batch else "20"),
         "-W", "[%h]:%p", jump]
     quote_command = subprocess.list2cmdline if os.name == "nt" else shlex.join
-    cmd = ["ssh", "-N", "-T"] + trust_options + [
+    cmd = [ssh, "-N", "-T"] + trust_options + [
            "-o", "Port=22",
            "-o", "ConnectTimeout=" + ("10" if batch else "60"),
            "-o", "ProxyCommand=" + quote_command(proxy),
-           "-o", "ExitOnForwardFailure=yes",
-           "-L", "127.0.0.1:%d:127.0.0.1:%d" % (local_port, remote_port)]
+           "-o", "ExitOnForwardFailure=yes"]
+    for local, remote in pairs:
+        cmd += ["-L", "127.0.0.1:%d:127.0.0.1:%d" % (local, remote)]
     if identity:
         cmd += ["-i", os.fspath(identity)]
     return cmd + [target]

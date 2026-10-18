@@ -7,8 +7,11 @@ from datetime import datetime, timezone
 import json
 import logging
 import math
+import os
 from pathlib import Path
+import signal
 import sys
+import threading
 from typing import Optional
 
 from laptop.bridge import Bridge, BridgeConfig
@@ -18,6 +21,12 @@ from laptop.evidence import PacketEvidence
 
 
 LOG = logging.getLogger(__name__)
+# Seconds between status snapshots handed to status_callback (supervised mode).
+STATUS_INTERVAL = 0.25
+
+
+class StopRequested(Exception):
+    """An operator stop arrived before both streams became active."""
 
 
 class DualBridge:
@@ -48,12 +57,18 @@ class DualBridge:
         if (left.config.address and right.config.address
                 and left.config.address.lower() == right.config.address.lower()):
             raise ValueError("physical devices require distinct BLE addresses")
+        # The run's current phase, and what ended its observation: "duration"
+        # (the deadline) or "operator" (run's stop_event).
+        self.phase = None
+        self.stop_reason = "duration"
 
-    async def _wait_for_start(self, active, input_tasks, on_tick=None):
+    async def _wait_for_start(self, active, input_tasks, on_tick=None, stop_event=None):
         async def both_active():
             while not all(event.is_set() for event in active.values()):
                 if on_tick is not None:
                     on_tick("startup")
+                if stop_event is not None and stop_event.is_set():
+                    raise StopRequested("stop requested before both streams became active")
                 for task in input_tasks.values():
                     if task.done():
                         task.result()
@@ -64,7 +79,11 @@ class DualBridge:
 
     async def run(self, duration=600.0, *, mock=False, mock_rate: Optional[float] = None,
                   ble_options=None, progress_interval=0.0, progress_callback=None,
-                  keyboard=False, file_data=None, file_device=1):
+                  keyboard=False, file_data=None, file_device=1, stop_event=None,
+                  status_callback=None):
+        """stop_event (an asyncio.Event) ends the observation early, as the
+        deadline does; status_callback(status) receives a snapshot every
+        STATUS_INTERVAL seconds from startup to complete. Both default to off."""
         if not isinstance(duration, (int, float)) or isinstance(duration, bool) \
                 or not math.isfinite(duration) or duration <= 0:
             raise ValueError("duration must be positive finite seconds")
@@ -88,6 +107,8 @@ class DualBridge:
             raise ValueError("keyboard/file requires protected physical control connections")
         if file_device not in (1, 2):
             raise ValueError("file device must be 1 or 2")
+        self.phase = "startup"
+        self.stop_reason = "duration"
         stop = {device: asyncio.Event() for device in self.bridges}
         active = {device: asyncio.Event() for device in self.bridges}
         writers = {
@@ -164,17 +185,42 @@ class DualBridge:
 
         startup_ok = False
         observation_start = observation_end = None
+        status_failed = False
+
+        def emit_status():
+            # Counters already in memory only; the callback must not block.
+            nonlocal status_failed
+            if status_callback is None or status_failed:
+                return
+            try:
+                elapsed = (None if observation_start is None else round(
+                    asyncio.get_running_loop().time() - observation_start, 3))
+                status_callback(self._status(active, elapsed))
+            except Exception:
+                status_failed = True
+                LOG.warning("status output failed error_type=callback")
+
+        async def status_loop():
+            while True:
+                emit_status()
+                await asyncio.sleep(STATUS_INTERVAL)
+
+        status_task = (asyncio.create_task(status_loop(), name="status")
+                       if status_callback is not None else None)
         try:
             emit_progress("startup", force=True)
             try:
-                await self._wait_for_start(active, inputs, emit_progress)
+                await self._wait_for_start(active, inputs, emit_progress, stop_event)
                 startup_ok = True
             except (Exception, asyncio.TimeoutError) as exc:
+                if isinstance(exc, StopRequested):
+                    self.stop_reason = "operator"
                 for device in self.bridges:
                     if not active[device].is_set():
                         failures[device].append(f"startup:{type(exc).__name__}")
 
             if startup_ok:
+                self.phase = "observation"
                 emit_progress("observation", force=True)
                 observation_start = asyncio.get_running_loop().time()
                 for bridge in self.bridges.values():
@@ -189,6 +235,11 @@ class DualBridge:
                 while True:
                     now = asyncio.get_running_loop().time()
                     if now >= deadline:
+                        break
+                    if stop_event is not None and stop_event.is_set():
+                        # An operator stop ends the observation exactly as the
+                        # deadline does, so the orderly shutdown below still runs.
+                        self.stop_reason = "operator"
                         break
                     emit_progress("observation")
                     if keyboard_task is not None and keyboard_task.done():
@@ -219,6 +270,7 @@ class DualBridge:
                 for bridge in self.bridges.values():
                     bridge.finish_observation(observation_end)
         finally:
+            self.phase = "shutdown"
             control_stop.set()
             if keyboard_task is not None:
                 keyboard_task.cancel()
@@ -285,6 +337,7 @@ class DualBridge:
 
                     task.add_done_callback(consume)
 
+            self.phase = "drain"
             drain_deadline = asyncio.get_running_loop().time() + self.drain_timeout
             while (any(bridge.inbox.size or bridge._inflight
                        for bridge in self.bridges.values())
@@ -324,6 +377,11 @@ class DualBridge:
                 if isinstance(result, BaseException):
                     failures[device].append(f"transport_close:{type(result).__name__}")
             emit_progress("complete", force=True)
+            self.phase = "complete"
+            if status_task is not None:
+                status_task.cancel()
+                await asyncio.gather(status_task, return_exceptions=True)
+                emit_status()
 
         observed_duration = (observation_end - observation_start
                              if observation_start is not None and observation_end is not None
@@ -386,6 +444,47 @@ class DualBridge:
             },
             "devices": devices,
         }
+
+    def _status(self, active, elapsed):
+        """One supervised status snapshot: plain counters, no I/O."""
+        devices = {}
+        for device, bridge in self.bridges.items():
+            metrics, audit = bridge.metrics, bridge.source_audit
+            start = audit.start_stats if audit is not None else None
+            errors = {name: getattr(metrics, name) for name in (
+                "malformed", "ack_errors", "transport_errors", "ble_errors",
+                "cleanup_errors", "identity_mismatches", "source_stats_errors",
+                "disconnects")}
+            errors.update(gaps=bridge.tracker.gaps, duplicates=bridge.tracker.duplicates,
+                          out_of_order=bridge.tracker.out_of_order,
+                          new_boots=bridge.tracker.new_boots)
+            devices[str(device)] = {
+                "connected": active[device].is_set(),
+                "transport": bridge.writer is not None,
+                "mtu": bridge.negotiated_mtu,
+                "rate_hz": bridge.source_rate_confirmed,
+                "gated": start.gated if start is not None else None,
+                "boot_id": start.boot_id if start is not None else None,
+                "first_seq": start.next_seq if start is not None else None,
+                "last_seq": audit.last_received_seq if audit is not None else None,
+                "received": bridge.callback_received,
+                "processed": metrics.received,
+                "sent": metrics.sent,
+                "acked": metrics.acked,
+                "duplicate_acks": metrics.duplicate_acks,
+                "queue": bridge.inbox.size,
+                "dropped": {
+                    "queue": bridge.inbox.dropped,
+                    "stale": metrics.stale_dropped,
+                    "generation": bridge.inbox.generation_dropped + metrics.generation_dropped,
+                    "ambiguous": metrics.ambiguous_dropped,
+                },
+                "errors": errors,
+                "ble_connections": metrics.ble_connections,
+                "transport_connections": metrics.transport_connections,
+                "commands": bridge.commands.summary() if bridge.commands is not None else None,
+            }
+        return {"phase": self.phase, "elapsed_seconds": elapsed, "devices": devices}
 
 
 def board_coverage(item, expected_samples, freshness, expected_rate):
@@ -461,11 +560,15 @@ def _parser():
     parser.add_argument("--file-device", type=int, choices=(1, 2), default=1)
     parser.add_argument("--rate", type=_source_rate, help="set actual source rate on BOTH ESPs, 1..200 Hz")
     parser.add_argument("--seed", type=int, help="reproducible laptop fixture choice for tests")
-    parser.add_argument("--evidence", type=Path, help="new JSONL path; matching .log is also written")
+    parser.add_argument("--evidence", type=Path,
+                        help="new JSONL path; matching .log is also written unless --supervised")
     parser.add_argument("--console-sample", type=int, default=10)
     parser.add_argument("--mock", action="store_true",
                         help="explicit two-device synthetic input, not BLE evidence")
     parser.add_argument("--diagnostic-unprotected", action="store_true")
+    parser.add_argument("--supervised", action="store_true",
+                        help="for demo.py start: JSON lines on stdout (evidence, status, log, "
+                             "finished), stop/command lines on stdin, no stderr output")
     return parser
 
 
@@ -489,6 +592,8 @@ def main():
         parser.error("--console-sample must be positive")
     if args.keyboard and not sys.stdin.isatty():
         parser.error("--keyboard requires an interactive terminal")
+    if args.keyboard and args.supervised:
+        parser.error("--supervised takes commands on stdin; do not combine it with --keyboard")
     file_data = None
     if args.file is not None:
         try:
@@ -529,8 +634,19 @@ def main():
                 else type(exc).__name__
             print(f"report reservation failed: {detail}", file=sys.stderr)
             return 2
-    logging.basicConfig(level=logging.INFO)
-    evidence = PacketEvidence(args.evidence, sample_every=args.console_sample)
+    if args.supervised:
+        # Only the evidence writer thread writes stdout; logging goes there too.
+        evidence = PacketEvidence(args.evidence, stream=sys.stdout,
+                                  stream_all=True, text_log=False)
+        root = logging.getLogger()
+        for handler in list(root.handlers):
+            root.removeHandler(handler)
+        root.addHandler(_NoticeLogHandler(evidence))
+        root.setLevel(logging.INFO)
+    else:
+        logging.basicConfig(level=logging.INFO)
+        evidence = PacketEvidence(args.evidence, sample_every=args.console_sample)
+    duals = []
 
     def bridge(device_id, address):
         return Bridge(BridgeConfig(
@@ -548,14 +664,36 @@ def main():
             expected_rate=args.rate if args.rate is not None else args.expected_rate,
             startup_timeout=args.startup_timeout,
             drain_timeout=args.drain_timeout)
+        duals.append(dual)
+        if not args.supervised:
+            return await dual.run(
+                duration=args.duration, mock=args.mock, mock_rate=args.expected_rate,
+                progress_interval=args.progress_interval,
+                progress_callback=_write_progress, keyboard=args.keyboard,
+                file_data=file_data, file_device=args.file_device)
+        control = _SupervisedControl(asyncio.get_running_loop(), dual, sys.stdin)
+        # The handlers stay installed until the process exits: the default
+        # Ctrl+Break action would end it while report.json is still being
+        # finalized. A late request finds the loop closed and does nothing.
+        control.start()
+        # No stderr progress lines: they would be written on the loop thread.
         return await dual.run(
             duration=args.duration, mock=args.mock, mock_rate=args.expected_rate,
             progress_interval=args.progress_interval,
-            progress_callback=_write_progress, keyboard=args.keyboard,
-            file_data=file_data, file_device=args.file_device)
+            progress_callback=None, keyboard=args.keyboard,
+            file_data=file_data, file_device=args.file_device,
+            stop_event=control.stop_event,
+            status_callback=lambda status: evidence.notify("status", **status))
 
     try:
         report = _run_with_bounded_loop(run())
+    except BaseException as exc:
+        if args.supervised:
+            # The stream still ends with finished; the traceback goes to
+            # stderr and the interpreter exits with status 1.
+            LOG.error("capture failed: %s", type(exc).__name__)
+            evidence.finish(clean=False, report_saved=False, exit_code=1)
+        raise
     finally:
         evidence.close()
     report["evidence"] = evidence.summary()
@@ -563,7 +701,8 @@ def main():
         report["clean"] = False
     report["run"] = dict(
         run_metadata,
-        finished_at_utc=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"))
+        finished_at_utc=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        stop=duals[0].stop_reason if duals else "duration")
     report_error = False
     if reservation is not None:
         report["report_saved"] = True
@@ -575,10 +714,141 @@ def main():
             report["clean"] = False
             report["report_saved"] = False
             report["report_error"] = type(exc).__name__
-            print(f"report write failed: {type(exc).__name__}", file=sys.stderr)
+            if args.supervised:
+                LOG.error("report write failed: %s", type(exc).__name__)
+            else:
+                print(f"report write failed: {type(exc).__name__}", file=sys.stderr)
+    exit_code = 0 if report["clean"] and not report_error else 1
+    if args.supervised:
+        # The full report is in report.json; the stream ends with one summary.
+        evidence.finish(clean=bool(report["clean"]),
+                        report_saved=bool(report.get("report_saved", False)),
+                        exit_code=exit_code)
+        return exit_code
     serialized = json.dumps(report, sort_keys=True) + "\n"
     print(serialized, end="")
-    return 0 if report["clean"] and not report_error else 1
+    return exit_code
+
+
+class _NoticeLogHandler(logging.Handler):
+    """Forward supervised log records to the evidence stream, never to stderr."""
+
+    def __init__(self, evidence):
+        super().__init__(logging.INFO)
+        self.evidence = evidence
+        self.setFormatter(logging.Formatter("%(message)s"))
+
+    def emit(self, record):
+        try:
+            self.evidence.notify("log", level=record.levelname, logger=record.name,
+                                 message=self.format(record))
+        except Exception:
+            # A log line must never disturb the capture, and stderr is unread.
+            pass
+
+
+class _SupervisedControl:
+    """Stop and command requests for a supervised capture.
+
+    A daemon thread reads stdin lines: "stop" or end of input requests a
+    graceful stop; "command 1" / "command 2" submit a command on that glove's
+    control path while the observation runs. Ctrl+Break (SIGBREAK) and SIGINT
+    also request a graceful stop. Every request reaches the loop through
+    call_soon_threadsafe; nothing here blocks the loop.
+    """
+
+    _MAX_LINE = 4096
+
+    def __init__(self, loop, dual, stream=None):
+        # stream None: no control lines (signals only).
+        self.loop = loop
+        self.dual = dual
+        self.stream = stream
+        self.stop_event = asyncio.Event()
+        self._previous = {}
+        self._ignored = False
+
+    def start(self):
+        if threading.current_thread() is threading.main_thread():
+            for name in ("SIGINT", "SIGBREAK"):
+                number = getattr(signal, name, None)
+                if number is None:
+                    continue
+                try:
+                    previous = signal.signal(number, self._signal)
+                except (OSError, RuntimeError, ValueError):
+                    continue
+                self._previous[number] = signal.SIG_DFL if previous is None else previous
+        if self.stream is not None:
+            threading.Thread(target=self._read, name="supervised-control", daemon=True).start()
+
+    def restore_signals(self):
+        for number, previous in self._previous.items():
+            try:
+                signal.signal(number, previous)
+            except (OSError, RuntimeError, TypeError, ValueError):
+                pass
+        self._previous.clear()
+
+    def _signal(self, _number, _frame):
+        self.request_stop()
+
+    def request_stop(self):
+        try:
+            self.loop.call_soon_threadsafe(self.stop_event.set)
+        except RuntimeError:
+            pass  # the loop has closed: the capture already finished
+
+    def _command(self, device):
+        bridge = self.dual.bridges[device]
+        if bridge.commands is None:
+            LOG.warning("command %d ignored: no control connection", device)
+        elif self.dual.phase != "observation":
+            LOG.warning("command %d ignored: the observation is not running", device)
+        else:
+            bridge.submit_command()
+
+    def _line(self, text):
+        if text == "stop":
+            self.request_stop()
+        elif text in ("command 1", "command 2"):
+            try:
+                self.loop.call_soon_threadsafe(self._command, int(text[-1]))
+            except RuntimeError:
+                pass
+        elif text and not self._ignored:
+            self._ignored = True
+            LOG.warning("control input ignored: %r (expected stop, command 1 or command 2)",
+                        text[:40])
+
+    def _read(self):
+        try:
+            try:
+                descriptor = self.stream.fileno()
+            except (AttributeError, OSError, ValueError):
+                descriptor = None
+            if descriptor is None:
+                for line in self.stream:
+                    self._line(line.strip())
+                return
+            # Raw reads: a daemon thread blocked inside sys.stdin's buffered
+            # reader can abort interpreter shutdown.
+            pending = b""
+            while True:
+                chunk = os.read(descriptor, self._MAX_LINE)
+                if not chunk:
+                    break
+                *lines, pending = (pending + chunk).split(b"\n")
+                for line in lines:
+                    self._line(line.decode("utf-8", "replace").strip())
+                if len(pending) > self._MAX_LINE:
+                    # No control line is this long: discard it as unrecognised.
+                    pending = b""
+                    self._line("<too long>")
+        except (OSError, ValueError):
+            pass
+        finally:
+            self.request_stop()
 
 
 def _write_progress(phase, mode, snapshots):

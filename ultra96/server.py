@@ -24,6 +24,7 @@ from common.tls import server_context
 from common.wire import ProtocolError, STREAM_LIMIT, read_frame, write_frame
 from common.sensor import VERSION
 from ultra96.model import DummyModel, ModelPort, ModelStartError, load_model
+from ultra96.monitor import ServiceMonitor
 from ultra96.protocol import (DUMMY_GESTURES, result_identity, trace_fields, validate_message,
                               validate_session)
 
@@ -57,7 +58,7 @@ async def _close_writer(writer):
 
 class ResultQueue:
     """Live-only bounded queue with monotonic age, shared by one subscriber."""
-    def __init__(self, *, observer=None, subscriber_id=None):
+    def __init__(self, *, observer=None, subscriber_id=None, monitor=None):
         self._queue = asyncio.Queue(maxsize=32)
         self.dropped = 0
         self.stale = 0
@@ -65,6 +66,12 @@ class ResultQueue:
         self.observer_errors = 0
         self.subscriber_id = subscriber_id
         self.retirement_reason = None
+        self.monitor = monitor
+
+    def count(self, fate, message):
+        """Per-glove sent/unsent for the board monitor, with or without an observer."""
+        if self.monitor is not None:
+            self.monitor.count(message.get("device_id"), fate)
 
     def observe(self, event, message, received_at=None, **fields):
         if self.observer is None:
@@ -83,6 +90,7 @@ class ResultQueue:
         if self._queue.full():
             old_at, old = self._queue.get_nowait()
             self.dropped += 1
+            self.count("unsent", old)
             self.observe("result_drop_oldest", old, old_at)
         received_at = time.monotonic() if received_at is None else received_at
         self._queue.put_nowait((received_at, message))
@@ -98,6 +106,7 @@ class ResultQueue:
             current = time.monotonic() if now is None else now
             if current - received_at >= 2.0:
                 self.stale += 1
+                self.count("unsent", message)
                 self.observe("result_drop_stale", message, received_at, reason="dequeue")
                 continue
             return received_at, message
@@ -106,6 +115,7 @@ class ResultQueue:
         """Account unsent queued IDs after the sender has relinquished ownership."""
         while not self._queue.empty():
             received_at, message = self._queue.get_nowait()
+            self.count("unsent", message)
             self.observe("result_abandoned", message, received_at, reason=reason)
 
 
@@ -133,6 +143,8 @@ class CommsServer:
         self._waiting_ingest = {}
         self._subscriber = None
         self.observer = observer
+        # Always-on per-glove counters for the read-only board monitor (ultra96.monitor).
+        self.monitor = ServiceMonitor()
         self._subscriber_generation = 0
         # Stream high-water marks are never evicted: an old identity cannot reach
         # the model again after leaving the bounded fingerprint cache. Command IDs
@@ -173,6 +185,7 @@ class CommsServer:
     async def start(self):
         if self._listeners or self._closing:
             raise RuntimeError("server is already started or closed")
+        self.monitor.started = time.monotonic()
         # The model is ready before any listener can deliver a sample.
         self.model_start_seconds = self.model.start(asyncio.get_running_loop())
         try:
@@ -314,16 +327,15 @@ class CommsServer:
             finally:
                 self._waiting_ingest.pop(task, None)
             message = validate_message(frame, "SENSOR_BATCH", self.session_id)
-            trace = (message["device_id"], message["boot_id"], message["seq"])
             duplicate = self._duplicate(message)
             if duplicate:
                 self.metrics["duplicates"] += 1
+                self.monitor.count(message["device_id"], "duplicates")
                 self._observe("result_duplicate", **trace_fields(message))
             else:
                 self.metrics["accepted"] += 1
+                self.monitor.count(message["device_id"], "accepted")
                 self._observe("result_accepted", **trace_fields(message))
-                LOG.info("accepted session=%s device=%d boot=%d seq=%d",
-                         self.session_id, *trace)
                 if message["request_id"] is None:
                     # Runs before the ACK is written; the model must return immediately.
                     self.model.on_sample(message["device_id"], message["boot_id"], message["seq"],
@@ -333,6 +345,7 @@ class CommsServer:
                     result = dict(v=VERSION, type="GESTURE_RESULT", **trace_fields(message))
                     result.update(result_id=result_identity(message),
                                   gesture=self._rng.choice(DUMMY_GESTURES), confidence=1.0)
+                    self.monitor.published(result)
                     self._publish(result)
             ack = dict(v=message["v"], type="INGEST_ACK", **trace_fields(message))
             ack["status"] = "duplicate" if duplicate else "accepted"
@@ -341,6 +354,7 @@ class CommsServer:
     def _publish(self, result):
         if self._subscriber is None:
             self.metrics["disconnected_results"] += 1
+            self.monitor.count(result["device_id"], "unsent")
             self._observe("result_no_subscriber", **trace_fields(result))
         else:
             self._subscriber[1].put(result)
@@ -352,12 +366,14 @@ class CommsServer:
         high_water = self._high_water.get((device_id, boot_id))
         if high_water is None or seq > high_water:
             self.metrics["model_results_rejected"] += 1
+            self.monitor.refused(device_id, boot_id, seq, "unknown_identity")
             self._observe("model_result_refused", reason="unknown_identity", **identity)
             self.model.warn("identity", "model result names a sample this service has not accepted")
             return
         result_id = "{}:{}:{}".format(device_id, boot_id, seq)
         if result_id in self._emitted:
             self.metrics["model_results_duplicate"] += 1
+            self.monitor.refused(device_id, boot_id, seq, "duplicate")
             self._observe("model_result_refused", reason="duplicate", **identity)
             self.model.warn("duplicate", "model emitted a second result for one sample")
             return
@@ -368,6 +384,7 @@ class CommsServer:
                       confidence=confidence, **identity)
         validate_message(result, "GESTURE_RESULT", self.session_id)
         self.metrics["model_results"] += 1
+        self.monitor.published(result)
         self._observe("model_result", **identity)
         self._publish(result)
 
@@ -404,10 +421,16 @@ class CommsServer:
         return False
 
     async def _gateway(self, reader, writer):
-        validate_message(await read_frame(reader), "SUBSCRIBE", self.session_id)
+        frame = await read_frame(reader)
+        if isinstance(frame, dict) and frame.get("type") == "MONITOR":
+            # A read-only board monitor: it never claims or replaces the subscriber.
+            validate_message(frame, "MONITOR", self.session_id)
+            await self.monitor.serve(reader, writer, self.session_id, self._monitor_status)
+            return
+        validate_message(frame, "SUBSCRIBE", self.session_id)
         self._subscriber_generation += 1
         queue = ResultQueue(observer=self._observe if self.observer is not None else None,
-                            subscriber_id=self._subscriber_generation)
+                            subscriber_id=self._subscriber_generation, monitor=self.monitor)
         owner = (writer, queue)
         previous = self._subscriber
         self._subscriber = owner
@@ -418,6 +441,7 @@ class CommsServer:
         try:
             self._observe("subscriber_claimed", session_id=self.session_id,
                           subscriber_id=queue.subscriber_id)
+            self.monitor.subscriber("claimed", queue.subscriber_id)
             if previous is not None:
                 self.metrics["replaced"] += 1
                 previous[1].retirement_reason = "replaced"
@@ -457,8 +481,16 @@ class CommsServer:
                 queue.retire(reason)
                 self.metrics["result_drops"] += queue.dropped
                 self.metrics["result_stale"] += queue.stale
+                self.monitor.subscriber("ended", queue.subscriber_id, reason)
                 self._observe("subscriber_ended", session_id=self.session_id,
                               subscriber_id=queue.subscriber_id, reason=reason, **error_fields)
+
+    def _monitor_status(self):
+        """Service-wide fields of a board monitor update, read by the monitor's own task."""
+        subscriber = None if self._subscriber is None else self._subscriber[1].subscriber_id
+        return dict(model=self.model.name, subscriber=subscriber,
+                    identities=len(self._high_water), identity_limit=self._max_namespaces,
+                    metrics=self.metrics)
 
     async def _send_results(self, writer, queue):
         while True:
@@ -466,6 +498,7 @@ class CommsServer:
             remaining = 2.0 - (time.monotonic() - received_at)
             if remaining <= 0:
                 queue.stale += 1
+                queue.count("unsent", result)
                 queue.observe("result_drop_stale", result, received_at, reason="before_write")
                 continue
             # A drain deadline bounds our own backlog. Bytes already handed to
@@ -474,12 +507,15 @@ class CommsServer:
             try:
                 await write_frame(writer, result, timeout=remaining)
             except asyncio.CancelledError:
+                queue.count("unsent", result)
                 queue.observe("result_send_cancelled", result, received_at, ambiguous=True)
                 raise
             except Exception as exc:
+                queue.count("unsent", result)
                 queue.observe("result_send_failed", result, received_at,
                               ambiguous=True, error_type=type(exc).__name__)
                 raise
+            queue.count("sent", result)
             queue.observe("result_write_complete", result, received_at,
                           phone_receipt_confirmed=False)
 
