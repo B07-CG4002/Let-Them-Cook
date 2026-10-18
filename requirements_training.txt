@@ -1,0 +1,6 @@
+# Use the working laptop virtual environment first; these are direct dependencies.
+# Freeze exact working versions after successful testing.
+numpy
+pandas
+scikit-learn
+torch

@@ -1,57 +1,16 @@
+"""Check architecture shapes; optionally load a trained eight-class checkpoint."""
+import argparse
 import torch
-import torch.nn as nn
-
-class GestureCNN(nn.Module):
-    def __init__(self, num_classes=6, num_features=22):
-        super().__init__()
-
-        self.features = nn.Sequential(
-            nn.Conv1d(in_channels=num_features, out_channels=32, kernel_size=3),
-            nn.ReLU(),
-            nn.MaxPool1d(kernel_size=2),
-
-            nn.Conv1d(in_channels=32, out_channels=64, kernel_size=3),
-            nn.ReLU(),
-            nn.MaxPool1d(kernel_size=2)
-        )
-
-        self.classifier = nn.Sequential(
-            nn.Flatten(),
-            nn.LazyLinear(64),
-            nn.ReLU(),
-            nn.Linear(64, num_classes)
-        )
-
-    def forward(self, x):
-        x = self.features(x)
-        return self.classifier(x)
-
-
-model = GestureCNN()
-
-# PyTorch Conv1D input format:
-# batch size × features × samples
-test_input = torch.randn(1, 22, 50)
-
-class_names = [
-    "PICKUPHOLD",
-    "PLACEDOWN",
-    "CHOP",
-    "WASH",
-    "THROW",
-    "FIREEXT",
-]
-
+from src.model import GestureCNN
+from src.inference import Predictor
+p=argparse.ArgumentParser(); p.add_argument('--run-dir'); a=p.parse_args()
+model=Predictor(a.run_dir).model if a.run_dir else GestureCNN(num_classes=8,num_features=22)
 model.eval()
-
 with torch.no_grad():
-    output = model(test_input)
-    probabilities = torch.softmax(output, dim=1)
-    predicted_class = torch.argmax(probabilities, dim=1).item()
-    confidence = probabilities[0, predicted_class].item()
-
-print("Input shape:", test_input.shape)
-print("Output shape:", output.shape)
-print("Output:", output)
-print("Predicted gesture:", class_names[predicted_class])
-print("Confidence:", confidence)
+    x=torch.zeros(1,22,50)
+    print('Input:',tuple(x.shape))
+    for layer in model.features:
+        x=layer(x); print(type(layer).__name__,tuple(x.shape))
+    for layer in model.classifier:
+        x=layer(x); print(type(layer).__name__,tuple(x.shape))
+print('Loaded trained weights' if a.run_dir else 'Shape check only: randomly initialized, not a prediction demo')
