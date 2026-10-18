@@ -1,134 +1,41 @@
+"""Evaluate the saved test split, or a separate explicitly supplied holdout dataset."""
+import hashlib
+import argparse
 import json
 from pathlib import Path
-
 import numpy as np
-import torch
-from sklearn.metrics import (
-    accuracy_score,
-    classification_report,
-    confusion_matrix,
-)
-from torch.utils.data import DataLoader, TensorDataset
-from sklearn.model_selection import train_test_split
-
-from src.model import GestureCNN
-
+import pandas as pd
+from sklearn.metrics import accuracy_score,classification_report,confusion_matrix
+from src.ai_common import CLASS_NAMES,read_config
+from src.inference import Predictor
 
 def main():
-    class_names_path = Path("models/class_names.json")
-    model_path = Path("models/gesture_cnn.pth")
-    features_path = Path("data/real_processed/X.npy")
-    labels_path = Path("data/real_processed/y.npy")
-
-    required_files = {
-        "class names": class_names_path,
-        "model weights": model_path,
-        "feature data": features_path,
-        "label data": labels_path,
-    }
-
-    for description, path in required_files.items():
-        if not path.exists():
-            raise SystemExit(
-                f"Missing {description} file: {path}. "
-                "Run the required preparation or training script first."
-            )
-
-    with open(class_names_path, "r") as file:
-        class_names = json.load(file)
-
-    X = np.load(features_path)
-    y = np.load(labels_path)
-
-    # Convert from:
-    # (number of windows, 50 samples, 22 features)
-    # to:
-    # (number of windows, 22 features, 50 samples)
-    X = torch.tensor(X, dtype=torch.float32).permute(0, 2, 1)
-    y = torch.tensor(y, dtype=torch.long)
-
-    indices = np.arange(len(y))
-
-    _, test_indices = train_test_split(
-        indices,
-        test_size=0.2,
-        random_state=42,
-        stratify=y.numpy(),
-    )
-
-    test_indices = torch.tensor(test_indices, dtype=torch.long)
-
-    test_dataset = TensorDataset(
-        X[test_indices],
-        y[test_indices],
-    )
-
-    test_loader = DataLoader(
-        test_dataset,
-        batch_size=32,
-        shuffle=False,
-    )
-
-    model = GestureCNN(
-        num_classes=len(class_names),
-        num_features=X.shape[1],
-    )
-
-    # Initialise LazyLinear before loading the trained weights
-    with torch.no_grad():
-        model(torch.randn(1, X.shape[1], X.shape[2]))
-
-    try:
-        state_dict = torch.load(
-            model_path,
-            map_location="cpu",
-            weights_only=True,
-        )
-    except TypeError:
-        # Compatibility fallback for older PyTorch versions
-        state_dict = torch.load(
-            model_path,
-            map_location="cpu",
-        )
-
-    model.load_state_dict(state_dict)
-    model.eval()
-
-    true_labels = []
-    predicted_labels = []
-
-    with torch.no_grad():
-        for inputs, labels in test_loader:
-            outputs = model(inputs)
-            predictions = torch.argmax(outputs, dim=1)
-
-            true_labels.extend(labels.numpy())
-            predicted_labels.extend(predictions.numpy())
-
-    accuracy = accuracy_score(true_labels, predicted_labels)
-
-    print(f"Test accuracy: {accuracy:.2%}")
-
-    print("\nClassification report:")
-    print(
-        classification_report(
-            true_labels,
-            predicted_labels,
-            labels=range(len(class_names)),
-            target_names=class_names,
-            zero_division=0,
-        )
-    )
-
-    print("Confusion matrix:")
-    print(
-        confusion_matrix(
-            true_labels,
-            predicted_labels,
-            labels=range(len(class_names)),
-        )
-    )
-
-
-if __name__ == "__main__":
-    main()
+    p=argparse.ArgumentParser(description=__doc__); p.add_argument('--run-dir',required=True)
+    p.add_argument('--holdout-dir'); p.add_argument('--output',required=True); a=p.parse_args()
+    run=Path(a.run_dir); output=Path(a.output)
+    if output.exists(): raise FileExistsError(output)
+    training=json.loads((run/'training.json').read_text())
+    data=Path(a.holdout_dir or training['data_dir']); read_config(data)
+    X=np.load(data/'X.npy'); y=np.load(data/'y.npy'); meta=pd.read_csv(data/'metadata.csv')
+    if a.holdout_dir:
+        saved=pd.read_csv(run/'split_manifest.csv')
+        old=set(zip(saved.person,saved.gesture,saved.trial)); new=set(zip(meta.person,meta.gesture,meta.trial))
+        if old & new: raise ValueError('Holdout shares recording identities with development dataset')
+        ids=np.arange(len(y))
+    else:
+        for name,digest in training['dataset_sha256'].items():
+            if hashlib.sha256((data/name).read_bytes()).hexdigest()!=digest: raise ValueError('Dataset changed since training')
+        saved=pd.read_csv(run/'split_manifest.csv')
+        if len(saved)!=len(meta) or not saved[['person','gesture','trial','source']].equals(meta[['person','gesture','trial','source']]):
+            raise ValueError('Dataset ordering/content identity no longer matches training manifest')
+        with np.load(run/'splits.npz') as z: ids=z['test']
+    predictor=Predictor(run); logits=predictor.logits(X[ids]); pred=logits.argmax(1)
+    report=dict(kind='extra_holdout' if a.holdout_dir else 'saved_test_split',samples=len(ids),
+        accuracy=float(accuracy_score(y[ids],pred)),class_names=CLASS_NAMES,
+        confusion_matrix=confusion_matrix(y[ids],pred,labels=range(8)).tolist(),
+        classification_report=classification_report(y[ids],pred,labels=range(8),target_names=CLASS_NAMES,zero_division=0,output_dict=True))
+    output.parent.mkdir(parents=True,exist_ok=True); output.write_text(json.dumps(report,indent=2),encoding='utf-8')
+    print(classification_report(y[ids],pred,labels=range(8),target_names=CLASS_NAMES,zero_division=0))
+    print('Rows=true, columns=predicted:',CLASS_NAMES); print(np.array(report['confusion_matrix']))
+    print('Accuracy:',f"{report['accuracy']:.2%}",'Saved',output)
+if __name__=='__main__': main()

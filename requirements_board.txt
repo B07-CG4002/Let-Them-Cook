@@ -1,0 +1,4 @@
+# CPU NumPy backend and socket worker:
+numpy
+# FPGA mode additionally uses the board's EXISTING working PYNQ installation.
+# Do not pip-install a new PYNQ or replace the board's system packages blindly.
