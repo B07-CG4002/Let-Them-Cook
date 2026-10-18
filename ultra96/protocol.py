@@ -10,6 +10,10 @@ from common.wire import ProtocolError
 DUMMY_GESTURES = ("REST", "FIST", "OPEN", "POINT")
 MAX_GESTURE_LENGTH = 32
 GESTURE_PATTERN = re.compile(r"[A-Za-z0-9_-]{1,%d}" % MAX_GESTURE_LENGTH)
+# Read-only board monitor on the gateway port: one update every MONITOR_INTERVAL
+# seconds, each carrying at most MAX_MONITOR_EVENTS recent events.
+MONITOR_INTERVAL = 0.25
+MAX_MONITOR_EVENTS = 100
 _BASE = {"v", "type", "session_id"}
 _TRACE = {"device_id", "boot_id", "seq", "request_id"}
 _FIELDS = {
@@ -18,10 +22,19 @@ _FIELDS = {
     "SUBSCRIBE": _BASE,
     "SUBSCRIBED": _BASE,
     "GESTURE_RESULT": _BASE | _TRACE | {"result_id", "gesture", "confidence"},
+    "MONITOR": _BASE,
+    "MONITORING": _BASE,
+    "MONITOR_UPDATE": _BASE | {"update", "uptime_seconds", "model", "subscriber", "identities",
+                               "identity_limit", "devices", "service", "events", "events_dropped"},
 }
-# Subscription envelopes never changed and stay at version 1.
+# Subscription and monitor envelopes stay at version 1.
 _VERSIONS = {"SENSOR_BATCH": VERSION, "INGEST_ACK": VERSION, "GESTURE_RESULT": VERSION,
-             "SUBSCRIBE": 1, "SUBSCRIBED": 1}
+             "SUBSCRIBE": 1, "SUBSCRIBED": 1, "MONITOR": 1, "MONITORING": 1, "MONITOR_UPDATE": 1}
+_MONITOR_DEVICE = {"accepted", "duplicates", "results", "commands", "refused", "sent", "unsent"}
+_MONITOR_SERVICE = {"rejected", "client_limit", "idle_evicted", "subscribers", "replaced",
+                    "model_samples", "model_errors", "model_slow_calls", "model_results_late"}
+_MONITOR_REFUSALS = ("unknown_identity", "duplicate")
+_TOKEN = re.compile(r"[A-Za-z][A-Za-z0-9_.-]{0,63}")
 
 
 def _integer(value, low, high):
@@ -40,6 +53,69 @@ def valid_confidence(value):
     return type(value) is float and math.isfinite(value) and 0 <= value <= 1
 
 
+def _count(value, low=0):
+    return type(value) is int and value >= low
+
+
+def _seconds(value):
+    """A finite JSON number (not a boolean) of at least zero."""
+    if type(value) is int:
+        return value >= 0
+    return type(value) is float and math.isfinite(value) and value >= 0
+
+
+def _monitor_event(event):
+    """One event array of a MONITOR_UPDATE; its last item is the uptime t."""
+    if not isinstance(event, list) or not event or not _seconds(event[-1]):
+        return False
+    kind = event[0]
+    if kind in ("result", "command", "refused"):
+        if (len(event) != (6 if kind == "refused" else 7) or not _integer(event[1], 1, 2)
+                or not _integer(event[2], 0, 0xFFFFFFFF) or not _integer(event[3], 0, 0xFFFFFFFF)):
+            return False
+        if kind == "refused":
+            return event[4] in _MONITOR_REFUSALS
+        return valid_gesture(event[4]) and valid_confidence(event[5])
+    if kind == "subscriber" and len(event) == 5 and _count(event[2], 1):
+        if event[1] == "claimed":
+            return event[3] is None
+        return (event[1] == "ended" and isinstance(event[3], str)
+                and _TOKEN.fullmatch(event[3]) is not None)
+    return False
+
+
+def _monitor_update(message):
+    for field in ("update", "identities", "events_dropped"):
+        if not _count(message[field]):
+            raise ProtocolError("invalid monitor " + field)
+    if not _count(message["identity_limit"], 1):
+        raise ProtocolError("invalid monitor identity_limit")
+    if not _seconds(message["uptime_seconds"]):
+        raise ProtocolError("invalid monitor uptime_seconds")
+    model = message["model"]
+    if not isinstance(model, str) or not 1 <= len(model) <= 128 or not model.isprintable():
+        raise ProtocolError("monitor model must be 1..128 printable characters")
+    if message["subscriber"] is not None and not _count(message["subscriber"], 1):
+        raise ProtocolError("invalid monitor subscriber")
+    devices = message["devices"]
+    if not isinstance(devices, dict) or set(devices) != {"1", "2"}:
+        raise ProtocolError("monitor devices must be exactly \"1\" and \"2\"")
+    for counters in devices.values():
+        if (not isinstance(counters, dict) or set(counters) != _MONITOR_DEVICE
+                or any(not _count(value) for value in counters.values())):
+            raise ProtocolError("invalid monitor device counters")
+    service = message["service"]
+    if (not isinstance(service, dict) or set(service) != _MONITOR_SERVICE | {"model_max_call_ms"}
+            or any(not _count(service[key]) for key in _MONITOR_SERVICE)
+            or not _seconds(service["model_max_call_ms"])):
+        raise ProtocolError("invalid monitor service counters")
+    events = message["events"]
+    if not isinstance(events, list) or len(events) > MAX_MONITOR_EVENTS:
+        raise ProtocolError("monitor events must be a list of at most {}".format(MAX_MONITOR_EVENTS))
+    if any(not _monitor_event(event) for event in events):
+        raise ProtocolError("invalid monitor event")
+
+
 def validate_session(session_id):
     if (not isinstance(session_id, str) or not 1 <= len(session_id) <= 128
             or any(ord(character) < 32 or 0xD800 <= ord(character) <= 0xDFFF
@@ -49,7 +125,7 @@ def validate_session(session_id):
 
 
 def validate_message(message, expected_type=None, session_id=None):
-    """Validate one protocol-version-3 message (subscription envelopes are version 1).
+    """Validate one protocol-version-3 message (subscription and monitor envelopes are version 1).
 
     request_id is always present in data messages: null for samples and model
     results, uint32 equal to seq for commands.
@@ -97,6 +173,8 @@ def validate_message(message, expected_type=None, session_id=None):
             raise ProtocolError("gesture must be 1..32 characters from A-Z a-z 0-9 _ -")
         if not valid_confidence(message["confidence"]):
             raise ProtocolError("confidence must be a finite number in [0, 1]")
+    elif kind == "MONITOR_UPDATE":
+        _monitor_update(message)
     return message
 
 

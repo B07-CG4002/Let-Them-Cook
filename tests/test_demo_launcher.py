@@ -165,6 +165,9 @@ def test_run_streams_both_child_streams_and_saves_a_unique_capture(
 def test_run_defaults_build_the_existing_physical_dual_bridge_command(
         tmp_path, dummy_ca, monkeypatch):
     monkeypatch.delenv("LTC_COMMS_SESSION", raising=False)
+    # The built-in default boards, not this machine's .comms-local/boards.json.
+    import tools.demo_boards
+    monkeypatch.setattr(tools.demo_boards, "CONFIG_PATH", tmp_path / "no-boards.json")
     emitted = []
     original_command = demo.capture_command
 
