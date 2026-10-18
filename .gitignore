@@ -59,3 +59,16 @@ dist/
 .pytest_cache/
 .coverage
 htmlcov/
+.pio/
+.week7-local/
+.comms-local/
+ios-visualizer/CommsNative/.build/
+ios-visualizer/CommsNative/.swiftpm/
+ios-visualizer/NativePreview/*.xcodeproj/
+ios-visualizer/NativePreview/Info.plist
+*.pem
+*.key
+*.pfx
+*.p12
+*.mobileprovision
+!ios-visualizer/reference/teammate-localhost-cert.pem

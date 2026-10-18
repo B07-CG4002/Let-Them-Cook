@@ -1,0 +1,84 @@
+name: CommsNativePreview
+options:
+  deploymentTarget:
+    iOS: '15.0'
+packages:
+  CommsNative:
+    path: ../CommsNative
+  SwiftNIO:
+    url: https://github.com/apple/swift-nio.git
+    exactVersion: 2.102.0
+settings:
+  base:
+    SWIFT_VERSION: '5.0'
+    CODE_SIGNING_ALLOWED: NO
+targets:
+  CommsNativePreview:
+    type: application
+    platform: iOS
+    sources: [Sources]
+    dependencies:
+      - package: CommsNative
+        product: CommsNative
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.letthemcook.comms.nativepreview
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: '1,2'
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: Communications Native Preview
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationLandscapeRight]
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+          UISceneConfigurations:
+            UIWindowSceneSessionRoleApplication:
+              - UISceneConfigurationName: Default Configuration
+                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).SceneDelegate
+  CommsNativePreviewUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    dependencies:
+      - target: CommsNativePreview
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.letthemcook.comms.nativepreview.uitests
+        GENERATE_INFOPLIST_FILE: YES
+  CommsNativeTransportTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: ../CommsNative/Tests/CommsTransportTests/LocalPeers.swift
+      - path: ../CommsNative/Tests/CommsTransportTests/TransportTests.swift
+      - path: ../CommsNative/Tests/CommsTransportTests/TrustTests.swift
+      - path: ../../.comms-local/CommsFixturePKI
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - target: CommsNativePreview
+      - package: SwiftNIO
+        product: NIOEmbedded
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.letthemcook.comms.nativepreview.transporttests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/CommsNativePreview.app/CommsNativePreview
+        BUNDLE_LOADER: $(TEST_HOST)
+schemes:
+  CommsNativePreview:
+    build:
+      targets:
+        CommsNativePreview: all
+    test:
+      targets: [CommsNativePreviewUITests]
+  CommsNativeTransport:
+    build:
+      targets:
+        CommsNativePreview: all
+    test:
+      targets:
+        - name: CommsNativeTransportTests
+          parallelizable: false

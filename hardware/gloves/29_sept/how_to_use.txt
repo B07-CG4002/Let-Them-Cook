@@ -1,0 +1,7 @@
+1. Upload imu_v7.ino on both gloves if not done so.
+	- Left glove: Change BLUETOOTH_DEVICE_NAME to "SENSOR_GLOVE_LEFT".
+	              Change GLOVE_ID to "SENS_GL_LEFT".
+	- Right glove: Change BLUETOOTH_DEVICE_NAME to "SENSOR_GLOVE_RIGHT".
+	               Change GLOVE_ID to "SENS_GL_RIGHT".
+
+2. Open and run imu_recording_terminal_v14.py. It should find the outgoing COM ports used by the bluetooth of both gloves automatically.

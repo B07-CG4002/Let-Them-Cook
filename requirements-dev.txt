@@ -1,0 +1,5 @@
+# Local provisioning and test tools; Ultra96 runtime remains standard-library-only.
+pytest>=8,<10
+cryptography>=42,<51
+pyserial==3.5
+paramiko>=2.8,<4  # tools/deploy_service.py (SSH and SFTP through the jump host)
