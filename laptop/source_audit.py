@@ -18,6 +18,11 @@ SOURCE_STATS_MAGIC = b"LCS3"
 SOURCE_STATS_SIZE = _SOURCE_STATS.size
 # Flag bit 0: the board sends only while its glove module reports movement.
 SOURCE_FLAG_GATED = 0x01
+# Flag bit 1: a sensor notification may carry several packets
+# (common.sensor.split_notification). Set by every board since 2026-10-19; a
+# laptop older than that refuses it here, before subscribing.
+SOURCE_FLAG_BATCHED = 0x02
+_KNOWN_FLAGS = SOURCE_FLAG_GATED | SOURCE_FLAG_BATCHED
 _UINT32_MASK = 0xFFFFFFFF
 _COUNTERS = ("boot_id", "next_seq", "submitted", "failures", "idle", "unread", "refused")
 
@@ -69,7 +74,7 @@ def parse_source_stats(data: bytes, *, expected_device_id: Optional[int] = None)
      idle, unread, refused) = _SOURCE_STATS.unpack(raw)
     if magic != SOURCE_STATS_MAGIC:
         raise ValueError("invalid source statistics magic; flash this board with the current firmware")
-    if flags & ~SOURCE_FLAG_GATED:
+    if flags & ~_KNOWN_FLAGS:
         raise ValueError("source statistics flags contain unknown bits")
     if expected_device_id is not None and device_id != expected_device_id:
         raise ValueError("source statistics device identity mismatch")
@@ -180,7 +185,9 @@ class SourceAudit:
         idle = _delta32(end.idle, start.idle) if same_boot else None
         unread = _delta32(end.unread, start.unread) if same_boot else None
         refused = _delta32(end.refused, start.refused) if same_boot else None
-        # Every send tick while the laptop listened: a packet or a skipped tick.
+        # Every send tick while the laptop listened: a packet or a skipped tick,
+        # less the samples still in the board's send queue when notifications
+        # stopped (at most 32; discarded without a seq, so uncounted).
         ticks = generated + idle + unread + refused if same_boot else None
         latest = end if end is not None else start
         source_consistent = bool(same_boot and generated == submitted + failures)

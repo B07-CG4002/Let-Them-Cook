@@ -13,13 +13,13 @@ from test_video_evidence import capture, packets, sensor, ack
 @pytest.mark.parametrize("mode,seconds,keyboard", [("run", 60, False), ("live", 120, True)])
 def test_short_modes_have_explicit_source_rate_and_preserve_bridge_options(mode, seconds, keyboard):
     args = demo._parser().parse_args([mode])
-    assert (args.duration, args.rate, args.keyboard) == (seconds, 10, keyboard)
+    assert (args.duration, args.rate, args.keyboard) == (seconds, 50, keyboard)
     command = demo.capture_command(args, Path("capture/report.json"))
-    assert command[command.index("--rate") + 1] == "10"
+    assert command[command.index("--rate") + 1] == "50"
     assert ("--keyboard" in command) is keyboard
     assert "--mock" not in command
-    changed = demo._parser().parse_args([mode, "--duration", "90", "--rate", "50"])
-    assert (changed.duration, changed.rate) == (90, 50)
+    changed = demo._parser().parse_args([mode, "--duration", "90", "--rate", "10"])
+    assert (changed.duration, changed.rate) == (90, 10)
 
 
 def test_report_prints_matching_packets_without_input_or_phone_observation_files(tmp_path, monkeypatch, capsys):

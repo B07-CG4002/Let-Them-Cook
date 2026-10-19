@@ -33,6 +33,55 @@ class BridgeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await inbox.get()).payload, payload(4))
         self.assertEqual(inbox.generation_dropped, 2)
 
+    async def test_notification_of_several_packets_becomes_one_item_per_packet(self):
+        class Evidence:
+            def __init__(self):
+                self.records = []
+
+            def record(self, kind, **fields):
+                self.records.append((kind, fields))
+
+        evidence = Evidence()
+        clock = [5.0]
+        bridge = Bridge(BridgeConfig(ca_file="unused", expected_device_id=1),
+                        clock=lambda: clock[0], evidence=evidence)
+        bridge.inbox.activate(1)
+        bridge.begin_observation(4.99)
+        self.assertTrue(bridge.enqueue(1, payload(3) + payload(4)))
+        clock[0] = 5.03
+        self.assertTrue(bridge.enqueue(1, payload(5)))
+        items = [await bridge.inbox.get() for _ in range(3)]
+        self.assertEqual([item.payload for item in items], [payload(3), payload(4), payload(5)])
+        self.assertEqual([item.received_at for item in items], [5.0, 5.0, 5.03])
+        self.assertEqual((bridge.callback_received, bridge.notifications_received,
+                          bridge.observation_received), (3, 2, 3))
+        self.assertAlmostEqual(bridge.observation_max_silence, 0.03)
+        sensors = [fields for kind, fields in evidence.records if kind == "sensor"]
+        self.assertEqual([(f["seq"], f["batch_index"], f["batch_size"], f["raw_hex"])
+                          for f in sensors],
+                         [(3, 0, 2, payload(3).hex()), (4, 1, 2, payload(4).hex()),
+                          (5, 0, 1, payload(5).hex())])
+        self.assertEqual(bridge.summary()["notifications_received"], 2)
+
+    async def test_notification_that_does_not_split_stays_one_malformed_item(self):
+        bridge = Bridge(BridgeConfig(ca_file="unused"), connector=AsyncMock(return_value=(object(), FakeWriter())))
+        bridge.inbox.activate(1)
+        damaged = bytearray(payload(1))
+        damaged[2] = 2
+        for raw in (payload(0) + bytes(damaged), payload(0) + payload(1)[:-1],
+                    b"".join(payload(seq) for seq in range(7))):
+            self.assertTrue(bridge.enqueue(1, raw))
+        self.assertEqual((bridge.callback_received, bridge.notifications_received), (3, 3))
+        bridge._write_frame = AsyncMock()
+        for _ in range(3):
+            await bridge.forward_one()
+        self.assertEqual(bridge.metrics.malformed, 3)
+        self.assertEqual(bridge._write_frame.await_count, 0)
+        # A notification for a generation that is no longer accepted adds nothing.
+        self.assertFalse(bridge.enqueue(2, payload(0) + payload(1)))
+        self.assertEqual(bridge.callback_received, 3)
+        await bridge.close_transport()
+
     async def test_tracker_wrap_duplicate_old_and_new_boot(self):
         tracker = StreamTracker()
         for seq in [0xfffffffe, 0xffffffff, 0, 2, 2, 1]:

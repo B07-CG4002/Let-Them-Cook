@@ -121,17 +121,40 @@ static void testDummyTicks() {
 
   uint8_t output[comms::kSourceStatsSize] = {};
   assert(comms::serializeSourceStats(output, sizeof(output), 1, comms::kGloveGated, stats, counters));
-  assert(output[5] == (comms::kGloveGated ? 0x01 : 0x00));
+  assert(output[5] == (comms::kGloveGated ? 0x03 : 0x02));
+}
+
+static void testBeginRetries() {
+  // begin() is called until it succeeds or the attempts run out; pause() runs
+  // only between two calls and gets the number of the try that failed.
+  for (unsigned maxAttempts = 1; maxAttempts <= 10; ++maxAttempts) {
+    for (unsigned failures = 0; failures <= maxAttempts + 1; ++failures) {
+      unsigned calls = 0, pauses = 0, lastPaused = 0, attempts = 99;
+      const bool ok = comms::beginWithRetries(
+          [&] { return ++calls > failures; },
+          [&](unsigned failed) { ++pauses; assert(failed == calls); lastPaused = failed; },
+          maxAttempts, attempts);
+      const bool expected = failures < maxAttempts;
+      assert(ok == expected);
+      assert(attempts == calls);
+      assert(attempts == (expected ? failures + 1 : maxAttempts));
+      assert(pauses == attempts - 1);
+      assert(lastPaused == (attempts > 1 ? attempts - 1 : 0));
+    }
+  }
 }
 
 int main() {
   testDummyCycle();
   testFixtureRoundTrip();
   testDummyTicks();
+  testBeginRetries();
+  assert(comms::kGloveBeginAttempts == COMMS_GLOVE_BEGIN_ATTEMPTS);
   assert(comms::kGloveExternal == (COMMS_GLOVE_MODULE == 1));
   assert(comms::kGloveGated == (comms::kGloveExternal || comms::kDummyIdleMs > 0));
-  std::printf("PASS glove module=%s gated=%u moving_ms=%lu idle_ms=%lu\n",
+  std::printf("PASS glove module=%s gated=%u moving_ms=%lu idle_ms=%lu begin_attempts=%u retry_ms=%lu\n",
               comms::kGloveModuleName, comms::kGloveGated ? 1u : 0u,
               static_cast<unsigned long>(comms::kDummyMovingMs),
-              static_cast<unsigned long>(comms::kDummyIdleMs));
+              static_cast<unsigned long>(comms::kDummyIdleMs), comms::kGloveBeginAttempts,
+              static_cast<unsigned long>(comms::kGloveBeginRetryMs));
 }

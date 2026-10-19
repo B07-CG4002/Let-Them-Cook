@@ -36,15 +36,24 @@ def test_ungated_snapshot_has_a_clear_flag_and_zero_skip_counters():
     assert (stats.idle, stats.unread, stats.refused) == (0, 0, 0)
 
 
+@pytest.mark.parametrize("flags, gated", [(0x02, False), (0x03, True)])
+def test_snapshot_of_a_batching_board_is_accepted(flags, gated):
+    # Every board since 2026-10-19 sets bit 1: its sensor notifications may
+    # carry several packets. It does not change any counter.
+    stats = parse_source_stats(stats_bytes(flags=flags), expected_device_id=2)
+    assert stats.gated is gated
+    assert (stats.next_seq, stats.submitted, stats.failures) == (3, 3, 0)
+
+
 @pytest.mark.parametrize("raw", [
     stats_bytes(magic=b"BAD!"),
     stats_bytes(magic=b"W7S1"),
     # Reserved bytes 6 and 7 must stay zero.
     b"LCS3" + bytes([2, 0, 1, 0]) + bytes(28),
     b"LCS3" + bytes([2, 0, 0, 1]) + bytes(28),
-    # Only flag bit 0 (gated) is defined.
-    stats_bytes(flags=0x02),
-    stats_bytes(flags=0x81),
+    # Only flag bits 0 (gated) and 1 (several packets per notification) are defined.
+    stats_bytes(flags=0x04),
+    stats_bytes(flags=0x83),
     stats_bytes(flags=0xFF),
     bytes(35),
     stats_bytes() + bytes(1),

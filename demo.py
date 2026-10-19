@@ -86,8 +86,8 @@ def _parser():
         run.add_argument("--output-root", type=Path, default=OUTPUT_ROOT)
         run.add_argument("--keyboard", action="store_true", default=keyboard,
                          help="individual keys 1/2 command the selected ESP")
-        run.add_argument("--rate", type=_source_rate, default=10,
-                         help="set BOTH physical ESP sources to 1..200 Hz; default: 10")
+        run.add_argument("--rate", type=_source_rate, default=50,
+                         help="set BOTH physical ESP sources to 1..200 Hz; default: 50, the gloves' rate")
         run.add_argument("--file", type=Path, help="send a 1..65536 byte file through BLE")
         run.add_argument("--file-device", type=int, choices=(1, 2), default=1)
         run.add_argument("--seed", type=int, help="repeat laptop random fixture selection")
