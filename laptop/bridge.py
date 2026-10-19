@@ -15,8 +15,8 @@ import threading
 import time
 from typing import Any, Optional
 
-from common.sensor import (decode_packet, choose_fixture, SensorPacket, encode_packet, PACKET_SIZE,
-                           SENSOR_MTU_FLOOR)
+from common.sensor import (decode_packet, split_notification, choose_fixture, SensorPacket,
+                           encode_packet, PACKET_SIZE, SENSOR_MTU_FLOOR)
 from common.control import CONTROL_UUID, RESPONSE_UUID
 from common.tls import client_context, TLS_SERVER_NAME
 from common.wire import read_frame, write_frame, ProtocolError
@@ -233,6 +233,7 @@ class Bridge:
         self.max_receive_silence = 0.0
         self._notification_lock = threading.Lock()
         self.callback_received = 0
+        self.notifications_received = 0
         self.last_notification_at = None
         self._observation_active = False
         self.observation_received = 0
@@ -288,30 +289,48 @@ class Bridge:
                     raise
 
     def enqueue(self, generation, data):
+        """One BLE notification: each of its 1 to 6 packets becomes one inbox item.
+
+        The packets share the notification's arrival time. A notification that
+        does not split stays one item, which the writer counts as malformed.
+        callback_received and observation_received count packets; silence is
+        measured between notifications.
+        """
         received_at = self.clock()
-        if not self.inbox.put(generation, data, received_at):
-            return False
         try:
-            packet = decode_packet(data)
-            if (self.config.expected_device_id is None or
-                    packet.device_id == self.config.expected_device_id):
-                self.goodput.record(packet, received_at)
-                self.log("sensor", direction="ESP->laptop", version=packet.version,
-                         boot_id=packet.boot_id, seq=packet.seq, uptime_ms=packet.uptime_ms,
-                         values=list(packet.values), raw_hex=bytes(data).hex(), validation="decoded",
-                         received_monotonic=received_at)
+            pieces = split_notification(data)
         except (ValueError, TypeError):
-            self.log("sensor_invalid", direction="ESP->laptop", raw_hex=bytes(data).hex(),
-                     validation="malformed")
+            pieces = (bytes(data),)
+        accepted = 0
+        for index, piece in enumerate(pieces):
+            if not self.inbox.put(generation, piece, received_at):
+                continue
+            accepted += 1
+            try:
+                packet = decode_packet(piece)
+                if (self.config.expected_device_id is None or
+                        packet.device_id == self.config.expected_device_id):
+                    self.goodput.record(packet, received_at)
+                    self.log("sensor", direction="ESP->laptop", version=packet.version,
+                             boot_id=packet.boot_id, seq=packet.seq, uptime_ms=packet.uptime_ms,
+                             values=list(packet.values), raw_hex=piece.hex(), validation="decoded",
+                             received_monotonic=received_at, batch_index=index,
+                             batch_size=len(pieces))
+            except (ValueError, TypeError):
+                self.log("sensor_invalid", direction="ESP->laptop", raw_hex=piece.hex(),
+                         validation="malformed")
+        if not accepted:
+            return False
         with self._notification_lock:
-            self.callback_received += 1
+            self.callback_received += accepted
+            self.notifications_received += 1
             self.last_notification_at = received_at
             if self._observation_active:
                 self.observation_max_silence = max(
                     self.observation_max_silence,
                     received_at - self._observation_last)
                 self._observation_last = received_at
-                self.observation_received += 1
+                self.observation_received += accepted
         return True
 
     def begin_observation(self, now=None):
@@ -1010,6 +1029,7 @@ class Bridge:
                     last_received_at=self.last_received_at,
                     max_receive_silence=self.max_receive_silence,
                     callback_received=self.callback_received,
+                    notifications_received=self.notifications_received,
                     observation_received=self.observation_received,
                     observation_max_silence=self.observation_max_silence,
                     source_ticking_seconds=(

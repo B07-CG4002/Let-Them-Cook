@@ -26,6 +26,16 @@
 #ifndef COMMS_GLOVE_SEND_ALL
 #define COMMS_GLOVE_SEND_ALL 0
 #endif
+// Boot only: setup() calls gloveBegin() up to COMMS_GLOVE_BEGIN_ATTEMPTS times
+// until it returns true, pausing COMMS_GLOVE_BEGIN_RETRY_MS between tries, so
+// one failed sensor read during start-up does not leave the glove without data
+// until the next power-up. Each try repeats the module's calibration.
+#ifndef COMMS_GLOVE_BEGIN_ATTEMPTS
+#define COMMS_GLOVE_BEGIN_ATTEMPTS 3
+#endif
+#ifndef COMMS_GLOVE_BEGIN_RETRY_MS
+#define COMMS_GLOVE_BEGIN_RETRY_MS 500
+#endif
 
 namespace comms {
 constexpr bool fitsUint32(long long value) { return value >= 0 && value <= 4294967295LL; }
@@ -35,9 +45,15 @@ static_assert(COMMS_GLOVE_MODULE == 0 || COMMS_GLOVE_MODULE == 1,
               "COMMS_GLOVE_MODULE must be 0 (built-in dummy) or 1 (external module)");
 static_assert(comms::fitsUint32(COMMS_DUMMY_MOVING_MS) && comms::fitsUint32(COMMS_DUMMY_IDLE_MS),
               "dummy gate times are uint32 milliseconds");
+static_assert(COMMS_GLOVE_BEGIN_ATTEMPTS >= 1 && COMMS_GLOVE_BEGIN_ATTEMPTS <= 10,
+              "COMMS_GLOVE_BEGIN_ATTEMPTS must be 1 to 10");
+static_assert(COMMS_GLOVE_BEGIN_RETRY_MS >= 0 && COMMS_GLOVE_BEGIN_RETRY_MS <= 10000,
+              "COMMS_GLOVE_BEGIN_RETRY_MS must be 0 to 10000 milliseconds");
 
-// Once in setup(), before BLE starts. May block (about 5 s of calibration,
-// with the glove still). false = no sensor found; the board still advertises.
+// In setup(), before BLE starts, up to COMMS_GLOVE_BEGIN_ATTEMPTS times. May
+// block (about 5 s of calibration, with the glove still). false = no sensor
+// found or a failed read; after the last try the board still advertises.
+// Must be safe to call again after it returned false.
 bool gloveBegin();
 // Every main-loop pass (about every 1 to 2 ms plus this call), outside any
 // lock, whether or not the laptop is connected. A slow call delays the next
@@ -64,5 +80,21 @@ constexpr bool kGloveGated = (COMMS_GLOVE_MODULE == 1 && COMMS_GLOVE_SEND_ALL ==
                               (COMMS_GLOVE_MODULE == 0 && COMMS_DUMMY_IDLE_MS > 0);
 constexpr uint32_t kDummyMovingMs = static_cast<uint32_t>(COMMS_DUMMY_MOVING_MS);
 constexpr uint32_t kDummyIdleMs = static_cast<uint32_t>(COMMS_DUMMY_IDLE_MS);
+constexpr unsigned kGloveBeginAttempts = COMMS_GLOVE_BEGIN_ATTEMPTS;
+constexpr uint32_t kGloveBeginRetryMs = static_cast<uint32_t>(COMMS_GLOVE_BEGIN_RETRY_MS);
+
+// Calls begin() until it returns true or maxAttempts calls have failed, and
+// calls pause(failedAttempt) between two calls. attempts receives the number
+// of begin() calls made.
+template <typename Begin, typename Pause>
+bool beginWithRetries(Begin begin, Pause pause, unsigned maxAttempts, unsigned& attempts) {
+  attempts = 0;
+  while (attempts < maxAttempts) {
+    ++attempts;
+    if (begin()) return true;
+    if (attempts < maxAttempts) pause(attempts);
+  }
+  return false;
+}
 
 }  // namespace comms

@@ -65,6 +65,40 @@ def test_decoder_rejects_truncation_and_trailing_bytes(length):
         decode_packet((raw + bytes(64))[:length])
 
 
+@pytest.mark.parametrize("count", [1, 2, 3, 6])
+def test_notification_splits_into_whole_packets_oldest_first(count):
+    from common.sensor import (MAX_PACKETS_PER_NOTIFICATION, SensorPacket, decode_packet,
+                               encode_packet, split_notification)
+
+    assert MAX_PACKETS_PER_NOTIFICATION == 6
+    packets = [SensorPacket(2, 9, 40 + index, 1000 + 20 * index, tuple(range(index, index + 11)))
+               for index in range(count)]
+    pieces = split_notification(bytearray(b"".join(encode_packet(p) for p in packets)))
+    assert all(type(piece) is bytes and len(piece) == 38 for piece in pieces)
+    assert [decode_packet(piece) for piece in pieces] == packets
+
+
+@pytest.mark.parametrize("length", [0, 1, 37, 39, 75, 77, 7 * 38, 13 * 38])
+def test_notification_of_partial_or_too_many_packets_is_refused(length):
+    from common.sensor import split_notification
+
+    raw = (FIXTURES / "comms-dummy.bin").read_bytes()
+    with pytest.raises(ValueError):
+        split_notification((raw * 13)[:length])
+
+
+def test_one_bad_packet_refuses_the_whole_notification():
+    from common.sensor import split_notification
+
+    raw = (FIXTURES / "comms-dummy.bin").read_bytes()
+    damaged = bytearray(raw)
+    damaged[2] = 2  # version 2 inside an otherwise valid pair
+    with pytest.raises(ValueError):
+        split_notification(raw + bytes(damaged))
+    with pytest.raises(ValueError):
+        split_notification("not bytes")
+
+
 @pytest.mark.parametrize("offset,value", [
     (0, 0), (1, 0), (2, 0), (2, 1), (2, 2), (2, 4), (3, 0), (3, 3), (3, 255),
 ])

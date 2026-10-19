@@ -26,14 +26,17 @@ def _build(compiler, defines, executable):
 
 
 @pytest.mark.parametrize("name,defines,summary", [
-    ("dummy", [], "module=dummy gated=0 moving_ms=3000 idle_ms=0"),
+    ("dummy", [], "module=dummy gated=0 moving_ms=3000 idle_ms=0 begin_attempts=3 retry_ms=500"),
     ("dummy-gated", ["-DCOMMS_DUMMY_IDLE_MS=7000"],
-     "module=dummy gated=1 moving_ms=3000 idle_ms=7000"),
+     "module=dummy gated=1 moving_ms=3000 idle_ms=7000 begin_attempts=3 retry_ms=500"),
     ("dummy-gated-explicit", ["-DCOMMS_DUMMY_MOVING_MS=3000", "-DCOMMS_DUMMY_IDLE_MS=7000"],
-     "module=dummy gated=1 moving_ms=3000 idle_ms=7000"),
+     "module=dummy gated=1 moving_ms=3000 idle_ms=7000 begin_attempts=3 retry_ms=500"),
     ("dummy-moving-only", ["-DCOMMS_DUMMY_MOVING_MS=1500"],
-     "module=dummy gated=0 moving_ms=1500 idle_ms=0"),
-    ("external", ["-DCOMMS_GLOVE_MODULE=1"], "module=external gated=1 moving_ms=3000 idle_ms=0"),
+     "module=dummy gated=0 moving_ms=1500 idle_ms=0 begin_attempts=3 retry_ms=500"),
+    ("external", ["-DCOMMS_GLOVE_MODULE=1"], "module=external gated=1 moving_ms=3000 idle_ms=0 begin_attempts=3 retry_ms=500"),
+    ("external-one-try", ["-DCOMMS_GLOVE_MODULE=1", "-DCOMMS_GLOVE_BEGIN_ATTEMPTS=1",
+                          "-DCOMMS_GLOVE_BEGIN_RETRY_MS=0"],
+     "module=external gated=1 moving_ms=3000 idle_ms=0 begin_attempts=1 retry_ms=0"),
 ])
 def test_dummy_cycle_fixture_round_trip_and_gated_flag(tmp_path, name, defines, summary):
     compiler = _compiler()
@@ -49,6 +52,10 @@ def test_dummy_cycle_fixture_round_trip_and_gated_flag(tmp_path, name, defines, 
     ["-DCOMMS_GLOVE_MODULE=2"],
     ["-DCOMMS_DUMMY_IDLE_MS=-1"],
     ["-DCOMMS_DUMMY_MOVING_MS=4294967296"],
+    ["-DCOMMS_GLOVE_BEGIN_ATTEMPTS=0"],
+    ["-DCOMMS_GLOVE_BEGIN_ATTEMPTS=11"],
+    ["-DCOMMS_GLOVE_BEGIN_RETRY_MS=-1"],
+    ["-DCOMMS_GLOVE_BEGIN_RETRY_MS=10001"],
 ])
 def test_invalid_glove_switches_do_not_compile(tmp_path, defines):
     compiler = _compiler()

@@ -9,7 +9,7 @@ PROG="$(cat "$SRC/remote_program.py")"
 OPTS='{"event_log": true, "model": null, "model_path": null, "session_id": "ltc-comms", "start_timeout": 30}'
 pass=0; fail=0
 check() { if eval "$2"; then echo "PASS: $1"; pass=$((pass+1)); else echo "FAIL: $1"; fail=$((fail+1)); fi; }
-cleanup() { pkill -u "$(id -u)" -f '[u]ltra96.server' 2>/dev/null; pkill -u "$(id -u)" -f '[h]ttp.server 8888' 2>/dev/null; sleep 0.5; }
+cleanup() { pkill -u "$(id -u)" -f '[u]ltra96.server' 2>/dev/null; pkill -u "$(id -u)" -f '[h]ttp.server 8888' 2>/dev/null; pkill -u "$(id -u)" -f '[m]odel_runner_example' 2>/dev/null; sleep 0.5; }
 
 cleanup; rm -rf "$BASE"; mkdir -p "$BASE/tls" "$BASE/evidence"
 cp "$SRC/pki-a/server-cert.pem" "$SRC/pki-a/server-key.pem" "$BASE/tls/"; chmod 600 "$BASE/tls/server-key.pem"
@@ -127,9 +127,87 @@ check "stubborn old service: deployed" '[ $code -eq 0 ] && grep -q "\"status\": 
 check "stubborn old service: stopped with SIGKILL" 'grep -q "\"old_stop\": \"sigkill\"" "$BASE/out6.json"'
 check "stubborn old service: process gone" '! kill -0 "$STUBPID" 2>/dev/null'
 
+# --- 9. the bridge with a model runner (started directly: "sudo": false, so no password prompt) ---
+cleanup
+mkdir -p "$BASE/runner"; cp "$SRC/new/ultra96/model_runner_example.py" "$BASE/runner/"
+runner_opts() {  # $1 script
+  printf '{"event_log": false, "model": "ultra96.model_bridge", "model_path": null, "session_id": "ltc-comms", "start_timeout": 30, "runner": {"script": "%s", "python": "/usr/bin/python3", "args": ["--socket", "%s/model-runner.sock", "--every", "1"], "sudo": false}}' "$1" "$BASE"
+}
+newsrc source-co-v3-T7
+echo "not-a-password" | /usr/bin/python3 -c "$PROG" "$BASE" "$BASE/source-co-v3-T7" T7 "$(runner_opts "$BASE/runner/model_runner_example.py")" > "$BASE/out7.json" 2> "$BASE/err7.txt"; code=$?
+check "runner: deployed, exit 0" '[ $code -eq 0 ] && grep -q "\"status\": \"deployed\"" "$BASE/out7.json"'
+check "runner: running and connected" 'tail -1 "$BASE/out7.json" | grep -q "\"status\": \"running\", \"connected\": true"'
+RUN1=$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pid"])' "$BASE/evidence/model-runner.json")
+check "runner: alive in its own session" 'kill -0 "$RUN1" 2>/dev/null && [ "$(ps -o sid= -p "$RUN1" | tr -d " ")" = "$RUN1" ]'
+check "runner: the password never reached the runner" '! grep -q not-a-password "$BASE/evidence/model-runner-T7.log"'
+(cd "$BASE/source-co-v3-T7" && /usr/bin/python3 - "$SRC/pki-a/ca-cert.pem" > "$BASE/e2e7.txt" 2>&1 <<'PY'
+import asyncio, sys
+from common.tls import client_context, TLS_SERVER_NAME
+from common.wire import read_frame, write_frame
+from common.sensor import SensorPacket, DUMMY_FIXTURES
+from ultra96.protocol import validate_message
+ca = sys.argv[1]
+async def main():
+    pr, pw = await asyncio.open_connection("127.0.0.1", 9999, ssl=client_context(ca), server_hostname=TLS_SERVER_NAME)
+    await write_frame(pw, dict(v=1, type="SUBSCRIBE", session_id="ltc-comms"))
+    validate_message(await read_frame(pr), "SUBSCRIBED", "ltc-comms")
+    ir, iw = await asyncio.open_connection("127.0.0.1", 8888, ssl=client_context(ca), server_hostname=TLS_SERVER_NAME)
+    await write_frame(iw, SensorPacket(1, 5, 0, 0, DUMMY_FIXTURES[0]).to_message("ltc-comms"))
+    validate_message(await read_frame(ir), "INGEST_ACK", "ltc-comms")
+    res = validate_message(await asyncio.wait_for(read_frame(pr), 5), "GESTURE_RESULT", "ltc-comms")
+    print("result", res["result_id"], res["gesture"])
+    print("E2E_OK")
+asyncio.run(main())
+PY
+)
+check "runner: a sample's result comes back through the runner" 'grep -q "result 1:5:0 CHOP" "$BASE/e2e7.txt"'
+
+# --- 10. redeploy with a runner: the previous runner is replaced ---
+newsrc source-co-v3-T8
+echo x | /usr/bin/python3 -c "$PROG" "$BASE" "$BASE/source-co-v3-T8" T8 "$(runner_opts "$BASE/runner/model_runner_example.py")" > "$BASE/out8.json" 2> "$BASE/err8.txt"; code=$?
+RUN2=$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pid"])' "$BASE/evidence/model-runner.json")
+check "runner redeploy: exit 0, previous runner stopped" '[ $code -eq 0 ] && tail -1 "$BASE/out8.json" | grep -q "\"previous\": \"sigterm\""'
+check "runner redeploy: old runner gone, new one alive" '! kill -0 "$RUN1" 2>/dev/null && kill -0 "$RUN2" 2>/dev/null && [ "$RUN1" != "$RUN2" ]'
+
+# --- 11. a runner script that does not exist: the service stays deployed, exit 3 ---
+newsrc source-co-v3-T9
+echo x | /usr/bin/python3 -c "$PROG" "$BASE" "$BASE/source-co-v3-T9" T9 "$(runner_opts "$BASE/runner/missing.py")" > "$BASE/out9.json" 2> "$BASE/err9.txt"; code=$?
+SVC9=$(cat "$BASE/evidence/server.pid")
+check "missing runner: exit 3, service deployed and alive" '[ $code -eq 3 ] && grep -q "\"status\": \"deployed\"" "$BASE/out9.json" && kill -0 "$SVC9" 2>/dev/null'
+check "missing runner: reported as failed" 'tail -1 "$BASE/out9.json" | grep -q "runner script not found"'
+check "missing runner: the previous runner is untouched, alive and named" 'tail -1 "$BASE/out9.json" | grep -q "\"previous\": \"untouched\", \"previous_running\": $RUN2" && kill -0 "$RUN2" 2>/dev/null'
+
+# --- 12. a runner started by hand next to --runner: the new runner is stopped, status conflict ---
+(cd "$BASE/runner" && setsid /usr/bin/python3 model_runner_example.py --socket "$BASE/model-runner.sock" --every 1 > "$BASE/hand-runner.log" 2>&1 < /dev/null &)
+sleep 2
+HAND=$(pgrep -u "$(id -u)" -f '[m]odel_runner_example.py --socket' | while read -r p; do [ "$p" != "$RUN2" ] && echo "$p"; done | head -1)
+newsrc source-co-v3-T10
+echo x | /usr/bin/python3 -c "$PROG" "$BASE" "$BASE/source-co-v3-T10" T10 "$(runner_opts "$BASE/runner/model_runner_example.py")" > "$BASE/out10.json" 2> "$BASE/err10.txt"; code=$?
+RUN3=$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pid"])' "$BASE/evidence/model-runner.json")
+check "hand-started runner: exit 3 with status conflict" '[ $code -eq 3 ] && tail -1 "$BASE/out10.json" | grep -q "\"status\": \"conflict\""'
+check "hand-started runner: the recorded runner replaced, the new one stopped again" '! kill -0 "$RUN2" 2>/dev/null && ! kill -0 "$RUN3" 2>/dev/null'
+check "hand-started runner: left running (not this tool's)" '[ -n "$HAND" ] && kill -0 "$HAND" 2>/dev/null'
+
+# --- 13. a runner started as a module (python -m src.worker) from its own folder, as the model owner does ---
+pkill -u "$(id -u)" -f '[m]odel_runner_example.py --socket' 2>/dev/null; sleep 0.5
+mkdir -p "$BASE/ai/src"; cp "$SRC/new/ultra96/model_runner_example.py" "$BASE/ai/src/worker.py"
+module_opts() {  # $1 module, $2 folder
+  printf '{"event_log": false, "model": "ultra96.model_bridge", "model_path": null, "session_id": "ltc-comms", "start_timeout": 30, "runner": {"module": "%s", "cwd": "%s", "python": "/usr/bin/python3", "args": ["--socket", "%s/model-runner.sock", "--every", "1"], "sudo": false}}' "$1" "$2" "$BASE"
+}
+newsrc source-co-v3-T11
+echo x | /usr/bin/python3 -c "$PROG" "$BASE" "$BASE/source-co-v3-T11" T11 "$(module_opts src.worker "$BASE/ai")" > "$BASE/out11.json" 2> "$BASE/err11.txt"; code=$?
+RUN4=$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pid"])' "$BASE/evidence/model-runner.json")
+check "module runner: exit 0, running and connected" '[ $code -eq 0 ] && tail -1 "$BASE/out11.json" | grep -q "\"status\": \"running\", \"connected\": true"'
+check "module runner: python -m src.worker in its folder" 'tr "\0" " " < /proc/$RUN4/cmdline | grep -q -- "-m src.worker --socket" && [ "$(readlink /proc/$RUN4/cwd)" = "$BASE/ai" ]'
+newsrc source-co-v3-T12
+echo x | /usr/bin/python3 -c "$PROG" "$BASE" "$BASE/source-co-v3-T12" T12 "$(module_opts src.missing "$BASE/ai")" > "$BASE/out12.json" 2> "$BASE/err12.txt"; code=$?
+check "missing module: exit 3, reported, the previous runner untouched" '[ $code -eq 3 ] && tail -1 "$BASE/out12.json" | grep -q "runner module not found" && kill -0 "$RUN4" 2>/dev/null'
+check "missing module: the service is deployed" 'grep -q "\"status\": \"deployed\"" "$BASE/out12.json"'
+pkill -u "$(id -u)" -f '[s]rc.worker --socket' 2>/dev/null
+
 cleanup
 echo "RESULT pass=$pass fail=$fail"
-for f in err1 err2 err3 err4 err5 err6; do echo "--- $f"; tail -3 "$BASE/$f.txt"; done
-echo "--- e2e"; cat "$BASE/e2e.txt"
+for f in err1 err2 err3 err4 err5 err6 err7 err8 err9 err10 err11 err12; do echo "--- $f"; tail -3 "$BASE/$f.txt"; done
+echo "--- e2e"; cat "$BASE/e2e.txt"; echo "--- e2e7"; cat "$BASE/e2e7.txt"
 rm -rf "$BASE"
-[ "$fail" -eq 0 ] && [ "$pass" -eq 27 ]
+[ "$fail" -eq 0 ] && [ "$pass" -eq 44 ]

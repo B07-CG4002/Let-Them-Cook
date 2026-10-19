@@ -4,6 +4,7 @@
 #include <BLESecurity.h>
 #include <BLEServer.h>
 #include <esp_gatt_common_api.h>
+#include <esp_idf_version.h>
 #include <esp_system.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
@@ -15,6 +16,7 @@
 // a sequence number is allocated only for a sample that is sent.
 #include "comms_glove.h"
 #include "comms_sample.h"
+#include "comms_send_queue.h"
 #include "comms_source_stats.h"
 #include "comms_security.h"
 #include "comms_gatts_control.h"
@@ -36,6 +38,10 @@ constexpr uint8_t kDeviceId = COMMS_DEVICE_ID;
 static_assert(kDeviceId == 1 || kDeviceId == 2, "device ID must be 1 or 2");
 static_assert(comms::kRequiredAuthMode == ESP_LE_AUTH_REQ_SC_MITM_BOND,
               "Update portable security policy for this SDK");
+// The sensor send gate reads Bluedroid's ESP-IDF 4.4 sendable counts (and
+// relies on its 20/10 ATT congestion thresholds); check them on another SDK.
+static_assert(ESP_IDF_VERSION_MAJOR == 4 && ESP_IDF_VERSION_MINOR == 4,
+              "Re-check the sensor send gate (comms_send_queue.h) for this ESP-IDF");
 constexpr uint32_t kReportIntervalMs = 1000;
 constexpr uint16_t kInitialRateHz = COMMS_INITIAL_RATE_HZ;
 static_assert(kInitialRateHz >= 1 && kInitialRateHz <= 200, "rate must be 1..200 Hz");
@@ -55,6 +61,20 @@ comms::SourceStats sensorStats = {};
 // Written only by loop(), under the mutex; the source statistics read them.
 comms::SampleCounters sampleCounters = {};
 uint32_t sampleRaceDropped = 0;
+// Samples waiting for the link, and the send gate's view of Bluedroid (all
+// under the mutex). The idle values are the largest counts seen: nothing is
+// pending then. The *Peak values restart after each comms_stats line.
+comms::SampleQueue sampleQueue;
+uint16_t idleSendable = 0, idleControllerWindow = 0;
+uint32_t sensorNotifications = 0, sensorSendRefused = 0, queueDiscarded = 0, queueOverflow = 0;
+uint32_t queuePeak = 0, batchPeak = 0, inFlightPeak = 0;
+// The gate re-learns idleSendable after this long shut with the controller idle.
+constexpr uint32_t kGateRebaselineMs = 200;
+uint32_t gateStuckSinceMs = 0, gateRebaselines = 0;
+bool gateStuck = false;
+bool dataLengthRequested = false;
+// Counted in the BTU task without the mutex (ESP_GATTS_CONGEST_EVT must not block).
+volatile uint32_t congestedEvents = 0;
 uint32_t sensorMtuSuppressed = 0, securitySuppressed = 0;
 uint32_t submissionErrors = 0, lastReportMs = 0, lastNotificationUs = 0;
 bool clientConnected = false, authenticated = false;
@@ -102,9 +122,31 @@ bool submitNotification(BLECharacteristic* characteristic, uint8_t* payload, uin
   return result == ESP_OK;
 }
 
+// Called with the mutex held. Samples that never left the board take no seq
+// (comms_send_queue.h), so the source statistics do not change here. Used when
+// the laptop turns notifications off: its two shutdown reads must agree.
+void discardQueuedSamples() {
+  queueDiscarded += static_cast<uint32_t>(sampleQueue.clear());
+}
+
+// Called with the mutex held, when the link drops. These samples were lost
+// while the laptop was listening, so each takes a seq and counts as a failure,
+// like an overflow: the laptop sees the gap after it reconnects.
+void failQueuedSamples() {
+  while (sampleQueue.size() != 0) {
+    comms::allocateSampleSequence(sensorStats);
+    comms::recordSensorSubmission(sensorStats, false);
+    sampleQueue.dropFront(1);
+    ++queueOverflow;
+  }
+}
+
 void resetSubscriptions() {
   notificationsEnabled = mtuProbeNotificationsEnabled = sensorNotificationsEnabled = false;
   responseNotificationsEnabled = false;
+  discardQueuedSamples();
+  idleSendable = 0;
+  gateStuck = false;
   controlQueueHead = controlQueueCount = 0;
   if (controls != nullptr) controls->disconnect();
   mtuProbeRequestPending = false;
@@ -125,6 +167,7 @@ class ServerCallbacks final : public BLEServerCallbacks {
     }
     clientConnected = true;
     authenticated = false;
+    dataLengthRequested = false;
     connectionId = param->connect.conn_id;
     memcpy(connectedAddress, param->connect.remote_bda, sizeof(connectedAddress));
     resetSubscriptions();
@@ -151,6 +194,7 @@ class ServerCallbacks final : public BLEServerCallbacks {
       return;
     }
     clientConnected = authenticated = false;
+    failQueuedSamples();
     resetSubscriptions();
     negotiatedMtu = ESP_GATT_DEF_BLE_MTU_SIZE;
     restartAdvertising = !erasingBonds;
@@ -209,6 +253,9 @@ class CccdCallbacks final : public BLEDescriptorCallbacks {
     mtuProbeNotificationsEnabled = clientConnected && mtuProbeCccd->getNotifications();
     sensorNotificationsEnabled = clientConnected && sensorCccd->getNotifications();
     responseNotificationsEnabled = clientConnected && responseCccd->getNotifications();
+    // In the same locked step as the laptop's notification-off write, so its
+    // quiesce read and its confirming read see the same statistics.
+    if (!sensorNotificationsEnabled) discardQueuedSamples();
     xSemaphoreGive(connectionStateMutex);
   }
 };
@@ -254,6 +301,12 @@ bool configureSecurity() {
 
 void gattsCallback(esp_gatts_cb_event_t event, esp_gatt_if_t interface,
                    esp_ble_gatts_cb_param_t* param) {
+  // Runs in the BTU task: count only, never take the mutex. The send gate
+  // keeps the ATT queue below the congestion threshold, so this stays 0.
+  if (event == ESP_GATTS_CONGEST_EVT) {
+    if (param->congest.congested) congestedEvents = congestedEvents + 1;
+    return;
+  }
   // BLEServer's getGattsIf() is private in Arduino 2.0.17. Capture the public
   // registration event for this process's sole GATT application instead.
   if (event == ESP_GATTS_REG_EVT) {
@@ -322,6 +375,22 @@ void gattsCallback(esp_gatts_cb_event_t event, esp_gatt_if_t interface,
 }
 
 void gapCallback(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t* param) {
+  // Link facts for the serial log: whether the 251-byte link-layer packets
+  // (data length extension) are in use, and the connection interval the
+  // laptop chose (units of 1.25 ms; timeout in units of 10 ms).
+  if (event == ESP_GAP_BLE_SET_PKT_LENGTH_COMPLETE_EVT) {
+    Serial.printf("ble_data_length status=%d tx_len=%u rx_len=%u uptime_ms=%lu\n",
+        param->pkt_data_lenth_cmpl.status, param->pkt_data_lenth_cmpl.params.tx_len,
+        param->pkt_data_lenth_cmpl.params.rx_len, static_cast<unsigned long>(millis()));
+    return;
+  }
+  if (event == ESP_GAP_BLE_UPDATE_CONN_PARAMS_EVT) {
+    Serial.printf("ble_conn_params status=%d interval=%u latency=%u timeout=%u uptime_ms=%lu\n",
+        param->update_conn_params.status, param->update_conn_params.conn_int,
+        param->update_conn_params.latency, param->update_conn_params.timeout,
+        static_cast<unsigned long>(millis()));
+    return;
+  }
   if (event != ESP_GAP_BLE_REMOVE_BOND_DEV_COMPLETE_EVT) return;
   xSemaphoreTake(connectionStateMutex, portMAX_DELAY);
   if (erasingBonds && bondErasePending != 0) {
@@ -396,11 +465,59 @@ BLECharacteristic* addNotify(BLEService* service, const char* uuid, BLE2902** de
   return characteristic;
 }
 
+// Called with the mutex held, on every loop pass. Sends the waiting samples,
+// up to the batch limit, as one notification once fewer than
+// kMaxNotificationsInFlight notifications are still below the application.
+// When the link carries fewer notifications than ticks (two gloves on one
+// laptop: one notification per 30 ms per glove at worst), each notification
+// carries the samples of one service period instead of the surplus being
+// refused (comms_send_queue.h).
+void sendQueuedSamples() {
+  if (sampleQueue.size() == 0 || !canNotify(sensorNotificationsEnabled)) return;
+  const size_t limit = comms::packetsPerNotification(negotiatedMtu);
+  if (limit == 0) return;
+  const uint16_t sendable = esp_ble_get_cur_sendable_packets_num(connectionId);
+  const uint16_t window = esp_ble_get_sendable_packets_num();
+  if (sendable > idleSendable) idleSendable = sendable;
+  if (window > idleControllerWindow) idleControllerWindow = window;
+  const uint16_t inFlight = comms::notificationsInFlight(idleSendable, sendable,
+                                                         idleControllerWindow, window);
+  if (inFlight > inFlightPeak) inFlightPeak = inFlight;
+  if (inFlight >= comms::kMaxNotificationsInFlight) {
+    // Host-side work that never reaches an idle controller is a count
+    // Bluedroid lost (a failed allocation leaves it raised); learn the lower
+    // value instead of keeping the gate shut for the rest of the connection.
+    const uint32_t nowMs = millis();
+    if (window < idleControllerWindow || !gateStuck) {
+      gateStuck = window >= idleControllerWindow;  // a busy controller is a real wait
+      gateStuckSinceMs = nowMs;
+    } else if (static_cast<uint32_t>(nowMs - gateStuckSinceMs) >= kGateRebaselineMs) {
+      idleSendable = sendable;
+      gateStuck = false;
+      ++gateRebaselines;
+    }
+    return;
+  }
+  gateStuck = false;
+  uint8_t payload[comms::kMaxSensorNotificationSize];
+  const size_t count = comms::buildSensorNotification(payload, sizeof(payload), sampleQueue, limit,
+                                                      kDeviceId, sensorStats);
+  if (count == 0) return;
+  if (submitNotification(sensorCharacteristic, payload,
+                         static_cast<uint16_t>(count * comms::kPacketSize))) {
+    comms::commitSensorNotification(sampleQueue, sensorStats, count);
+    ++sensorNotifications;
+    if (count > batchPeak) batchPeak = static_cast<uint32_t>(count);
+  } else {
+    ++sensorSendRefused;  // the samples stay queued, without a seq, for the next pass
+  }
+}
+
 // One sensor tick, called WITHOUT the mutex: the glove module may take
 // milliseconds and BLE callbacks must not wait for it. The tick is committed
-// (its counters, and for a sample to send its seq) only if the laptop is
-// still ready under the mutex. So once the laptop has turned notifications
-// off, nothing in the source statistics changes (the bridge checks that).
+// (its counters, and a sample to send queued) only if the laptop is still
+// ready under the mutex. So once the laptop has turned notifications off,
+// nothing in the source statistics changes (the bridge checks that).
 void produceSample() {
   float values[comms::kChannelCount];
   for (float& value : values) value = NAN;  // a channel the module leaves unwritten is refused
@@ -415,13 +532,12 @@ void produceSample() {
   if (canNotify(sensorNotificationsEnabled) && comms::sensorFitsMtu(negotiatedMtu)) {
     sampleCounters = counters;
     if (outcome == comms::SampleSend) {
-      uint8_t payload[comms::kPacketSize];
-      const uint32_t sampleSequence = comms::allocateSampleSequence(sensorStats);
-      const bool serialized = comms::serializePacket(payload, sizeof(payload), kDeviceId,
-          bootId, sampleSequence, sampleMs, scaled);
-      const bool submitted = serialized &&
-          submitNotification(sensorCharacteristic, payload, sizeof(payload));
-      comms::recordSensorSubmission(sensorStats, submitted);
+      comms::PendingSample pending;
+      pending.uptimeMs = sampleMs;
+      memcpy(pending.values, scaled, sizeof(pending.values));
+      if (comms::enqueueSample(sampleQueue, sensorStats, pending)) ++queueOverflow;
+      if (sampleQueue.size() > queuePeak) queuePeak = static_cast<uint32_t>(sampleQueue.size());
+      sendQueuedSamples();
     }
   } else {
     // The link changed during the read: nothing is counted, no seq is taken.
@@ -432,13 +548,26 @@ void produceSample() {
 }  // namespace
 
 void setup() {
+  // Without a transmit buffer each once-a-second report blocks loop() for
+  // about 30 ms (115200 baud) and costs a 50 Hz send tick; this core takes the
+  // size only before begin().
+  Serial.setTxBufferSize(1024);
   Serial.begin(115200);
   // Before BLE: the glove module may calibrate for seconds (glove held still)
   // and the board advertises only after it returns. A glove that reports no
-  // sensor still advertises; its ticks then count as unread.
-  const bool gloveReady = gloveBegin();
-  Serial.printf("glove_begin ok=%u module=%s gated=%u\n", gloveReady, comms::kGloveModuleName,
-      comms::kGloveGated);
+  // sensor still advertises; its ticks then count as unread. A failed try is
+  // repeated (comms_glove.h), so one bad read at start-up is not fatal.
+  unsigned gloveAttempts = 0;
+  const bool gloveReady = comms::beginWithRetries(
+      gloveBegin,
+      [](unsigned failedAttempt) {
+        Serial.printf("glove_begin_failed attempt=%u retry_ms=%lu\n", failedAttempt,
+            static_cast<unsigned long>(comms::kGloveBeginRetryMs));
+        delay(comms::kGloveBeginRetryMs);
+      },
+      comms::kGloveBeginAttempts, gloveAttempts);
+  Serial.printf("glove_begin ok=%u module=%s gated=%u attempts=%u\n", gloveReady,
+      comms::kGloveModuleName, comms::kGloveGated, gloveAttempts);
   bootId = esp_random();
   sensorStats.bootId = bootId;
   lastReportMs = millis();
@@ -496,7 +625,18 @@ void loop() {
   // The glove module's own pace (filters, movement windows), connected or not.
   gloveUpdate();
   bool shouldRestartAdvertising = false;
+  bool requestDataLength = false;
+  esp_bd_addr_t dataLengthPeer = {};
   xSemaphoreTake(connectionStateMutex, portMAX_DELAY);
+  // Once per connection, after authentication: ask for 251-byte link-layer
+  // packets, so a notification of several samples is one packet on the air.
+  // Bluedroid asks by itself when the peer advertises support; the reply
+  // (ble_data_length) shows the outcome either way.
+  if (clientConnected && (authenticated || kDiagnostic) && !dataLengthRequested) {
+    dataLengthRequested = true;
+    requestDataLength = true;
+    memcpy(dataLengthPeer, connectedAddress, sizeof(dataLengthPeer));
+  }
   if (erasingBonds && bondEraseStarted && bondErasePending == 0) {
     bondEraseStarted = false;
     const int remaining = esp_ble_get_bond_device_num();
@@ -512,6 +652,11 @@ void loop() {
     shouldRestartAdvertising = true;
   }
   xSemaphoreGive(connectionStateMutex);
+  if (requestDataLength) {
+    const esp_err_t result = esp_ble_gap_set_pkt_data_len(dataLengthPeer, 251);
+    Serial.printf("ble_data_length_requested tx_len=251 return_code=%d uptime_ms=%lu\n", result,
+        static_cast<unsigned long>(nowMs));
+  }
   if (shouldRestartAdvertising) {
     advertising->start();
     Serial.printf("ble_advertising_restarted boot_id=%lu counter=%lu uptime_ms=%lu\n",
@@ -547,6 +692,9 @@ void loop() {
   if (sampleDue) produceSample();
 
   xSemaphoreTake(connectionStateMutex, portMAX_DELAY);
+  // Every pass, not only on ticks: the backlog leaves as soon as the link
+  // takes it.
+  sendQueuedSamples();
   // Bound bulk work to one command/chunk per loop. Sensor deadlines get the
   // first opportunity to run; callbacks only copy into a four-entry queue.
   if (controlQueueCount != 0 && canNotify(responseNotificationsEnabled)) {
@@ -581,8 +729,15 @@ void loop() {
   }
   const bool observedAuthenticated = authenticated;
   const uint16_t observedMtu = negotiatedMtu;
+  const bool report = static_cast<uint32_t>(nowMs - lastReportMs) >= kReportIntervalMs;
+  // Send-queue figures for the report; the peaks restart each second.
+  const uint32_t observedQueue = static_cast<uint32_t>(sampleQueue.size());
+  const uint32_t observedQueuePeak = queuePeak, observedBatchPeak = batchPeak;
+  const uint32_t observedInFlightPeak = inFlightPeak;
+  const uint16_t observedIdleSendable = idleSendable, observedIdleWindow = idleControllerWindow;
+  if (report) queuePeak = batchPeak = inFlightPeak = 0;
   xSemaphoreGive(connectionStateMutex);
-  if (static_cast<uint32_t>(nowMs - lastReportMs) >= kReportIntervalMs) {
+  if (report) {
     lastReportMs = nowMs;
     Serial.printf("alive boot_id=%lu sequence=%lu uptime_ms=%lu\n", static_cast<unsigned long>(bootId),
         static_cast<unsigned long>(aliveSequence++), static_cast<unsigned long>(nowMs));
@@ -594,6 +749,13 @@ void loop() {
         static_cast<unsigned long>(sampleCounters.unread), static_cast<unsigned long>(sampleCounters.idle),
         static_cast<unsigned long>(sampleCounters.refused), static_cast<unsigned long>(sampleCounters.clamped),
         static_cast<unsigned long>(sampleRaceDropped));
+    Serial.printf("comms_send notifications=%lu failures=%lu queue=%lu queue_peak=%lu batch_peak=%lu in_flight_peak=%lu idle_sendable=%u idle_window=%u send_refused=%lu overflow=%lu discarded=%lu congested=%lu rebaselines=%lu\n",
+        static_cast<unsigned long>(sensorNotifications), static_cast<unsigned long>(sensorStats.failures),
+        static_cast<unsigned long>(observedQueue), static_cast<unsigned long>(observedQueuePeak),
+        static_cast<unsigned long>(observedBatchPeak), static_cast<unsigned long>(observedInFlightPeak),
+        observedIdleSendable, observedIdleWindow, static_cast<unsigned long>(sensorSendRefused),
+        static_cast<unsigned long>(queueOverflow), static_cast<unsigned long>(queueDiscarded),
+        static_cast<unsigned long>(congestedEvents), static_cast<unsigned long>(gateRebaselines));
   }
   delay(1);
 }

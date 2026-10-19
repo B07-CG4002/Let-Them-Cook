@@ -46,4 +46,4 @@ def test_source_statistics_accounting_and_wire_format(tmp_path):
     raw = bytes.fromhex(gated_hex)
     assert len(raw) == 36 and raw[6:8] == b"\0\0"
     assert struct.unpack("<4sBB2xIIIIIII", raw) == (
-        b"LCS3", 1, 0x01, 0x78563412, 2, 1, 1, 0x04030201, 0x0D0C0B0A, 0x11223344)
+        b"LCS3", 1, 0x03, 0x78563412, 2, 1, 1, 0x04030201, 0x0D0C0B0A, 0x11223344)

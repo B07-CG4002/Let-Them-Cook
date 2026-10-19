@@ -1,6 +1,8 @@
 """Fixed 38-byte sensor codec, protocol version 3: 16-byte header + 11 x int16.
 
 Only version 3 exists. Values travel as int16; physical = int16 / SCALES[i].
+A BLE sensor notification carries 1 to 6 whole packets back to back, oldest
+first (split_notification); commands carry exactly one (decode_packet).
 """
 
 from dataclasses import dataclass
@@ -20,6 +22,9 @@ CHANNEL_COUNT = len(CHANNELS)
 _PACKET = struct.Struct("<2sBBIII{}h".format(CHANNEL_COUNT))
 PACKET_SIZE = _PACKET.size
 SENSOR_MTU_FLOOR = PACKET_SIZE + 3  # ATT notification header
+# The glove sends the samples waiting since its last notification together
+# (firmware comms_send_queue.h); six fit one 251-byte link-layer packet.
+MAX_PACKETS_PER_NOTIFICATION = 6
 PACKET_MAGIC = b"LC"
 SENSOR_CHARACTERISTIC_UUID = "6e1c0005-7a45-4dc4-b678-3f2d5a9c1001"
 
@@ -87,6 +92,25 @@ def decode_packet(data: bytes) -> SensorPacket:
     if version != VERSION:
         raise ValueError("unsupported sensor packet version")
     return SensorPacket(device_id, boot_id, seq, uptime_ms, tuple(values), version)
+
+
+def split_notification(data) -> Tuple[bytes, ...]:
+    """Cut one BLE sensor notification into its 38-byte packets, oldest first.
+
+    Every packet must decode; otherwise the whole notification is refused, so a
+    bad notification stays one malformed item, as a bad single packet was.
+    """
+    if not isinstance(data, (bytes, bytearray, memoryview)):
+        raise ValueError("sensor notification must be bytes")
+    data = bytes(data)
+    count, rest = divmod(len(data), PACKET_SIZE)
+    if rest or not 1 <= count <= MAX_PACKETS_PER_NOTIFICATION:
+        raise ValueError("sensor notification must contain 1 to {} whole {}-byte packets".format(
+            MAX_PACKETS_PER_NOTIFICATION, PACKET_SIZE))
+    pieces = tuple(data[index * PACKET_SIZE:(index + 1) * PACKET_SIZE] for index in range(count))
+    for piece in pieces:
+        decode_packet(piece)
+    return pieces
 
 
 def physical_values(values) -> Tuple[float, ...]:

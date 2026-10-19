@@ -13,6 +13,10 @@ namespace comms {
 constexpr size_t kSourceStatsSize = 36;
 // Flags bit 0: a gated source, which skips ticks while the glove is IDLE.
 constexpr uint8_t kSourceFlagGated = 0x01;
+// Flags bit 1, always set: a sensor notification may carry several packets
+// (comms_send_queue.h). A laptop that predates it refuses the unknown bit
+// before subscribing instead of counting such notifications as malformed.
+constexpr uint8_t kSourceFlagBatched = 0x02;
 static_assert(kPacketVersion == 3, "update the LCS3 source statistics marker");
 
 struct SourceStats {
@@ -51,7 +55,7 @@ inline bool serializeSourceStats(uint8_t* output, size_t capacity, uint8_t devic
   output[2] = 'S';
   output[3] = '3';
   output[4] = deviceId;
-  output[5] = gated ? kSourceFlagGated : 0;
+  output[5] = static_cast<uint8_t>((gated ? kSourceFlagGated : 0) | kSourceFlagBatched);
   output[6] = 0;
   output[7] = 0;
   writeUint32Le(output + 8, stats.bootId);

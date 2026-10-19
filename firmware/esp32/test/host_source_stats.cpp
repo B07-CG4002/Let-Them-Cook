@@ -26,7 +26,7 @@ int main() {
   uint8_t output[comms::kSourceStatsSize] = {};
   assert(comms::serializeSourceStats(output, sizeof(output), 2u, false, stats, samples));
   const uint8_t expected[comms::kSourceStatsSize] = {
-      0x4c, 0x43, 0x53, 0x33, 0x02, 0x00, 0x00, 0x00,
+      0x4c, 0x43, 0x53, 0x33, 0x02, 0x02, 0x00, 0x00,
       0x12, 0x34, 0x56, 0x78, 0x02, 0x00, 0x00, 0x00,
       0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
       0x01, 0x02, 0x03, 0x04, 0x0a, 0x0b, 0x0c, 0x0d,
@@ -34,11 +34,13 @@ int main() {
   };
   assert(std::memcmp(output, expected, sizeof(expected)) == 0);
 
-  // A gated source sets flags bit 0 only; the reserved bytes stay zero even
-  // when the buffer held other bytes before.
+  // Bit 1 (several packets per notification) is always set; a gated source
+  // adds bit 0. The reserved bytes stay zero even when the buffer held other
+  // bytes before.
   std::memset(output, 0xa5, sizeof(output));
   assert(comms::serializeSourceStats(output, sizeof(output), 1u, true, stats, samples));
-  assert(output[4] == 0x01 && output[5] == comms::kSourceFlagGated && output[5] == 0x01);
+  assert(output[4] == 0x01 && output[5] == (comms::kSourceFlagGated | comms::kSourceFlagBatched) &&
+         output[5] == 0x03);
   assert(output[6] == 0x00 && output[7] == 0x00);
   assert(std::memcmp(output + 8, expected + 8, sizeof(expected) - 8) == 0);
   // pytest unpacks this line with the laptop's struct format.
@@ -47,7 +49,7 @@ int main() {
 
   const comms::SampleCounters zero = {0u, 0u, 0u, 0u};
   assert(comms::serializeSourceStats(output, sizeof(output), 1u, false, stats, zero));
-  assert(output[5] == 0x00 && output[6] == 0x00 && output[7] == 0x00);
+  assert(output[5] == comms::kSourceFlagBatched && output[6] == 0x00 && output[7] == 0x00);
   for (size_t index = 24; index < sizeof(output); ++index) assert(output[index] == 0x00);
 
   comms::SourceStats wrapped = {1u, UINT32_MAX, UINT32_MAX, UINT32_MAX};
