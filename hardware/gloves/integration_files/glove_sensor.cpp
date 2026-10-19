@@ -151,7 +151,6 @@ bool readImu(RawImu &raw) {
   raw.ay = readInt16();
   raw.az = readInt16();
   (void)readInt16();  // Temperature
-  (void)readInt16();
   raw.gx = readInt16();
   raw.gy = readInt16();
   raw.gz = readInt16();
