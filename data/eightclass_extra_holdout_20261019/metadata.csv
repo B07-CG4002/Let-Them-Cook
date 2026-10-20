@@ -1,0 +1,17 @@
+person,gesture,trial,source,duration_s
+P02,CHOP,19,C:\Users\ooiwe\OneDrive\Documents\CG4002\Let_Them_Cook\recordings_firmware_unverified_20261018\recordings\holdout_trials\chop\P02_CHOP_19.csv,1.9719900000000001
+P02,CHOP,20,C:\Users\ooiwe\OneDrive\Documents\CG4002\Let_Them_Cook\recordings_firmware_unverified_20261018\recordings\holdout_trials\chop\P02_CHOP_20.csv,1.970145
+P02,DROP,19,C:\Users\ooiwe\OneDrive\Documents\CG4002\Let_Them_Cook\recordings_firmware_unverified_20261018\recordings\holdout_trials\drop\P02_DROP_19.csv,1.971023
+P02,DROP,20,C:\Users\ooiwe\OneDrive\Documents\CG4002\Let_Them_Cook\recordings_firmware_unverified_20261018\recordings\holdout_trials\drop\P02_DROP_20.csv,1.969945
+P02,FIREEXT,19,C:\Users\ooiwe\OneDrive\Documents\CG4002\Let_Them_Cook\recordings_firmware_unverified_20261018\recordings\holdout_trials\fireext\P02_FIREEXT_19.csv,1.970536
+P02,FIREEXT,20,C:\Users\ooiwe\OneDrive\Documents\CG4002\Let_Them_Cook\recordings_firmware_unverified_20261018\recordings\holdout_trials\fireext\P02_FIREEXT_20.csv,1.97069
+P02,IDLE,19,C:\Users\ooiwe\OneDrive\Documents\CG4002\Let_Them_Cook\recordings_firmware_unverified_20261018\recordings\holdout_trials\idle\P02_IDLE_19.csv,1.971038
+P02,IDLE,20,C:\Users\ooiwe\OneDrive\Documents\CG4002\Let_Them_Cook\recordings_firmware_unverified_20261018\recordings\holdout_trials\idle\P02_IDLE_20.csv,1.971315
+P02,PICKUP,19,C:\Users\ooiwe\OneDrive\Documents\CG4002\Let_Them_Cook\recordings_firmware_unverified_20261018\recordings\holdout_trials\pickup\P02_PICKUP_19.csv,1.970481
+P02,PICKUP,20,C:\Users\ooiwe\OneDrive\Documents\CG4002\Let_Them_Cook\recordings_firmware_unverified_20261018\recordings\holdout_trials\pickup\P02_PICKUP_20.csv,1.989748
+P02,POURING,19,C:\Users\ooiwe\OneDrive\Documents\CG4002\Let_Them_Cook\recordings_firmware_unverified_20261018\recordings\holdout_trials\pouring\P02_POURING_19.csv,1.971294
+P02,POURING,20,C:\Users\ooiwe\OneDrive\Documents\CG4002\Let_Them_Cook\recordings_firmware_unverified_20261018\recordings\holdout_trials\pouring\P02_POURING_20.csv,1.991634
+P02,THROW,19,C:\Users\ooiwe\OneDrive\Documents\CG4002\Let_Them_Cook\recordings_firmware_unverified_20261018\recordings\holdout_trials\throw\P02_THROW_19.csv,1.972242
+P02,THROW,20,C:\Users\ooiwe\OneDrive\Documents\CG4002\Let_Them_Cook\recordings_firmware_unverified_20261018\recordings\holdout_trials\throw\P02_THROW_20.csv,1.9711589999999999
+P02,WASH,19,C:\Users\ooiwe\OneDrive\Documents\CG4002\Let_Them_Cook\recordings_firmware_unverified_20261018\recordings\holdout_trials\wash\P02_WASH_19.csv,1.969797
+P02,WASH,20,C:\Users\ooiwe\OneDrive\Documents\CG4002\Let_Them_Cook\recordings_firmware_unverified_20261018\recordings\holdout_trials\wash\P02_WASH_20.csv,1.970045

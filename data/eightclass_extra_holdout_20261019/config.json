@@ -1,0 +1,41 @@
+{
+  "version": "20261018_v2",
+  "class_names": [
+    "PICKUP",
+    "DROP",
+    "CHOP",
+    "WASH",
+    "THROW",
+    "FIREEXT",
+    "POURING",
+    "IDLE"
+  ],
+  "feature_columns": [
+    "left_ax_g",
+    "left_ay_g",
+    "left_az_g",
+    "left_gx_deg_s",
+    "left_gy_deg_s",
+    "left_gz_deg_s",
+    "left_yaw_deg",
+    "left_pitch_deg",
+    "left_roll_deg",
+    "left_flex_1",
+    "left_flex_2",
+    "right_ax_g",
+    "right_ay_g",
+    "right_az_g",
+    "right_gx_deg_s",
+    "right_gy_deg_s",
+    "right_gz_deg_s",
+    "right_yaw_deg",
+    "right_pitch_deg",
+    "right_roll_deg",
+    "right_flex_1",
+    "right_flex_2"
+  ],
+  "window_seconds": 2.0,
+  "time_positions": 50,
+  "normalization": "none",
+  "angle_interpolation": "unwrap degrees, interpolate, wrap to [-180,180)"
+}
