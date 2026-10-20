@@ -1,0 +1,10 @@
+{
+  "samples": 24,
+  "exact_word_mismatches": 0,
+  "class_agreement": 24,
+  "correct": 21,
+  "max_logit_error": 5.412101745605469e-05,
+  "mean_call_ms": 2.04446321974198,
+  "max_call_ms": 2.0705247297883034,
+  "timing_scope": "AXI start/poll/output invalidate/copy; excludes input packing/flush and model/overlay loading"
+}
