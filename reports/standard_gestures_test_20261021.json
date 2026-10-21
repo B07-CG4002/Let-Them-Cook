@@ -1,0 +1,160 @@
+{
+  "kind": "saved_test_split",
+  "samples": 27,
+  "accuracy": 0.8518518518518519,
+  "class_names": [
+    "PICKUP",
+    "DROP",
+    "CHOP",
+    "WASH",
+    "THROW",
+    "FIREEXT",
+    "POURING",
+    "IDLE"
+  ],
+  "confusion_matrix": [
+    [
+      3,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      4,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      2,
+      0,
+      0,
+      0,
+      0,
+      1
+    ],
+    [
+      0,
+      0,
+      1,
+      2,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      3,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      3,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      4,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      2
+    ]
+  ],
+  "classification_report": {
+    "PICKUP": {
+      "precision": 1.0,
+      "recall": 0.75,
+      "f1-score": 0.8571428571428571,
+      "support": 4.0
+    },
+    "DROP": {
+      "precision": 0.8,
+      "recall": 1.0,
+      "f1-score": 0.8888888888888888,
+      "support": 4.0
+    },
+    "CHOP": {
+      "precision": 0.6666666666666666,
+      "recall": 0.6666666666666666,
+      "f1-score": 0.6666666666666666,
+      "support": 3.0
+    },
+    "WASH": {
+      "precision": 1.0,
+      "recall": 0.6666666666666666,
+      "f1-score": 0.8,
+      "support": 3.0
+    },
+    "THROW": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 3.0
+    },
+    "FIREEXT": {
+      "precision": 0.75,
+      "recall": 1.0,
+      "f1-score": 0.8571428571428571,
+      "support": 3.0
+    },
+    "POURING": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 4.0
+    },
+    "IDLE": {
+      "precision": 0.6666666666666666,
+      "recall": 0.6666666666666666,
+      "f1-score": 0.6666666666666666,
+      "support": 3.0
+    },
+    "accuracy": 0.8518518518518519,
+    "macro avg": {
+      "precision": 0.8604166666666666,
+      "recall": 0.84375,
+      "f1-score": 0.8420634920634921,
+      "support": 27.0
+    },
+    "weighted avg": {
+      "precision": 0.8685185185185185,
+      "recall": 0.8518518518518519,
+      "f1-score": 0.8502057613168724,
+      "support": 27.0
+    }
+  }
+}

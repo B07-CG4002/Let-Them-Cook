@@ -1,0 +1,160 @@
+{
+  "kind": "extra_holdout",
+  "samples": 24,
+  "accuracy": 0.75,
+  "class_names": [
+    "PICKUP",
+    "DROP",
+    "CHOP",
+    "WASH",
+    "THROW",
+    "FIREEXT",
+    "POURING",
+    "IDLE"
+  ],
+  "confusion_matrix": [
+    [
+      3,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      3,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      1,
+      0,
+      0,
+      2,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      2,
+      0,
+      0,
+      0,
+      1
+    ],
+    [
+      1,
+      0,
+      0,
+      0,
+      2,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      1,
+      0,
+      0,
+      0,
+      2,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      3,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      2
+    ]
+  ],
+  "classification_report": {
+    "PICKUP": {
+      "precision": 0.75,
+      "recall": 1.0,
+      "f1-score": 0.8571428571428571,
+      "support": 3.0
+    },
+    "DROP": {
+      "precision": 0.75,
+      "recall": 1.0,
+      "f1-score": 0.8571428571428571,
+      "support": 3.0
+    },
+    "CHOP": {
+      "precision": 1.0,
+      "recall": 0.3333333333333333,
+      "f1-score": 0.5,
+      "support": 3.0
+    },
+    "WASH": {
+      "precision": 1.0,
+      "recall": 0.6666666666666666,
+      "f1-score": 0.8,
+      "support": 3.0
+    },
+    "THROW": {
+      "precision": 1.0,
+      "recall": 0.6666666666666666,
+      "f1-score": 0.8,
+      "support": 3.0
+    },
+    "FIREEXT": {
+      "precision": 0.4,
+      "recall": 0.6666666666666666,
+      "f1-score": 0.5,
+      "support": 3.0
+    },
+    "POURING": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 3.0
+    },
+    "IDLE": {
+      "precision": 0.6666666666666666,
+      "recall": 0.6666666666666666,
+      "f1-score": 0.6666666666666666,
+      "support": 3.0
+    },
+    "accuracy": 0.75,
+    "macro avg": {
+      "precision": 0.8208333333333333,
+      "recall": 0.75,
+      "f1-score": 0.7476190476190476,
+      "support": 24.0
+    },
+    "weighted avg": {
+      "precision": 0.8208333333333333,
+      "recall": 0.75,
+      "f1-score": 0.7476190476190476,
+      "support": 24.0
+    }
+  }
+}
