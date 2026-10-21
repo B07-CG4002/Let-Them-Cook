@@ -72,3 +72,20 @@ ios-visualizer/NativePreview/Info.plist
 *.p12
 *.mobileprovision
 !ios-visualizer/reference/teammate-localhost-cert.pem
+
+# Vivado temporary files
+.Xil/
+vivado.jou
+vivado*.backup.jou
+vivado*.backup.log
+nlviewcommon.logfile
+
+# Copied Vivado block-design folder:
+# ignore generated contents, retain design/recreation/constraint sources
+/B07_full_cnn/multiply_accumulate/*
+!/B07_full_cnn/multiply_accumulate/*.bd
+!/B07_full_cnn/multiply_accumulate/*.tcl
+!/B07_full_cnn/multiply_accumulate/*.xdc
+
+# Generated out-of-context constraints
+/B07_full_cnn/multiply_accumulate/*_ooc.xdc
