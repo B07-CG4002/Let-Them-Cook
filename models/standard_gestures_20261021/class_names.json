@@ -1,0 +1,10 @@
+[
+  "PICKUP",
+  "DROP",
+  "CHOP",
+  "WASH",
+  "THROW",
+  "FIREEXT",
+  "POURING",
+  "IDLE"
+]
