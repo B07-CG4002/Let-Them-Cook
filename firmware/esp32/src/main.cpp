@@ -19,6 +19,7 @@
 #include "comms_send_queue.h"
 #include "comms_source_stats.h"
 #include "comms_security.h"
+#include "comms_early_auth.h"
 #include "comms_gatts_control.h"
 #include "comms_control.h"
 
@@ -87,6 +88,7 @@ uint16_t negotiatedMtu = ESP_GATT_DEF_BLE_MTU_SIZE;
 esp_gatt_if_t serverGattIf = ESP_GATT_IF_NONE;
 esp_bd_addr_t connectedAddress = {};
 bool erasingBonds = false, bondEraseStarted = false;
+comms::EarlyAuth earlyAuth;
 uint32_t bondErasePending = 0, bondEraseFailures = 0;
 SemaphoreHandle_t connectionStateMutex = nullptr;
 BLEServer* server = nullptr;
@@ -166,7 +168,9 @@ class ServerCallbacks final : public BLEServerCallbacks {
       return;
     }
     clientConnected = true;
-    authenticated = false;
+    const bool earlyApproved = !kDiagnostic &&
+        earlyAuth.consume(param->connect.remote_bda, millis());
+    authenticated = earlyApproved;
     dataLengthRequested = false;
     connectionId = param->connect.conn_id;
     memcpy(connectedAddress, param->connect.remote_bda, sizeof(connectedAddress));
@@ -177,8 +181,9 @@ class ServerCallbacks final : public BLEServerCallbacks {
     advertising->stop();
     Serial.printf("ble_connected boot_id=%lu uptime_ms=%lu security=%s\n",
         static_cast<unsigned long>(bootId), static_cast<unsigned long>(millis()),
-        kDiagnostic ? "UNPROTECTED_DIAGNOSTIC" : "pending");
-    if (!kDiagnostic) {
+        kDiagnostic ? "UNPROTECTED_DIAGNOSTIC" :
+        (earlyApproved ? "authenticated_early_event" : "pending"));
+    if (!kDiagnostic && !earlyApproved) {
       const esp_err_t result = esp_ble_set_encryption(param->connect.remote_bda, ESP_BLE_SEC_ENCRYPT_MITM);
       if (result != ESP_OK) {
         Serial.printf("ble_security_request_failed return_code=%d\n", result);
@@ -189,6 +194,7 @@ class ServerCallbacks final : public BLEServerCallbacks {
 
   void onDisconnect(BLEServer*, esp_ble_gatts_cb_param_t* param) override {
     xSemaphoreTake(connectionStateMutex, portMAX_DELAY);
+    earlyAuth.clear();
     if (!clientConnected || param->disconnect.conn_id != connectionId) {
       xSemaphoreGive(connectionStateMutex);
       return;
@@ -235,12 +241,14 @@ class SecurityCallbacks final : public BLESecurityCallbacks {
     const bool currentPeer = clientConnected &&
         memcmp(connectedAddress, result.bd_addr, sizeof(connectedAddress)) == 0;
     const bool approved = !erasingBonds && comms::isAuthenticated(result.success, result.auth_mode);
-    if (currentPeer) authenticated = approved;
+    const bool deferred = !clientConnected && approved;
+    if (!clientConnected) earlyAuth.remember(result.bd_addr, millis(), approved);
+    if (currentPeer) { earlyAuth.clear(); authenticated = approved; }
     const uint16_t rejectedConnection = connectionId;
     xSemaphoreGive(connectionStateMutex);
     // Never print the callback struct: it includes key material.
-    Serial.printf("ble_security_complete success=%u auth_mode=%u approved=%u current_peer=%u reason=%u\n",
-        result.success, result.auth_mode, currentPeer && approved, currentPeer,
+    Serial.printf("ble_security_complete success=%u auth_mode=%u approved=%u current_peer=%u deferred=%u reason=%u\n",
+        result.success, result.auth_mode, currentPeer && approved, currentPeer, deferred,
         result.success ? 0 : result.fail_reason);
     if (currentPeer && !approved) server->disconnect(rejectedConnection);
   }
@@ -407,6 +415,7 @@ void eraseBonds() {
     Serial.println("erase_bonds_rejected disconnect_Windows_first_or_wait_for_erasure");
     return;
   }
+  earlyAuth.clear();
   erasingBonds = true;
   authenticated = false;
   restartAdvertising = false;
@@ -763,3 +772,4 @@ void loop() {
 // flash.py derives the Bluetooth identity from the ESP32 factory base MAC.
 static_assert(CONFIG_ESP32_UNIVERSAL_MAC_ADDRESSES == 4,
               "Sequential flash mapping requires the default four-address ESP32 SDK");
+
