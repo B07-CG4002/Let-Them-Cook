@@ -1,0 +1,22 @@
+[
+  {
+    "original": "right/pilot1/P02_pilot1_CHOP_017.csv",
+    "reviewed": "data/hand_raw_reviewed/right/pilot2/P02_pilot2_CHOP_001.csv"
+  },
+  {
+    "original": "right/pilot1/P02_pilot1_CHOP_018.csv",
+    "reviewed": "data/hand_raw_reviewed/right/pilot2/P02_pilot2_CHOP_002.csv"
+  },
+  {
+    "original": "right/pilot1/P02_pilot1_CHOP_019.csv",
+    "reviewed": "data/hand_raw_reviewed/right/pilot2/P02_pilot2_CHOP_003.csv"
+  },
+  {
+    "original": "right/pilot1/P02_pilot1_CHOP_020.csv",
+    "reviewed": "data/hand_raw_reviewed/right/pilot2/P02_pilot2_CHOP_004.csv"
+  },
+  {
+    "original": "right/pilot1_validation/P02_pilot1_validation_WASH_001.csv",
+    "reviewed": "data/hand_raw_reviewed/right/pilot1_validation/P02_pilot1_validation_WASH_004.csv"
+  }
+]

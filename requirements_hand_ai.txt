@@ -1,0 +1,6 @@
+# Reuse your existing .venv. Install only if the import check reports missing modules.
+bleak
+numpy
+pandas
+scikit-learn
+torch

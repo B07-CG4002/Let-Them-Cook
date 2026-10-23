@@ -1,0 +1,558 @@
+{
+  "split": "test",
+  "samples": 28,
+  "class_names": [
+    "PICKUP",
+    "DROP",
+    "CHOP",
+    "WASH",
+    "THROW",
+    "POURING",
+    "IDLE"
+  ],
+  "accuracy": 1.0,
+  "confusion_matrix": [
+    [
+      4,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      4,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      4,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      4,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      4,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      4,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      4
+    ]
+  ],
+  "classification_report": {
+    "PICKUP": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 4.0
+    },
+    "DROP": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 4.0
+    },
+    "CHOP": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 4.0
+    },
+    "WASH": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 4.0
+    },
+    "THROW": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 4.0
+    },
+    "POURING": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 4.0
+    },
+    "IDLE": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 4.0
+    },
+    "accuracy": 1.0,
+    "macro avg": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 28.0
+    },
+    "weighted avg": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 28.0
+    }
+  },
+  "predictions": [
+    {
+      "source": "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\data\\hand_raw_reviewed\\right_throw_v3\\drop_v2_test\\P02_drop_v2_test_DROP_001.csv",
+      "true": "DROP",
+      "predicted": "DROP",
+      "confidence": 0.9972478747367859,
+      "probabilities": [
+        1.7495058273198083e-05,
+        0.9972478747367859,
+        6.974644202273339e-05,
+        3.0801449611317366e-05,
+        0.002436272334307432,
+        3.330875188112259e-05,
+        0.0001645135780563578
+      ]
+    },
+    {
+      "source": "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\data\\hand_raw_reviewed\\right_throw_v3\\drop_v2_test\\P02_drop_v2_test_DROP_002.csv",
+      "true": "DROP",
+      "predicted": "DROP",
+      "confidence": 0.9974132180213928,
+      "probabilities": [
+        1.4148740774544422e-05,
+        0.9974132180213928,
+        0.00010771162487799302,
+        6.406044849427417e-05,
+        0.0012189657427370548,
+        1.9092760339844972e-05,
+        0.0011627542553469539
+      ]
+    },
+    {
+      "source": "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\data\\hand_raw_reviewed\\right_throw_v3\\drop_v2_test\\P02_drop_v2_test_DROP_003.csv",
+      "true": "DROP",
+      "predicted": "DROP",
+      "confidence": 0.9762844443321228,
+      "probabilities": [
+        0.0022129903081804514,
+        0.9762844443321228,
+        0.004042019601911306,
+        0.0007668795878998935,
+        0.010924658738076687,
+        0.0007671465864405036,
+        0.005001808516681194
+      ]
+    },
+    {
+      "source": "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\data\\hand_raw_reviewed\\right_throw_v3\\drop_v2_test\\P02_drop_v2_test_DROP_004.csv",
+      "true": "DROP",
+      "predicted": "DROP",
+      "confidence": 0.9653041362762451,
+      "probabilities": [
+        0.0011578286066651344,
+        0.9653041362762451,
+        0.002950069261714816,
+        0.00030116812558844686,
+        0.02821948193013668,
+        0.0015343938721343875,
+        0.0005329169216565788
+      ]
+    },
+    {
+      "source": "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\data\\hand_raw_reviewed\\right_throw_v3\\pilot1_test\\P02_pilot1_test_CHOP_001.csv",
+      "true": "CHOP",
+      "predicted": "CHOP",
+      "confidence": 0.7901623845100403,
+      "probabilities": [
+        0.0007548955036327243,
+        5.199919087317539e-06,
+        0.7901623845100403,
+        0.0031071242410689592,
+        0.014063313603401184,
+        0.1919027417898178,
+        4.420324785314733e-06
+      ]
+    },
+    {
+      "source": "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\data\\hand_raw_reviewed\\right_throw_v3\\pilot1_test\\P02_pilot1_test_CHOP_002.csv",
+      "true": "CHOP",
+      "predicted": "CHOP",
+      "confidence": 0.9995001554489136,
+      "probabilities": [
+        2.6692339815781452e-05,
+        7.524907630340749e-08,
+        0.9995001554489136,
+        0.00010304636816726997,
+        1.095131847250741e-05,
+        0.0003567683743312955,
+        2.2865040136821335e-06
+      ]
+    },
+    {
+      "source": "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\data\\hand_raw_reviewed\\right_throw_v3\\pilot1_test\\P02_pilot1_test_CHOP_003.csv",
+      "true": "CHOP",
+      "predicted": "CHOP",
+      "confidence": 0.9808242321014404,
+      "probabilities": [
+        3.5100936656817794e-05,
+        4.507414530507958e-07,
+        0.9808242321014404,
+        0.013180897571146488,
+        0.0004318256978876889,
+        0.0054720668122172356,
+        5.552691800403409e-05
+      ]
+    },
+    {
+      "source": "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\data\\hand_raw_reviewed\\right_throw_v3\\pilot1_test\\P02_pilot1_test_CHOP_004.csv",
+      "true": "CHOP",
+      "predicted": "CHOP",
+      "confidence": 0.9886766672134399,
+      "probabilities": [
+        4.1256716940551996e-05,
+        1.1696996438104179e-07,
+        0.9886766672134399,
+        0.006026268936693668,
+        0.00021983795159030706,
+        0.005014174152165651,
+        2.1651501810993068e-05
+      ]
+    },
+    {
+      "source": "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\data\\hand_raw_reviewed\\right_throw_v3\\pilot1_test\\P02_pilot1_test_IDLE_001.csv",
+      "true": "IDLE",
+      "predicted": "IDLE",
+      "confidence": 0.9999328851699829,
+      "probabilities": [
+        1.2493159374571405e-05,
+        4.0608178096590564e-05,
+        3.879171799781034e-06,
+        1.0029463737737387e-05,
+        5.102387845568046e-08,
+        1.0493270252709408e-07,
+        0.9999328851699829
+      ]
+    },
+    {
+      "source": "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\data\\hand_raw_reviewed\\right_throw_v3\\pilot1_test\\P02_pilot1_test_IDLE_002.csv",
+      "true": "IDLE",
+      "predicted": "IDLE",
+      "confidence": 0.9998229146003723,
+      "probabilities": [
+        2.57577485172078e-05,
+        0.00013666439917869866,
+        9.231212970917113e-06,
+        5.157935447641648e-06,
+        4.901608363638843e-08,
+        2.6969260602527356e-07,
+        0.9998229146003723
+      ]
+    },
+    {
+      "source": "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\data\\hand_raw_reviewed\\right_throw_v3\\pilot1_test\\P02_pilot1_test_IDLE_003.csv",
+      "true": "IDLE",
+      "predicted": "IDLE",
+      "confidence": 0.9999417066574097,
+      "probabilities": [
+        1.2430957212927751e-05,
+        4.160901880823076e-05,
+        1.5485506992263254e-06,
+        2.62012781604426e-06,
+        2.0287250990236316e-08,
+        3.697425654536346e-08,
+        0.9999417066574097
+      ]
+    },
+    {
+      "source": "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\data\\hand_raw_reviewed\\right_throw_v3\\pilot1_test\\P02_pilot1_test_IDLE_004.csv",
+      "true": "IDLE",
+      "predicted": "IDLE",
+      "confidence": 0.9999029636383057,
+      "probabilities": [
+        2.1176270820433274e-05,
+        6.1464321333915e-05,
+        5.5578057072125375e-06,
+        8.593186066718772e-06,
+        4.555678856377199e-08,
+        1.3195953840750008e-07,
+        0.9999029636383057
+      ]
+    },
+    {
+      "source": "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\data\\hand_raw_reviewed\\right_throw_v3\\pilot1_test\\P02_pilot1_test_PICKUP_001.csv",
+      "true": "PICKUP",
+      "predicted": "PICKUP",
+      "confidence": 0.9998598098754883,
+      "probabilities": [
+        0.9998598098754883,
+        4.814222052118566e-07,
+        9.175945479000802e-07,
+        5.5988518710137214e-08,
+        1.8149635252484586e-06,
+        0.00013692057109437883,
+        3.369519063767257e-08
+      ]
+    },
+    {
+      "source": "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\data\\hand_raw_reviewed\\right_throw_v3\\pilot1_test\\P02_pilot1_test_PICKUP_002.csv",
+      "true": "PICKUP",
+      "predicted": "PICKUP",
+      "confidence": 0.9998482465744019,
+      "probabilities": [
+        0.9998482465744019,
+        1.462335035284923e-07,
+        2.9149716738174902e-06,
+        1.3232293838427722e-07,
+        2.6003067432611715e-07,
+        0.00014717166777700186,
+        1.2355392300378298e-06
+      ]
+    },
+    {
+      "source": "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\data\\hand_raw_reviewed\\right_throw_v3\\pilot1_test\\P02_pilot1_test_PICKUP_003.csv",
+      "true": "PICKUP",
+      "predicted": "PICKUP",
+      "confidence": 0.9999966621398926,
+      "probabilities": [
+        0.9999966621398926,
+        1.86901893961533e-09,
+        2.500015057194105e-07,
+        1.188633191873123e-08,
+        3.376407775590451e-08,
+        3.1183815281110583e-06,
+        3.029416717481581e-08
+      ]
+    },
+    {
+      "source": "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\data\\hand_raw_reviewed\\right_throw_v3\\pilot1_test\\P02_pilot1_test_PICKUP_004.csv",
+      "true": "PICKUP",
+      "predicted": "PICKUP",
+      "confidence": 0.9996298551559448,
+      "probabilities": [
+        0.9996298551559448,
+        6.257160123368521e-08,
+        4.934997832606314e-06,
+        2.46575581286379e-07,
+        6.814249786657456e-07,
+        0.000363704573828727,
+        4.5062554931973864e-07
+      ]
+    },
+    {
+      "source": "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\data\\hand_raw_reviewed\\right_throw_v3\\pilot1_test\\P02_pilot1_test_POURING_001.csv",
+      "true": "POURING",
+      "predicted": "POURING",
+      "confidence": 0.9972586631774902,
+      "probabilities": [
+        0.0013940157368779182,
+        2.5454415663261898e-05,
+        0.0012355931103229523,
+        2.5809143266997125e-07,
+        8.581694419262931e-05,
+        0.9972586631774902,
+        1.500834088119518e-07
+      ]
+    },
+    {
+      "source": "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\data\\hand_raw_reviewed\\right_throw_v3\\pilot1_test\\P02_pilot1_test_POURING_002.csv",
+      "true": "POURING",
+      "predicted": "POURING",
+      "confidence": 0.9831368327140808,
+      "probabilities": [
+        0.014287015423178673,
+        0.00021561756148003042,
+        0.0018954568076878786,
+        3.0343969683599425e-06,
+        0.000458263122709468,
+        0.9831368327140808,
+        3.719193273354904e-06
+      ]
+    },
+    {
+      "source": "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\data\\hand_raw_reviewed\\right_throw_v3\\pilot1_test\\P02_pilot1_test_POURING_003.csv",
+      "true": "POURING",
+      "predicted": "POURING",
+      "confidence": 0.9891201257705688,
+      "probabilities": [
+        0.0035667135380208492,
+        1.460004295950057e-05,
+        0.0072686499916017056,
+        1.1522420351184337e-07,
+        2.9386210371740162e-05,
+        0.9891201257705688,
+        4.571221836613404e-07
+      ]
+    },
+    {
+      "source": "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\data\\hand_raw_reviewed\\right_throw_v3\\pilot1_test\\P02_pilot1_test_POURING_004.csv",
+      "true": "POURING",
+      "predicted": "POURING",
+      "confidence": 0.994476854801178,
+      "probabilities": [
+        0.004595386795699596,
+        1.2911103112855926e-05,
+        0.0008272528648376465,
+        4.436801361862308e-07,
+        8.706932567292824e-05,
+        0.994476854801178,
+        1.3280038047014386e-07
+      ]
+    },
+    {
+      "source": "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\data\\hand_raw_reviewed\\right_throw_v3\\pilot1_test\\P02_pilot1_test_WASH_001.csv",
+      "true": "WASH",
+      "predicted": "WASH",
+      "confidence": 0.9995712637901306,
+      "probabilities": [
+        3.546541051946406e-07,
+        2.1050777121445208e-08,
+        0.00023087128647603095,
+        0.9995712637901306,
+        0.00010614615894155577,
+        5.97347451503083e-08,
+        9.110864630201831e-05
+      ]
+    },
+    {
+      "source": "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\data\\hand_raw_reviewed\\right_throw_v3\\pilot1_test\\P02_pilot1_test_WASH_002.csv",
+      "true": "WASH",
+      "predicted": "WASH",
+      "confidence": 0.9995785355567932,
+      "probabilities": [
+        2.901590789861075e-07,
+        4.130126285417646e-08,
+        0.000252825440838933,
+        0.9995785355567932,
+        4.138960866839625e-05,
+        4.643953133154355e-08,
+        0.0001268944761250168
+      ]
+    },
+    {
+      "source": "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\data\\hand_raw_reviewed\\right_throw_v3\\pilot1_test\\P02_pilot1_test_WASH_003.csv",
+      "true": "WASH",
+      "predicted": "WASH",
+      "confidence": 0.999933123588562,
+      "probabilities": [
+        1.1315493793517817e-05,
+        2.2985344116932538e-07,
+        1.0389118870079983e-05,
+        0.999933123588562,
+        2.2410288238461362e-06,
+        2.6450758028317978e-08,
+        4.270011413609609e-05
+      ]
+    },
+    {
+      "source": "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\data\\hand_raw_reviewed\\right_throw_v3\\pilot1_test\\P02_pilot1_test_WASH_004.csv",
+      "true": "WASH",
+      "predicted": "WASH",
+      "confidence": 0.9999719858169556,
+      "probabilities": [
+        2.844460595952114e-06,
+        5.8864774388212027e-08,
+        5.151699042471591e-06,
+        0.9999719858169556,
+        2.4083867629087763e-06,
+        9.595161110098616e-09,
+        1.7471205865149386e-05
+      ]
+    },
+    {
+      "source": "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\data\\hand_raw_reviewed\\right_throw_v3\\throw_v3_test\\P02_throw_v3_test_THROW_001.csv",
+      "true": "THROW",
+      "predicted": "THROW",
+      "confidence": 0.9972152709960938,
+      "probabilities": [
+        3.1779998721503944e-07,
+        0.002676310483366251,
+        7.968827958393376e-06,
+        9.277540812036023e-05,
+        0.9972152709960938,
+        7.278820703504607e-06,
+        1.6630129096029123e-07
+      ]
+    },
+    {
+      "source": "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\data\\hand_raw_reviewed\\right_throw_v3\\throw_v3_test\\P02_throw_v3_test_THROW_002.csv",
+      "true": "THROW",
+      "predicted": "THROW",
+      "confidence": 0.9992893934249878,
+      "probabilities": [
+        3.5691459743247833e-07,
+        0.0006456245318986475,
+        4.644811724574538e-06,
+        5.127116310177371e-05,
+        0.9992893934249878,
+        8.69654741109116e-06,
+        5.3429289437190164e-08
+      ]
+    },
+    {
+      "source": "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\data\\hand_raw_reviewed\\right_throw_v3\\throw_v3_test\\P02_throw_v3_test_THROW_003.csv",
+      "true": "THROW",
+      "predicted": "THROW",
+      "confidence": 0.9977604150772095,
+      "probabilities": [
+        1.7587068441571319e-06,
+        0.002095454139634967,
+        1.9398068616283126e-05,
+        0.00010279149137204513,
+        0.9977604150772095,
+        1.944292671396397e-05,
+        8.135136795317521e-07
+      ]
+    },
+    {
+      "source": "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\data\\hand_raw_reviewed\\right_throw_v3\\throw_v3_test\\P02_throw_v3_test_THROW_004.csv",
+      "true": "THROW",
+      "predicted": "THROW",
+      "confidence": 0.9995470643043518,
+      "probabilities": [
+        5.091965249448549e-07,
+        0.0003853192611131817,
+        4.7893699957057834e-05,
+        6.8630829446192365e-06,
+        0.9995470643043518,
+        1.2250647159817163e-05,
+        2.8344715019557043e-08
+      ]
+    }
+  ]
+}
