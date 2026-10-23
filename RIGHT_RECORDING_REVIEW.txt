@@ -1,0 +1,32 @@
+RIGHT recording review — 2026-10-23
+
+Source: uploaded right.zip. Person P02, device_id 2.
+189 recordings: 140 train, 21 validation, 28 test.
+Every gesture: PICKUP, DROP, CHOP, WASH, THROW, POURING, IDLE = 20/3/4.
+19,142 source samples total; each recording has 101-102 samples.
+Durations 2.000-2.020 seconds; largest source interval 23 ms.
+All CSV hashes match their JSON sidecars.
+No observed sequence gaps inside recordings; no nonfinite features.
+No identical resampled model inputs found. All data are from the RIGHT hand.
+No values at int16 transport saturation boundaries; flex values within 0..1.
+Some flex channels are constant within individual recordings; they vary across
+the dataset. These checks do not certify physical calibration or gesture labels.
+
+Training sessions in metadata: pilot1 (136), pilot2 (4).
+Validation: pilot1_validation (21). Test: pilot1_test (28).
+The reviewed copy preserves metadata sessions and split assignments.
+Four CHOP training paths said pilot1/17-20 but JSON said pilot2/1-4.
+One WASH validation path said trial 1 but JSON said trial 4.
+Only reviewed paths were corrected to metadata identities. CSV and per-trial
+JSON bytes are unchanged. See RIGHT_DATASET_PATH_CHANGES.json.
+The separate reviewed folder avoids modifying your original recordings.
+
+Updated split validation uses largest-remainder rounding of 75/10/15:
+27 recordings -> 20/3/4; 40 -> 30/4/6; 20 -> 15/2/3.
+No data is automatically moved between splits.
+Whole-person/session split separation remains checked.
+Preprocessing verified on this reviewed dataset: X=(189,50,11).
+
+Automated suite: 31 passed, one PyTorch test skipped here (torch unavailable).
+PyTorch test passed on the user's laptop previously. No real-data model has
+been trained or evaluated here. Test-set model predictions remain untouched.

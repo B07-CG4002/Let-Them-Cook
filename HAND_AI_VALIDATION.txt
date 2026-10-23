@@ -1,0 +1,27 @@
+Independent-hand AI v1 — validation on 2026-10-22
+
+Repository interfaces inspected on AI-standard-gesture-retraining:
+src/model.py blob a4219b7250cb1aa7ad561fee20c510539c8759de
+common/sensor.py blob 38044f194246f8803171516c00ede8c0fabcf76a
+common/control.py blob 75c05c300d0394d17a87429d856d99ea4efe2d44
+laptop/controls.py blob a5c633ff3be4176c408a53e48445e38d9a571cf0
+laptop/source_audit.py blob 895cb4faeac9e625b808fbd0d1e6931dc9184174
+
+10 automated checks passed:
+- Source-time recording with batched arrivals.
+- Recording rejects sequence gaps.
+- Angle interpolation handles +/-180-degree wrap.
+- Training-only normalization handles constant channels.
+- Exact split ratios and session crossing detection.
+- Existing JSON output cannot be overwritten.
+- Invalid timestamps, large gaps, nonfinite values rejected.
+- Prepare 140 synthetic recordings; verify dimensions, split counts and tamper rejection.
+- Live rolling window resets after sequence gaps.
+- Source uptime wraparound handled.
+
+One additional PyTorch train/evaluate/load smoke test is included but was SKIPPED
+in this environment because torch is unavailable. Run the supplied unittest
+command with the user's PyTorch .venv: expect all 11 tests to pass.
+No physical BLE recording, real-data training, real live classification, Ultra96
+integration or FPGA verification has been performed for this new pipeline here.
+The prior RIGHT 50 Hz transport success is separate evidence, not model validation.

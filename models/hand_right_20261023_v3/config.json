@@ -1,0 +1,29 @@
+{
+  "version": "independent_hand_v1",
+  "class_names": [
+    "PICKUP",
+    "DROP",
+    "CHOP",
+    "WASH",
+    "THROW",
+    "POURING",
+    "IDLE"
+  ],
+  "feature_columns": [
+    "ax",
+    "ay",
+    "az",
+    "gx",
+    "gy",
+    "gz",
+    "yaw",
+    "pitch",
+    "roll",
+    "flex1",
+    "flex2"
+  ],
+  "window_seconds": 2.0,
+  "time_positions": 50,
+  "normalization": "training-only per-feature mean/std after resampling",
+  "angle_interpolation": "unwrap degrees, interpolate, wrap to [-180,180)"
+}

@@ -1,0 +1,191 @@
+[
+  {
+    "archive": "throw_v3_train.zip",
+    "original": "throw_v3_train/P01_throw_v3_train_THROW_001.csv",
+    "reviewed": "data/hand_raw_reviewed/right_throw_v3/throw_v3_train/P02_throw_v3_train_THROW_001.csv",
+    "old_person": "P01",
+    "new_person": "P02"
+  },
+  {
+    "archive": "throw_v3_train.zip",
+    "original": "throw_v3_train/P01_throw_v3_train_THROW_002.csv",
+    "reviewed": "data/hand_raw_reviewed/right_throw_v3/throw_v3_train/P02_throw_v3_train_THROW_002.csv",
+    "old_person": "P01",
+    "new_person": "P02"
+  },
+  {
+    "archive": "throw_v3_train.zip",
+    "original": "throw_v3_train/P01_throw_v3_train_THROW_003.csv",
+    "reviewed": "data/hand_raw_reviewed/right_throw_v3/throw_v3_train/P02_throw_v3_train_THROW_003.csv",
+    "old_person": "P01",
+    "new_person": "P02"
+  },
+  {
+    "archive": "throw_v3_train.zip",
+    "original": "throw_v3_train/P01_throw_v3_train_THROW_004.csv",
+    "reviewed": "data/hand_raw_reviewed/right_throw_v3/throw_v3_train/P02_throw_v3_train_THROW_004.csv",
+    "old_person": "P01",
+    "new_person": "P02"
+  },
+  {
+    "archive": "throw_v3_train.zip",
+    "original": "throw_v3_train/P01_throw_v3_train_THROW_005.csv",
+    "reviewed": "data/hand_raw_reviewed/right_throw_v3/throw_v3_train/P02_throw_v3_train_THROW_005.csv",
+    "old_person": "P01",
+    "new_person": "P02"
+  },
+  {
+    "archive": "throw_v3_train.zip",
+    "original": "throw_v3_train/P01_throw_v3_train_THROW_006.csv",
+    "reviewed": "data/hand_raw_reviewed/right_throw_v3/throw_v3_train/P02_throw_v3_train_THROW_006.csv",
+    "old_person": "P01",
+    "new_person": "P02"
+  },
+  {
+    "archive": "throw_v3_train.zip",
+    "original": "throw_v3_train/P01_throw_v3_train_THROW_007.csv",
+    "reviewed": "data/hand_raw_reviewed/right_throw_v3/throw_v3_train/P02_throw_v3_train_THROW_007.csv",
+    "old_person": "P01",
+    "new_person": "P02"
+  },
+  {
+    "archive": "throw_v3_train.zip",
+    "original": "throw_v3_train/P01_throw_v3_train_THROW_008.csv",
+    "reviewed": "data/hand_raw_reviewed/right_throw_v3/throw_v3_train/P02_throw_v3_train_THROW_008.csv",
+    "old_person": "P01",
+    "new_person": "P02"
+  },
+  {
+    "archive": "throw_v3_train.zip",
+    "original": "throw_v3_train/P01_throw_v3_train_THROW_009.csv",
+    "reviewed": "data/hand_raw_reviewed/right_throw_v3/throw_v3_train/P02_throw_v3_train_THROW_009.csv",
+    "old_person": "P01",
+    "new_person": "P02"
+  },
+  {
+    "archive": "throw_v3_train.zip",
+    "original": "throw_v3_train/P01_throw_v3_train_THROW_010.csv",
+    "reviewed": "data/hand_raw_reviewed/right_throw_v3/throw_v3_train/P02_throw_v3_train_THROW_010.csv",
+    "old_person": "P01",
+    "new_person": "P02"
+  },
+  {
+    "archive": "throw_v3_train.zip",
+    "original": "throw_v3_train/P01_throw_v3_train_THROW_011.csv",
+    "reviewed": "data/hand_raw_reviewed/right_throw_v3/throw_v3_train/P02_throw_v3_train_THROW_011.csv",
+    "old_person": "P01",
+    "new_person": "P02"
+  },
+  {
+    "archive": "throw_v3_train.zip",
+    "original": "throw_v3_train/P01_throw_v3_train_THROW_012.csv",
+    "reviewed": "data/hand_raw_reviewed/right_throw_v3/throw_v3_train/P02_throw_v3_train_THROW_012.csv",
+    "old_person": "P01",
+    "new_person": "P02"
+  },
+  {
+    "archive": "throw_v3_train.zip",
+    "original": "throw_v3_train/P01_throw_v3_train_THROW_013.csv",
+    "reviewed": "data/hand_raw_reviewed/right_throw_v3/throw_v3_train/P02_throw_v3_train_THROW_013.csv",
+    "old_person": "P01",
+    "new_person": "P02"
+  },
+  {
+    "archive": "throw_v3_train.zip",
+    "original": "throw_v3_train/P01_throw_v3_train_THROW_014.csv",
+    "reviewed": "data/hand_raw_reviewed/right_throw_v3/throw_v3_train/P02_throw_v3_train_THROW_014.csv",
+    "old_person": "P01",
+    "new_person": "P02"
+  },
+  {
+    "archive": "throw_v3_train.zip",
+    "original": "throw_v3_train/P01_throw_v3_train_THROW_015.csv",
+    "reviewed": "data/hand_raw_reviewed/right_throw_v3/throw_v3_train/P02_throw_v3_train_THROW_015.csv",
+    "old_person": "P01",
+    "new_person": "P02"
+  },
+  {
+    "archive": "throw_v3_train.zip",
+    "original": "throw_v3_train/P01_throw_v3_train_THROW_016.csv",
+    "reviewed": "data/hand_raw_reviewed/right_throw_v3/throw_v3_train/P02_throw_v3_train_THROW_016.csv",
+    "old_person": "P01",
+    "new_person": "P02"
+  },
+  {
+    "archive": "throw_v3_train.zip",
+    "original": "throw_v3_train/P01_throw_v3_train_THROW_017.csv",
+    "reviewed": "data/hand_raw_reviewed/right_throw_v3/throw_v3_train/P02_throw_v3_train_THROW_017.csv",
+    "old_person": "P01",
+    "new_person": "P02"
+  },
+  {
+    "archive": "throw_v3_train.zip",
+    "original": "throw_v3_train/P01_throw_v3_train_THROW_018.csv",
+    "reviewed": "data/hand_raw_reviewed/right_throw_v3/throw_v3_train/P02_throw_v3_train_THROW_018.csv",
+    "old_person": "P01",
+    "new_person": "P02"
+  },
+  {
+    "archive": "throw_v3_train.zip",
+    "original": "throw_v3_train/P01_throw_v3_train_THROW_019.csv",
+    "reviewed": "data/hand_raw_reviewed/right_throw_v3/throw_v3_train/P02_throw_v3_train_THROW_019.csv",
+    "old_person": "P01",
+    "new_person": "P02"
+  },
+  {
+    "archive": "throw_v3_train.zip",
+    "original": "throw_v3_train/P01_throw_v3_train_THROW_020.csv",
+    "reviewed": "data/hand_raw_reviewed/right_throw_v3/throw_v3_train/P02_throw_v3_train_THROW_020.csv",
+    "old_person": "P01",
+    "new_person": "P02"
+  },
+  {
+    "archive": "throw_v3_validation.zip",
+    "original": "throw_v3_validation/P01_throw_v3_validation_THROW_001.csv",
+    "reviewed": "data/hand_raw_reviewed/right_throw_v3/throw_v3_validation/P02_throw_v3_validation_THROW_001.csv",
+    "old_person": "P01",
+    "new_person": "P02"
+  },
+  {
+    "archive": "throw_v3_validation.zip",
+    "original": "throw_v3_validation/P01_throw_v3_validation_THROW_002.csv",
+    "reviewed": "data/hand_raw_reviewed/right_throw_v3/throw_v3_validation/P02_throw_v3_validation_THROW_002.csv",
+    "old_person": "P01",
+    "new_person": "P02"
+  },
+  {
+    "archive": "throw_v3_validation.zip",
+    "original": "throw_v3_validation/P01_throw_v3_validation_THROW_003.csv",
+    "reviewed": "data/hand_raw_reviewed/right_throw_v3/throw_v3_validation/P02_throw_v3_validation_THROW_003.csv",
+    "old_person": "P01",
+    "new_person": "P02"
+  },
+  {
+    "archive": "throw_v3_test.zip",
+    "original": "throw_v3_test/P01_throw_v3_test_THROW_001.csv",
+    "reviewed": "data/hand_raw_reviewed/right_throw_v3/throw_v3_test/P02_throw_v3_test_THROW_001.csv",
+    "old_person": "P01",
+    "new_person": "P02"
+  },
+  {
+    "archive": "throw_v3_test.zip",
+    "original": "throw_v3_test/P01_throw_v3_test_THROW_002.csv",
+    "reviewed": "data/hand_raw_reviewed/right_throw_v3/throw_v3_test/P02_throw_v3_test_THROW_002.csv",
+    "old_person": "P01",
+    "new_person": "P02"
+  },
+  {
+    "archive": "throw_v3_test.zip",
+    "original": "throw_v3_test/P01_throw_v3_test_THROW_003.csv",
+    "reviewed": "data/hand_raw_reviewed/right_throw_v3/throw_v3_test/P02_throw_v3_test_THROW_003.csv",
+    "old_person": "P01",
+    "new_person": "P02"
+  },
+  {
+    "archive": "throw_v3_test.zip",
+    "original": "throw_v3_test/P01_throw_v3_test_THROW_004.csv",
+    "reviewed": "data/hand_raw_reviewed/right_throw_v3/throw_v3_test/P02_throw_v3_test_THROW_004.csv",
+    "old_person": "P01",
+    "new_person": "P02"
+  }
+]

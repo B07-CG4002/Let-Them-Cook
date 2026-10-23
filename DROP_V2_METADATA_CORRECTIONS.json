@@ -1,0 +1,82 @@
+{
+  "split_changes": [
+    {
+      "source": "drop_v2/drop_v2_test/P02_drop_v2_test_DROP_001.csv",
+      "session": "drop_v2_test",
+      "trial": 1,
+      "old_split": "train",
+      "new_split": "test"
+    },
+    {
+      "source": "drop_v2/drop_v2_test/P02_drop_v2_test_DROP_002.csv",
+      "session": "drop_v2_test",
+      "trial": 2,
+      "old_split": "train",
+      "new_split": "test"
+    },
+    {
+      "source": "drop_v2/drop_v2_test/P02_drop_v2_test_DROP_003.csv",
+      "session": "drop_v2_test",
+      "trial": 3,
+      "old_split": "train",
+      "new_split": "test"
+    },
+    {
+      "source": "drop_v2/drop_v2_test/P02_drop_v2_test_DROP_004.csv",
+      "session": "drop_v2_test",
+      "trial": 4,
+      "old_split": "train",
+      "new_split": "test"
+    },
+    {
+      "source": "drop_v2/drop_v2_validation/P02_drop_v2_validation_DROP_001.csv",
+      "session": "drop_v2_validation",
+      "trial": 1,
+      "old_split": "train",
+      "new_split": "validation"
+    },
+    {
+      "source": "drop_v2/drop_v2_validation/P02_drop_v2_validation_DROP_002.csv",
+      "session": "drop_v2_validation",
+      "trial": 2,
+      "old_split": "train",
+      "new_split": "validation"
+    },
+    {
+      "source": "drop_v2/drop_v2_validation/P02_drop_v2_validation_DROP_003.csv",
+      "session": "drop_v2_validation",
+      "trial": 3,
+      "old_split": "train",
+      "new_split": "validation"
+    }
+  ],
+  "excluded_old_drop": [
+    "pilot1/P02_pilot1_DROP_001.csv",
+    "pilot1/P02_pilot1_DROP_002.csv",
+    "pilot1/P02_pilot1_DROP_003.csv",
+    "pilot1/P02_pilot1_DROP_004.csv",
+    "pilot1/P02_pilot1_DROP_005.csv",
+    "pilot1/P02_pilot1_DROP_006.csv",
+    "pilot1/P02_pilot1_DROP_007.csv",
+    "pilot1/P02_pilot1_DROP_008.csv",
+    "pilot1/P02_pilot1_DROP_009.csv",
+    "pilot1/P02_pilot1_DROP_010.csv",
+    "pilot1/P02_pilot1_DROP_011.csv",
+    "pilot1/P02_pilot1_DROP_012.csv",
+    "pilot1/P02_pilot1_DROP_013.csv",
+    "pilot1/P02_pilot1_DROP_014.csv",
+    "pilot1/P02_pilot1_DROP_015.csv",
+    "pilot1/P02_pilot1_DROP_016.csv",
+    "pilot1/P02_pilot1_DROP_017.csv",
+    "pilot1/P02_pilot1_DROP_018.csv",
+    "pilot1/P02_pilot1_DROP_019.csv",
+    "pilot1/P02_pilot1_DROP_020.csv",
+    "pilot1_test/P02_pilot1_test_DROP_001.csv",
+    "pilot1_test/P02_pilot1_test_DROP_002.csv",
+    "pilot1_test/P02_pilot1_test_DROP_003.csv",
+    "pilot1_test/P02_pilot1_test_DROP_004.csv",
+    "pilot1_validation/P02_pilot1_validation_DROP_001.csv",
+    "pilot1_validation/P02_pilot1_validation_DROP_002.csv",
+    "pilot1_validation/P02_pilot1_validation_DROP_003.csv"
+  ]
+}
