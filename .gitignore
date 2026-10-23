@@ -89,3 +89,13 @@ nlviewcommon.logfile
 
 # Generated out-of-context constraints
 /B07_full_cnn/multiply_accumulate/*_ooc.xdc
+
+# Independent-hand recording sessions and dataset working copies
+/data/hand_pilot/
+/data/hand_drop_v2/
+/data/hand_throw_v3/
+/data/hand_raw_reviewed/
+/data/hand_processed/
+
+# Preserve model split manifests despite the existing *.csv rule
+!/models/hand_*/split_manifest.csv
