@@ -1,0 +1,1254 @@
+{
+  "version": 1,
+  "status": "completed",
+  "scope": "legacy_paired_regression",
+  "features": 22,
+  "classes": [
+    "PICKUP",
+    "DROP",
+    "CHOP",
+    "WASH",
+    "THROW",
+    "FIREEXT",
+    "POURING",
+    "IDLE"
+  ],
+  "source_sha256": {
+    "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\fpga\\hls\\eightclass_weights_standard_20261021.npz": "08cbb2e1e4ed02235b41f1142e248c261b78f99567f8f28446cc23de7a15c9dc"
+  },
+  "data": {
+    "evaluation_scope": "older paired regression vectors; not final-model accuracy",
+    "calibration_scope": "same regression vectors; diagnostic range profiling only",
+    "data_sha256": {
+      "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\fpga\\hls\\eightclass_board_test_20261019.npz": "caa79e76c4a6fb527165ca92517a72ab18883000f1789209416d7c7e22fbd045"
+    },
+    "split": "unassigned_legacy"
+  },
+  "normalization_applied": false,
+  "calibration_samples": 24,
+  "evaluation_samples": 24,
+  "calibration_float_ranges": {
+    "input": {
+      "minimum": -282.14849853515625,
+      "maximum": 250.65829467773438,
+      "elements": 26400
+    },
+    "conv1": {
+      "minimum": -229.61983249014622,
+      "maximum": 211.5461558590692,
+      "elements": 36864
+    },
+    "pool1": {
+      "minimum": 0.0,
+      "maximum": 211.5461558590692,
+      "elements": 18432
+    },
+    "conv2": {
+      "minimum": -86.7284753169126,
+      "maximum": 110.46052546695871,
+      "elements": 33792
+    },
+    "pool2": {
+      "minimum": 0.0,
+      "maximum": 110.46052546695871,
+      "elements": 16896
+    },
+    "fc1": {
+      "minimum": -52.63742988571768,
+      "maximum": 45.454502626876355,
+      "elements": 1536
+    },
+    "hidden": {
+      "minimum": 0.0,
+      "maximum": 45.454502626876355,
+      "elements": 1536
+    },
+    "logits": {
+      "minimum": -9.111867817384995,
+      "maximum": 17.716771334542887,
+      "elements": 192
+    }
+  },
+  "weight_ranges": {
+    "conv1_w": {
+      "minimum": -0.14225605130195618,
+      "maximum": 0.13945460319519043
+    },
+    "conv2_w": {
+      "minimum": -0.1144094169139862,
+      "maximum": 0.11595714092254639
+    },
+    "fc1_w": {
+      "minimum": -0.05756380409002304,
+      "maximum": 0.05986695736646652
+    },
+    "fc2_w": {
+      "minimum": -0.1344418227672577,
+      "maximum": 0.13621608912944794
+    },
+    "conv1_b": {
+      "minimum": -0.12328601628541946,
+      "maximum": 0.10534220933914185
+    },
+    "conv2_b": {
+      "minimum": -0.09474091231822968,
+      "maximum": 0.09386183321475983
+    },
+    "fc1_b": {
+      "minimum": -0.03373122215270996,
+      "maximum": 0.04185720533132553
+    },
+    "fc2_b": {
+      "minimum": -0.10350045561790466,
+      "maximum": 0.13378989696502686
+    }
+  },
+  "activation_integer_bits": 10,
+  "weight_integer_bits": -1,
+  "activation_integer_source": "explicit",
+  "guard_bits_applied": 0,
+  "float_reference": "NumPy float64 GestureCNN; no hardware timing prediction",
+  "emission_semantics": "Confidence-filtered class labels only; no stable-confirmation or game logic simulated",
+  "numeric_contract": "floor(x*2**F+0.5); same-F activations/bias; exact int64 partial sums; one round/saturate per layer",
+  "threshold": 0.7,
+  "threshold_rule": "ge",
+  "max_probability_error_limit": 0.01,
+  "limitations": [
+    "No HLS resource, clock, latency or power measurements",
+    "No rolling-window or end-to-end timing simulation",
+    "Software passing candidates require further data and hardware validation",
+    "Full-range accumulator bounds use representable operands plus this model quantized biases; measured widths are not safe hardware limits"
+  ],
+  "candidates": [
+    {
+      "kind": "current_numeric_baseline",
+      "activation_bits": 32,
+      "activation_integer_bits": 14,
+      "activation_fraction_bits": 18,
+      "weight_bits": 22,
+      "weight_integer_bits": 1,
+      "weight_fraction_bits": 21,
+      "clipping_events": 0,
+      "clipping_by_stage": {
+        "conv1_w": 0,
+        "conv2_w": 0,
+        "fc1_w": 0,
+        "fc2_w": 0,
+        "conv1_b": 0,
+        "conv2_b": 0,
+        "fc1_b": 0,
+        "fc2_b": 0,
+        "input": 0,
+        "conv1_output": 0,
+        "conv2_output": 0,
+        "fc1_output": 0,
+        "fc2_output": 0
+      },
+      "partial_sum_ranges": {
+        "conv1": {
+          "minimum": -126234758868802,
+          "maximum": 126907617187503,
+          "measured_partial_sum_bits": 48
+        },
+        "conv2": {
+          "minimum": -50154805091908,
+          "maximum": 69889676480574,
+          "measured_partial_sum_bits": 47
+        },
+        "fc1": {
+          "minimum": -28995200030593,
+          "maximum": 25423637675143,
+          "measured_partial_sum_bits": 46
+        },
+        "fc2": {
+          "minimum": -5620744345136,
+          "maximum": 9739914280237,
+          "measured_partial_sum_bits": 45
+        }
+      },
+      "full_range_accumulator_bits": {
+        "conv1": 60,
+        "conv2": 60,
+        "fc1": 63,
+        "fc2": 60
+      },
+      "samples": 24,
+      "class_agreement": 24,
+      "class_changes": 0,
+      "float_correct": 6,
+      "quantized_correct": 6,
+      "threshold_decision_changes": 0,
+      "emitted_label_changes": 0,
+      "max_probability_error": 5.083771895564304e-06,
+      "max_logit_error": 6.756198065271946e-05,
+      "changed_class_indices": [],
+      "changed_filtered_indices": [],
+      "passes_regression_screen": true
+    },
+    {
+      "kind": "candidate",
+      "activation_bits": 24,
+      "activation_integer_bits": 10,
+      "activation_fraction_bits": 14,
+      "weight_bits": 16,
+      "weight_integer_bits": -1,
+      "weight_fraction_bits": 17,
+      "clipping_events": 0,
+      "clipping_by_stage": {
+        "conv1_w": 0,
+        "conv2_w": 0,
+        "fc1_w": 0,
+        "fc2_w": 0,
+        "conv1_b": 0,
+        "conv2_b": 0,
+        "fc1_b": 0,
+        "fc2_b": 0,
+        "input": 0,
+        "conv1_output": 0,
+        "conv2_output": 0,
+        "fc1_output": 0,
+        "fc2_output": 0
+      },
+      "partial_sum_ranges": {
+        "conv1": {
+          "minimum": -493099638927,
+          "maximum": 495737078152,
+          "measured_partial_sum_bits": 40
+        },
+        "conv2": {
+          "minimum": -195912003175,
+          "maximum": 273005302105,
+          "measured_partial_sum_bits": 39
+        },
+        "fc1": {
+          "minimum": -113267742919,
+          "maximum": 99311962637,
+          "measured_partial_sum_bits": 38
+        },
+        "fc2": {
+          "minimum": -21955515247,
+          "maximum": 38046199134,
+          "measured_partial_sum_bits": 37
+        }
+      },
+      "full_range_accumulator_bits": {
+        "conv1": 46,
+        "conv2": 46,
+        "fc1": 49,
+        "fc2": 46
+      },
+      "samples": 24,
+      "class_agreement": 24,
+      "class_changes": 0,
+      "float_correct": 6,
+      "quantized_correct": 6,
+      "threshold_decision_changes": 0,
+      "emitted_label_changes": 0,
+      "max_probability_error": 0.00015886314181356997,
+      "max_logit_error": 0.0010384165601668993,
+      "changed_class_indices": [],
+      "changed_filtered_indices": [],
+      "passes_regression_screen": true
+    },
+    {
+      "kind": "candidate",
+      "activation_bits": 24,
+      "activation_integer_bits": 10,
+      "activation_fraction_bits": 14,
+      "weight_bits": 12,
+      "weight_integer_bits": -1,
+      "weight_fraction_bits": 13,
+      "clipping_events": 0,
+      "clipping_by_stage": {
+        "conv1_w": 0,
+        "conv2_w": 0,
+        "fc1_w": 0,
+        "fc2_w": 0,
+        "conv1_b": 0,
+        "conv2_b": 0,
+        "fc1_b": 0,
+        "fc2_b": 0,
+        "input": 0,
+        "conv1_output": 0,
+        "conv2_output": 0,
+        "fc1_output": 0,
+        "fc2_output": 0
+      },
+      "partial_sum_ranges": {
+        "conv1": {
+          "minimum": -30810409995,
+          "maximum": 30978670867,
+          "measured_partial_sum_bits": 36
+        },
+        "conv2": {
+          "minimum": -12248832748,
+          "maximum": 17062046711,
+          "measured_partial_sum_bits": 35
+        },
+        "fc1": {
+          "minimum": -7076424764,
+          "maximum": 6207554067,
+          "measured_partial_sum_bits": 34
+        },
+        "fc2": {
+          "minimum": -1371613331,
+          "maximum": 2377109568,
+          "measured_partial_sum_bits": 33
+        }
+      },
+      "full_range_accumulator_bits": {
+        "conv1": 42,
+        "conv2": 42,
+        "fc1": 45,
+        "fc2": 42
+      },
+      "samples": 24,
+      "class_agreement": 24,
+      "class_changes": 0,
+      "float_correct": 6,
+      "quantized_correct": 6,
+      "threshold_decision_changes": 0,
+      "emitted_label_changes": 0,
+      "max_probability_error": 0.003135589344346712,
+      "max_logit_error": 0.02151821344770033,
+      "changed_class_indices": [],
+      "changed_filtered_indices": [],
+      "passes_regression_screen": true
+    },
+    {
+      "kind": "candidate",
+      "activation_bits": 24,
+      "activation_integer_bits": 10,
+      "activation_fraction_bits": 14,
+      "weight_bits": 10,
+      "weight_integer_bits": -1,
+      "weight_fraction_bits": 11,
+      "clipping_events": 0,
+      "clipping_by_stage": {
+        "conv1_w": 0,
+        "conv2_w": 0,
+        "fc1_w": 0,
+        "fc2_w": 0,
+        "conv1_b": 0,
+        "conv2_b": 0,
+        "fc1_b": 0,
+        "fc2_b": 0,
+        "input": 0,
+        "conv1_output": 0,
+        "conv2_output": 0,
+        "fc1_output": 0,
+        "fc2_output": 0
+      },
+      "partial_sum_ranges": {
+        "conv1": {
+          "minimum": -7715182512,
+          "maximum": 7742796816,
+          "measured_partial_sum_bits": 34
+        },
+        "conv2": {
+          "minimum": -3056252137,
+          "maximum": 4268703676,
+          "measured_partial_sum_bits": 33
+        },
+        "fc1": {
+          "minimum": -1773632940,
+          "maximum": 1554324716,
+          "measured_partial_sum_bits": 32
+        },
+        "fc2": {
+          "minimum": -342639823,
+          "maximum": 596887513,
+          "measured_partial_sum_bits": 31
+        }
+      },
+      "full_range_accumulator_bits": {
+        "conv1": 40,
+        "conv2": 40,
+        "fc1": 43,
+        "fc2": 40
+      },
+      "samples": 24,
+      "class_agreement": 24,
+      "class_changes": 0,
+      "float_correct": 6,
+      "quantized_correct": 6,
+      "threshold_decision_changes": 1,
+      "emitted_label_changes": 1,
+      "max_probability_error": 0.02065787939278385,
+      "max_logit_error": 0.08123957135885185,
+      "changed_class_indices": [],
+      "changed_filtered_indices": [
+        17
+      ],
+      "passes_regression_screen": false
+    },
+    {
+      "kind": "candidate",
+      "activation_bits": 24,
+      "activation_integer_bits": 10,
+      "activation_fraction_bits": 14,
+      "weight_bits": 8,
+      "weight_integer_bits": -1,
+      "weight_fraction_bits": 9,
+      "clipping_events": 0,
+      "clipping_by_stage": {
+        "conv1_w": 0,
+        "conv2_w": 0,
+        "fc1_w": 0,
+        "fc2_w": 0,
+        "conv1_b": 0,
+        "conv2_b": 0,
+        "fc1_b": 0,
+        "fc2_b": 0,
+        "input": 0,
+        "conv1_output": 0,
+        "conv2_output": 0,
+        "fc1_output": 0,
+        "fc2_output": 0
+      },
+      "partial_sum_ranges": {
+        "conv1": {
+          "minimum": -1923057889,
+          "maximum": 1942031207,
+          "measured_partial_sum_bits": 32
+        },
+        "conv2": {
+          "minimum": -770759279,
+          "maximum": 1070188997,
+          "measured_partial_sum_bits": 31
+        },
+        "fc1": {
+          "minimum": -439783748,
+          "maximum": 386963734,
+          "measured_partial_sum_bits": 30
+        },
+        "fc2": {
+          "minimum": -85661068,
+          "maximum": 149563905,
+          "measured_partial_sum_bits": 29
+        }
+      },
+      "full_range_accumulator_bits": {
+        "conv1": 38,
+        "conv2": 38,
+        "fc1": 41,
+        "fc2": 38
+      },
+      "samples": 24,
+      "class_agreement": 23,
+      "class_changes": 1,
+      "float_correct": 6,
+      "quantized_correct": 6,
+      "threshold_decision_changes": 1,
+      "emitted_label_changes": 1,
+      "max_probability_error": 0.039767818656298026,
+      "max_logit_error": 0.2042749454019379,
+      "changed_class_indices": [
+        12
+      ],
+      "changed_filtered_indices": [
+        1
+      ],
+      "passes_regression_screen": false
+    },
+    {
+      "kind": "candidate",
+      "activation_bits": 20,
+      "activation_integer_bits": 10,
+      "activation_fraction_bits": 10,
+      "weight_bits": 16,
+      "weight_integer_bits": -1,
+      "weight_fraction_bits": 17,
+      "clipping_events": 0,
+      "clipping_by_stage": {
+        "conv1_w": 0,
+        "conv2_w": 0,
+        "fc1_w": 0,
+        "fc2_w": 0,
+        "conv1_b": 0,
+        "conv2_b": 0,
+        "fc1_b": 0,
+        "fc2_b": 0,
+        "input": 0,
+        "conv1_output": 0,
+        "conv2_output": 0,
+        "fc1_output": 0,
+        "fc2_output": 0
+      },
+      "partial_sum_ranges": {
+        "conv1": {
+          "minimum": -30818726251,
+          "maximum": 30983588054,
+          "measured_partial_sum_bits": 36
+        },
+        "conv2": {
+          "minimum": -12244597413,
+          "maximum": 17062769989,
+          "measured_partial_sum_bits": 35
+        },
+        "fc1": {
+          "minimum": -7079206141,
+          "maximum": 6206952209,
+          "measured_partial_sum_bits": 34
+        },
+        "fc2": {
+          "minimum": -1372187961,
+          "maximum": 2377855999,
+          "measured_partial_sum_bits": 33
+        }
+      },
+      "full_range_accumulator_bits": {
+        "conv1": 42,
+        "conv2": 42,
+        "fc1": 45,
+        "fc2": 42
+      },
+      "samples": 24,
+      "class_agreement": 24,
+      "class_changes": 0,
+      "float_correct": 6,
+      "quantized_correct": 6,
+      "threshold_decision_changes": 0,
+      "emitted_label_changes": 0,
+      "max_probability_error": 0.0004183422443342355,
+      "max_logit_error": 0.0016497276088518475,
+      "changed_class_indices": [],
+      "changed_filtered_indices": [],
+      "passes_regression_screen": true
+    },
+    {
+      "kind": "candidate",
+      "activation_bits": 20,
+      "activation_integer_bits": 10,
+      "activation_fraction_bits": 10,
+      "weight_bits": 12,
+      "weight_integer_bits": -1,
+      "weight_fraction_bits": 13,
+      "clipping_events": 0,
+      "clipping_by_stage": {
+        "conv1_w": 0,
+        "conv2_w": 0,
+        "fc1_w": 0,
+        "fc2_w": 0,
+        "conv1_b": 0,
+        "conv2_b": 0,
+        "fc1_b": 0,
+        "fc2_b": 0,
+        "input": 0,
+        "conv1_output": 0,
+        "conv2_output": 0,
+        "fc1_output": 0,
+        "fc2_output": 0
+      },
+      "partial_sum_ranges": {
+        "conv1": {
+          "minimum": -1925650551,
+          "maximum": 1936168221,
+          "measured_partial_sum_bits": 32
+        },
+        "conv2": {
+          "minimum": -765557909,
+          "maximum": 1066372491,
+          "measured_partial_sum_bits": 31
+        },
+        "fc1": {
+          "minimum": -442276846,
+          "maximum": 387969436,
+          "measured_partial_sum_bits": 30
+        },
+        "fc2": {
+          "minimum": -85723764,
+          "maximum": 148569803,
+          "measured_partial_sum_bits": 29
+        }
+      },
+      "full_range_accumulator_bits": {
+        "conv1": 38,
+        "conv2": 38,
+        "fc1": 41,
+        "fc2": 38
+      },
+      "samples": 24,
+      "class_agreement": 24,
+      "class_changes": 0,
+      "float_correct": 6,
+      "quantized_correct": 6,
+      "threshold_decision_changes": 0,
+      "emitted_label_changes": 0,
+      "max_probability_error": 0.003337480357124556,
+      "max_logit_error": 0.02176235407270033,
+      "changed_class_indices": [],
+      "changed_filtered_indices": [],
+      "passes_regression_screen": true
+    },
+    {
+      "kind": "candidate",
+      "activation_bits": 20,
+      "activation_integer_bits": 10,
+      "activation_fraction_bits": 10,
+      "weight_bits": 10,
+      "weight_integer_bits": -1,
+      "weight_fraction_bits": 11,
+      "clipping_events": 0,
+      "clipping_by_stage": {
+        "conv1_w": 0,
+        "conv2_w": 0,
+        "fc1_w": 0,
+        "fc2_w": 0,
+        "conv1_b": 0,
+        "conv2_b": 0,
+        "fc1_b": 0,
+        "fc2_b": 0,
+        "input": 0,
+        "conv1_output": 0,
+        "conv2_output": 0,
+        "fc1_output": 0,
+        "fc2_output": 0
+      },
+      "partial_sum_ranges": {
+        "conv1": {
+          "minimum": -482198889,
+          "maximum": 483925124,
+          "measured_partial_sum_bits": 30
+        },
+        "conv2": {
+          "minimum": -191017371,
+          "maximum": 266792262,
+          "measured_partial_sum_bits": 29
+        },
+        "fc1": {
+          "minimum": -110851525,
+          "maximum": 97144091,
+          "measured_partial_sum_bits": 28
+        },
+        "fc2": {
+          "minimum": -21414751,
+          "maximum": 37305621,
+          "measured_partial_sum_bits": 27
+        }
+      },
+      "full_range_accumulator_bits": {
+        "conv1": 36,
+        "conv2": 36,
+        "fc1": 39,
+        "fc2": 36
+      },
+      "samples": 24,
+      "class_agreement": 24,
+      "class_changes": 0,
+      "float_correct": 6,
+      "quantized_correct": 6,
+      "threshold_decision_changes": 1,
+      "emitted_label_changes": 1,
+      "max_probability_error": 0.020762047600055622,
+      "max_logit_error": 0.08172785260885185,
+      "changed_class_indices": [],
+      "changed_filtered_indices": [
+        17
+      ],
+      "passes_regression_screen": false
+    },
+    {
+      "kind": "candidate",
+      "activation_bits": 20,
+      "activation_integer_bits": 10,
+      "activation_fraction_bits": 10,
+      "weight_bits": 8,
+      "weight_integer_bits": -1,
+      "weight_fraction_bits": 9,
+      "clipping_events": 0,
+      "clipping_by_stage": {
+        "conv1_w": 0,
+        "conv2_w": 0,
+        "fc1_w": 0,
+        "fc2_w": 0,
+        "conv1_b": 0,
+        "conv2_b": 0,
+        "fc1_b": 0,
+        "fc2_b": 0,
+        "input": 0,
+        "conv1_output": 0,
+        "conv2_output": 0,
+        "fc1_output": 0,
+        "fc2_output": 0
+      },
+      "partial_sum_ranges": {
+        "conv1": {
+          "minimum": -120191113,
+          "maximum": 121377031,
+          "measured_partial_sum_bits": 28
+        },
+        "conv2": {
+          "minimum": -48172717,
+          "maximum": 66886482,
+          "measured_partial_sum_bits": 27
+        },
+        "fc1": {
+          "minimum": -27486541,
+          "maximum": 24185037,
+          "measured_partial_sum_bits": 26
+        },
+        "fc2": {
+          "minimum": -5353717,
+          "maximum": 9347762,
+          "measured_partial_sum_bits": 25
+        }
+      },
+      "full_range_accumulator_bits": {
+        "conv1": 34,
+        "conv2": 34,
+        "fc1": 37,
+        "fc2": 34
+      },
+      "samples": 24,
+      "class_agreement": 23,
+      "class_changes": 1,
+      "float_correct": 6,
+      "quantized_correct": 6,
+      "threshold_decision_changes": 1,
+      "emitted_label_changes": 1,
+      "max_probability_error": 0.039576363254036295,
+      "max_logit_error": 0.2044580508706879,
+      "changed_class_indices": [
+        12
+      ],
+      "changed_filtered_indices": [
+        1
+      ],
+      "passes_regression_screen": false
+    },
+    {
+      "kind": "candidate",
+      "activation_bits": 18,
+      "activation_integer_bits": 10,
+      "activation_fraction_bits": 8,
+      "weight_bits": 16,
+      "weight_integer_bits": -1,
+      "weight_fraction_bits": 17,
+      "clipping_events": 0,
+      "clipping_by_stage": {
+        "conv1_w": 0,
+        "conv2_w": 0,
+        "fc1_w": 0,
+        "fc2_w": 0,
+        "conv1_b": 0,
+        "conv2_b": 0,
+        "fc1_b": 0,
+        "fc2_b": 0,
+        "input": 0,
+        "conv1_output": 0,
+        "conv2_output": 0,
+        "fc1_output": 0,
+        "fc2_output": 0
+      },
+      "partial_sum_ranges": {
+        "conv1": {
+          "minimum": -7704717427,
+          "maximum": 7745833283,
+          "measured_partial_sum_bits": 34
+        },
+        "conv2": {
+          "minimum": -3061132140,
+          "maximum": 4265694034,
+          "measured_partial_sum_bits": 33
+        },
+        "fc1": {
+          "minimum": -1769754350,
+          "maximum": 1551816250,
+          "measured_partial_sum_bits": 32
+        },
+        "fc2": {
+          "minimum": -343073190,
+          "maximum": 594516468,
+          "measured_partial_sum_bits": 31
+        }
+      },
+      "full_range_accumulator_bits": {
+        "conv1": 40,
+        "conv2": 40,
+        "fc1": 43,
+        "fc2": 40
+      },
+      "samples": 24,
+      "class_agreement": 24,
+      "class_changes": 0,
+      "float_correct": 6,
+      "quantized_correct": 6,
+      "threshold_decision_changes": 0,
+      "emitted_label_changes": 0,
+      "max_probability_error": 0.0015821291096239087,
+      "max_logit_error": 0.0043737317186440805,
+      "changed_class_indices": [],
+      "changed_filtered_indices": [],
+      "passes_regression_screen": true
+    },
+    {
+      "kind": "candidate",
+      "activation_bits": 18,
+      "activation_integer_bits": 10,
+      "activation_fraction_bits": 8,
+      "weight_bits": 12,
+      "weight_integer_bits": -1,
+      "weight_fraction_bits": 13,
+      "clipping_events": 0,
+      "clipping_by_stage": {
+        "conv1_w": 0,
+        "conv2_w": 0,
+        "fc1_w": 0,
+        "fc2_w": 0,
+        "conv1_b": 0,
+        "conv2_b": 0,
+        "fc1_b": 0,
+        "fc2_b": 0,
+        "input": 0,
+        "conv1_output": 0,
+        "conv2_output": 0,
+        "fc1_output": 0,
+        "fc2_output": 0
+      },
+      "partial_sum_ranges": {
+        "conv1": {
+          "minimum": -481414879,
+          "maximum": 484038071,
+          "measured_partial_sum_bits": 30
+        },
+        "conv2": {
+          "minimum": -191388696,
+          "maximum": 266594995,
+          "measured_partial_sum_bits": 29
+        },
+        "fc1": {
+          "minimum": -110564601,
+          "maximum": 96998397,
+          "measured_partial_sum_bits": 28
+        },
+        "fc2": {
+          "minimum": -21434112,
+          "maximum": 37144210,
+          "measured_partial_sum_bits": 27
+        }
+      },
+      "full_range_accumulator_bits": {
+        "conv1": 36,
+        "conv2": 36,
+        "fc1": 39,
+        "fc2": 36
+      },
+      "samples": 24,
+      "class_agreement": 24,
+      "class_changes": 0,
+      "float_correct": 6,
+      "quantized_correct": 6,
+      "threshold_decision_changes": 0,
+      "emitted_label_changes": 0,
+      "max_probability_error": 0.003911914204316025,
+      "max_logit_error": 0.02176235407270033,
+      "changed_class_indices": [],
+      "changed_filtered_indices": [],
+      "passes_regression_screen": true
+    },
+    {
+      "kind": "candidate",
+      "activation_bits": 18,
+      "activation_integer_bits": 10,
+      "activation_fraction_bits": 8,
+      "weight_bits": 10,
+      "weight_integer_bits": -1,
+      "weight_fraction_bits": 11,
+      "clipping_events": 0,
+      "clipping_by_stage": {
+        "conv1_w": 0,
+        "conv2_w": 0,
+        "fc1_w": 0,
+        "fc2_w": 0,
+        "conv1_b": 0,
+        "conv2_b": 0,
+        "fc1_b": 0,
+        "fc2_b": 0,
+        "input": 0,
+        "conv1_output": 0,
+        "conv2_output": 0,
+        "fc1_output": 0,
+        "fc2_output": 0
+      },
+      "partial_sum_ranges": {
+        "conv1": {
+          "minimum": -120550283,
+          "maximum": 120980285,
+          "measured_partial_sum_bits": 28
+        },
+        "conv2": {
+          "minimum": -47754224,
+          "maximum": 66698277,
+          "measured_partial_sum_bits": 27
+        },
+        "fc1": {
+          "minimum": -27712269,
+          "maximum": 24287308,
+          "measured_partial_sum_bits": 26
+        },
+        "fc2": {
+          "minimum": -5354326,
+          "maximum": 9326922,
+          "measured_partial_sum_bits": 25
+        }
+      },
+      "full_range_accumulator_bits": {
+        "conv1": 34,
+        "conv2": 34,
+        "fc1": 37,
+        "fc2": 34
+      },
+      "samples": 24,
+      "class_agreement": 24,
+      "class_changes": 0,
+      "float_correct": 6,
+      "quantized_correct": 6,
+      "threshold_decision_changes": 1,
+      "emitted_label_changes": 1,
+      "max_probability_error": 0.02132227130909603,
+      "max_logit_error": 0.08368097760885185,
+      "changed_class_indices": [],
+      "changed_filtered_indices": [
+        17
+      ],
+      "passes_regression_screen": false
+    },
+    {
+      "kind": "candidate",
+      "activation_bits": 18,
+      "activation_integer_bits": 10,
+      "activation_fraction_bits": 8,
+      "weight_bits": 8,
+      "weight_integer_bits": -1,
+      "weight_fraction_bits": 9,
+      "clipping_events": 0,
+      "clipping_by_stage": {
+        "conv1_w": 0,
+        "conv2_w": 0,
+        "fc1_w": 0,
+        "fc2_w": 0,
+        "conv1_b": 0,
+        "conv2_b": 0,
+        "fc1_b": 0,
+        "fc2_b": 0,
+        "input": 0,
+        "conv1_output": 0,
+        "conv2_output": 0,
+        "fc1_output": 0,
+        "fc2_output": 0
+      },
+      "partial_sum_ranges": {
+        "conv1": {
+          "minimum": -30047918,
+          "maximum": 30344009,
+          "measured_partial_sum_bits": 26
+        },
+        "conv2": {
+          "minimum": -12043014,
+          "maximum": 16721747,
+          "measured_partial_sum_bits": 25
+        },
+        "fc1": {
+          "minimum": -6871406,
+          "maximum": 6046521,
+          "measured_partial_sum_bits": 24
+        },
+        "fc2": {
+          "minimum": -1338530,
+          "maximum": 2337034,
+          "measured_partial_sum_bits": 23
+        }
+      },
+      "full_range_accumulator_bits": {
+        "conv1": 32,
+        "conv2": 32,
+        "fc1": 35,
+        "fc2": 32
+      },
+      "samples": 24,
+      "class_agreement": 23,
+      "class_changes": 1,
+      "float_correct": 6,
+      "quantized_correct": 6,
+      "threshold_decision_changes": 1,
+      "emitted_label_changes": 1,
+      "max_probability_error": 0.03959625562232133,
+      "max_logit_error": 0.2073877383706879,
+      "changed_class_indices": [
+        12
+      ],
+      "changed_filtered_indices": [
+        1
+      ],
+      "passes_regression_screen": false
+    },
+    {
+      "kind": "candidate",
+      "activation_bits": 16,
+      "activation_integer_bits": 10,
+      "activation_fraction_bits": 6,
+      "weight_bits": 16,
+      "weight_integer_bits": -1,
+      "weight_fraction_bits": 17,
+      "clipping_events": 0,
+      "clipping_by_stage": {
+        "conv1_w": 0,
+        "conv2_w": 0,
+        "fc1_w": 0,
+        "fc2_w": 0,
+        "conv1_b": 0,
+        "conv2_b": 0,
+        "fc1_b": 0,
+        "fc2_b": 0,
+        "input": 0,
+        "conv1_output": 0,
+        "conv2_output": 0,
+        "fc1_output": 0,
+        "fc2_output": 0
+      },
+      "partial_sum_ranges": {
+        "conv1": {
+          "minimum": -1926168088,
+          "maximum": 1936486193,
+          "measured_partial_sum_bits": 32
+        },
+        "conv2": {
+          "minimum": -765211147,
+          "maximum": 1066364339,
+          "measured_partial_sum_bits": 31
+        },
+        "fc1": {
+          "minimum": -442505837,
+          "maximum": 387975009,
+          "measured_partial_sum_bits": 30
+        },
+        "fc2": {
+          "minimum": -85703235,
+          "maximum": 148659040,
+          "measured_partial_sum_bits": 29
+        }
+      },
+      "full_range_accumulator_bits": {
+        "conv1": 38,
+        "conv2": 38,
+        "fc1": 41,
+        "fc2": 38
+      },
+      "samples": 24,
+      "class_agreement": 24,
+      "class_changes": 0,
+      "float_correct": 6,
+      "quantized_correct": 6,
+      "threshold_decision_changes": 0,
+      "emitted_label_changes": 0,
+      "max_probability_error": 0.004621464367888906,
+      "max_logit_error": 0.018333383664032255,
+      "changed_class_indices": [],
+      "changed_filtered_indices": [],
+      "passes_regression_screen": true
+    },
+    {
+      "kind": "candidate",
+      "activation_bits": 16,
+      "activation_integer_bits": 10,
+      "activation_fraction_bits": 6,
+      "weight_bits": 12,
+      "weight_integer_bits": -1,
+      "weight_fraction_bits": 13,
+      "clipping_events": 0,
+      "clipping_by_stage": {
+        "conv1_w": 0,
+        "conv2_w": 0,
+        "fc1_w": 0,
+        "fc2_w": 0,
+        "conv1_b": 0,
+        "conv2_b": 0,
+        "fc1_b": 0,
+        "fc2_b": 0,
+        "input": 0,
+        "conv1_output": 0,
+        "conv2_output": 0,
+        "fc1_output": 0,
+        "fc2_output": 0
+      },
+      "partial_sum_ranges": {
+        "conv1": {
+          "minimum": -120353015,
+          "maximum": 121011260,
+          "measured_partial_sum_bits": 28
+        },
+        "conv2": {
+          "minimum": -47842693,
+          "maximum": 66643525,
+          "measured_partial_sum_bits": 27
+        },
+        "fc1": {
+          "minimum": -27643086,
+          "maximum": 24248834,
+          "measured_partial_sum_bits": 26
+        },
+        "fc2": {
+          "minimum": -5355695,
+          "maximum": 9288198,
+          "measured_partial_sum_bits": 25
+        }
+      },
+      "full_range_accumulator_bits": {
+        "conv1": 34,
+        "conv2": 34,
+        "fc1": 37,
+        "fc2": 34
+      },
+      "samples": 24,
+      "class_agreement": 24,
+      "class_changes": 0,
+      "float_correct": 6,
+      "quantized_correct": 6,
+      "threshold_decision_changes": 0,
+      "emitted_label_changes": 0,
+      "max_probability_error": 0.004850404966704969,
+      "max_logit_error": 0.02566860407270033,
+      "changed_class_indices": [],
+      "changed_filtered_indices": [],
+      "passes_regression_screen": true
+    },
+    {
+      "kind": "candidate",
+      "activation_bits": 16,
+      "activation_integer_bits": 10,
+      "activation_fraction_bits": 6,
+      "weight_bits": 10,
+      "weight_integer_bits": -1,
+      "weight_fraction_bits": 11,
+      "clipping_events": 0,
+      "clipping_by_stage": {
+        "conv1_w": 0,
+        "conv2_w": 0,
+        "fc1_w": 0,
+        "fc2_w": 0,
+        "conv1_b": 0,
+        "conv2_b": 0,
+        "fc1_b": 0,
+        "fc2_b": 0,
+        "input": 0,
+        "conv1_output": 0,
+        "conv2_output": 0,
+        "fc1_output": 0,
+        "fc2_output": 0
+      },
+      "partial_sum_ranges": {
+        "conv1": {
+          "minimum": -30137393,
+          "maximum": 30245506,
+          "measured_partial_sum_bits": 26
+        },
+        "conv2": {
+          "minimum": -11937073,
+          "maximum": 16673362,
+          "measured_partial_sum_bits": 25
+        },
+        "fc1": {
+          "minimum": -6929114,
+          "maximum": 6072056,
+          "measured_partial_sum_bits": 24
+        },
+        "fc2": {
+          "minimum": -1337942,
+          "maximum": 2332225,
+          "measured_partial_sum_bits": 23
+        }
+      },
+      "full_range_accumulator_bits": {
+        "conv1": 32,
+        "conv2": 32,
+        "fc1": 35,
+        "fc2": 32
+      },
+      "samples": 24,
+      "class_agreement": 24,
+      "class_changes": 0,
+      "float_correct": 6,
+      "quantized_correct": 6,
+      "threshold_decision_changes": 2,
+      "emitted_label_changes": 2,
+      "max_probability_error": 0.025329137564508164,
+      "max_logit_error": 0.09539972760885185,
+      "changed_class_indices": [],
+      "changed_filtered_indices": [
+        14,
+        17
+      ],
+      "passes_regression_screen": false
+    },
+    {
+      "kind": "candidate",
+      "activation_bits": 16,
+      "activation_integer_bits": 10,
+      "activation_fraction_bits": 6,
+      "weight_bits": 8,
+      "weight_integer_bits": -1,
+      "weight_fraction_bits": 9,
+      "clipping_events": 0,
+      "clipping_by_stage": {
+        "conv1_w": 0,
+        "conv2_w": 0,
+        "fc1_w": 0,
+        "fc2_w": 0,
+        "conv1_b": 0,
+        "conv2_b": 0,
+        "fc1_b": 0,
+        "fc2_b": 0,
+        "input": 0,
+        "conv1_output": 0,
+        "conv2_output": 0,
+        "fc1_output": 0,
+        "fc2_output": 0
+      },
+      "partial_sum_ranges": {
+        "conv1": {
+          "minimum": -7511935,
+          "maximum": 7586112,
+          "measured_partial_sum_bits": 24
+        },
+        "conv2": {
+          "minimum": -3010559,
+          "maximum": 4180179,
+          "measured_partial_sum_bits": 23
+        },
+        "fc1": {
+          "minimum": -1718083,
+          "maximum": 1511591,
+          "measured_partial_sum_bits": 22
+        },
+        "fc2": {
+          "minimum": -334444,
+          "maximum": 584417,
+          "measured_partial_sum_bits": 21
+        }
+      },
+      "full_range_accumulator_bits": {
+        "conv1": 30,
+        "conv2": 30,
+        "fc1": 33,
+        "fc2": 30
+      },
+      "samples": 24,
+      "class_agreement": 23,
+      "class_changes": 1,
+      "float_correct": 6,
+      "quantized_correct": 6,
+      "threshold_decision_changes": 1,
+      "emitted_label_changes": 1,
+      "max_probability_error": 0.03710241808213138,
+      "max_logit_error": 0.1982966119088858,
+      "changed_class_indices": [
+        12
+      ],
+      "changed_filtered_indices": [
+        1
+      ],
+      "passes_regression_screen": false
+    }
+  ]
+}

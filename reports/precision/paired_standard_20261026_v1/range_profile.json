@@ -1,0 +1,122 @@
+{
+  "version": 1,
+  "status": "running",
+  "scope": "legacy_paired_regression",
+  "features": 22,
+  "classes": [
+    "PICKUP",
+    "DROP",
+    "CHOP",
+    "WASH",
+    "THROW",
+    "FIREEXT",
+    "POURING",
+    "IDLE"
+  ],
+  "source_sha256": {
+    "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\fpga\\hls\\eightclass_weights_standard_20261021.npz": "08cbb2e1e4ed02235b41f1142e248c261b78f99567f8f28446cc23de7a15c9dc"
+  },
+  "data": {
+    "evaluation_scope": "older paired regression vectors; not final-model accuracy",
+    "calibration_scope": "same regression vectors; diagnostic range profiling only",
+    "data_sha256": {
+      "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\fpga\\hls\\eightclass_board_test_20261019.npz": "caa79e76c4a6fb527165ca92517a72ab18883000f1789209416d7c7e22fbd045"
+    },
+    "split": "unassigned_legacy"
+  },
+  "normalization_applied": false,
+  "calibration_samples": 24,
+  "evaluation_samples": 24,
+  "calibration_float_ranges": {
+    "input": {
+      "minimum": -282.14849853515625,
+      "maximum": 250.65829467773438,
+      "elements": 26400
+    },
+    "conv1": {
+      "minimum": -229.61983249014622,
+      "maximum": 211.5461558590692,
+      "elements": 36864
+    },
+    "pool1": {
+      "minimum": 0.0,
+      "maximum": 211.5461558590692,
+      "elements": 18432
+    },
+    "conv2": {
+      "minimum": -86.7284753169126,
+      "maximum": 110.46052546695871,
+      "elements": 33792
+    },
+    "pool2": {
+      "minimum": 0.0,
+      "maximum": 110.46052546695871,
+      "elements": 16896
+    },
+    "fc1": {
+      "minimum": -52.63742988571768,
+      "maximum": 45.454502626876355,
+      "elements": 1536
+    },
+    "hidden": {
+      "minimum": 0.0,
+      "maximum": 45.454502626876355,
+      "elements": 1536
+    },
+    "logits": {
+      "minimum": -9.111867817384995,
+      "maximum": 17.716771334542887,
+      "elements": 192
+    }
+  },
+  "weight_ranges": {
+    "conv1_w": {
+      "minimum": -0.14225605130195618,
+      "maximum": 0.13945460319519043
+    },
+    "conv2_w": {
+      "minimum": -0.1144094169139862,
+      "maximum": 0.11595714092254639
+    },
+    "fc1_w": {
+      "minimum": -0.05756380409002304,
+      "maximum": 0.05986695736646652
+    },
+    "fc2_w": {
+      "minimum": -0.1344418227672577,
+      "maximum": 0.13621608912944794
+    },
+    "conv1_b": {
+      "minimum": -0.12328601628541946,
+      "maximum": 0.10534220933914185
+    },
+    "conv2_b": {
+      "minimum": -0.09474091231822968,
+      "maximum": 0.09386183321475983
+    },
+    "fc1_b": {
+      "minimum": -0.03373122215270996,
+      "maximum": 0.04185720533132553
+    },
+    "fc2_b": {
+      "minimum": -0.10350045561790466,
+      "maximum": 0.13378989696502686
+    }
+  },
+  "activation_integer_bits": 10,
+  "weight_integer_bits": -1,
+  "activation_integer_source": "explicit",
+  "guard_bits_applied": 0,
+  "float_reference": "NumPy float64 GestureCNN; no hardware timing prediction",
+  "emission_semantics": "Confidence-filtered class labels only; no stable-confirmation or game logic simulated",
+  "numeric_contract": "floor(x*2**F+0.5); same-F activations/bias; exact int64 partial sums; one round/saturate per layer",
+  "threshold": 0.7,
+  "threshold_rule": "ge",
+  "max_probability_error_limit": 0.01,
+  "limitations": [
+    "No HLS resource, clock, latency or power measurements",
+    "No rolling-window or end-to-end timing simulation",
+    "Software passing candidates require further data and hardware validation",
+    "Full-range accumulator bounds use representable operands plus this model quantized biases; measured widths are not safe hardware limits"
+  ]
+}
