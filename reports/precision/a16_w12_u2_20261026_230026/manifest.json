@@ -1,0 +1,130 @@
+{
+  "version": 1,
+  "status": "prepared_not_synthesized",
+  "scope": "Legacy paired 22-feature/eight-class precision benchmark only",
+  "format": {
+    "activation_bits": 16,
+    "activation_fraction": 6,
+    "weight_bits": 12,
+    "weight_fraction": 13,
+    "accumulator_bits": 38,
+    "minimum_full_range_accumulator_bits": 37,
+    "axi_carrier_bits": 32
+  },
+  "source_sha256": {
+    "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\fpga\\hls\\eightclass_weights_standard_20261021.npz": "08cbb2e1e4ed02235b41f1142e248c261b78f99567f8f28446cc23de7a15c9dc"
+  },
+  "data": {
+    "evaluation_scope": "older paired regression vectors; not final-model accuracy",
+    "calibration_scope": "same regression vectors; diagnostic range profiling only",
+    "data_sha256": {
+      "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\fpga\\hls\\eightclass_board_test_20261019.npz": "caa79e76c4a6fb527165ca92517a72ab18883000f1789209416d7c7e22fbd045"
+    },
+    "split": "unassigned_legacy"
+  },
+  "sweep_sha256": "5a9cf89bcd4db358e2ec11a7d8323cfeb60393970a32d77cf471b41ece830140",
+  "recomputed_comparison": {
+    "samples": 24,
+    "class_agreement": 24,
+    "class_changes": 0,
+    "float_correct": 6,
+    "quantized_correct": 6,
+    "threshold_decision_changes": 0,
+    "emitted_label_changes": 0,
+    "max_probability_error": 0.004850404966704969,
+    "max_logit_error": 0.02566860407270033,
+    "changed_class_indices": [],
+    "changed_filtered_indices": []
+  },
+  "numeric_ranges": {
+    "clipping_events": 0,
+    "clipping_by_stage": {
+      "conv1_w": 0,
+      "conv2_w": 0,
+      "fc1_w": 0,
+      "fc2_w": 0,
+      "conv1_b": 0,
+      "conv2_b": 0,
+      "fc1_b": 0,
+      "fc2_b": 0,
+      "input": 0,
+      "conv1_output": 0,
+      "conv2_output": 0,
+      "fc1_output": 0,
+      "fc2_output": 0
+    },
+    "partial_sum_ranges": {
+      "conv1": {
+        "minimum": -120353015,
+        "maximum": 121011260,
+        "measured_partial_sum_bits": 28
+      },
+      "conv2": {
+        "minimum": -47842693,
+        "maximum": 66643525,
+        "measured_partial_sum_bits": 27
+      },
+      "fc1": {
+        "minimum": -27643086,
+        "maximum": 24248834,
+        "measured_partial_sum_bits": 26
+      },
+      "fc2": {
+        "minimum": -5355695,
+        "maximum": 9288198,
+        "measured_partial_sum_bits": 25
+      }
+    },
+    "full_range_accumulator_bits": {
+      "conv1": 34,
+      "conv2": 34,
+      "fc1": 37,
+      "fc2": 34
+    }
+  },
+  "part": "xazu3eg-sbva484-1-i",
+  "clock_target_ns": 10,
+  "top": "gesture_cnn_precision_u2",
+  "changes": "Two-lane dot products in all four layers; cyclic factor2 internal banking; numeric contract and parameter reload policy unchanged",
+  "caution": "Requires a candidate-specific driver and later controlled board validation. Do not load with the production worker.",
+  "generated_sha256": {
+    "precision_cnn.h": "b18f8b28afd5b3aac9c91faf30ad5ac35d43d25f2d328a95c057af81f74ae75d",
+    "precision_cnn.cpp": "87bf850b66d06c9e9d13757609b4d89ac131a1fb268c83c20edc7cbbf29afb52",
+    "tb_precision_cnn.cpp": "04afae7e5752445128bff1e9205a541de32fe361eea619530f38a90d1053372b",
+    "precision.cfg": "97ca83954adfdcab38906c75a86e7c9b5565e6d52b48d01a3e276910cee7a86d",
+    "vectors/precision_test.bin": "a2c5502fe163fd17bcf75f3683849777130a487dcbeb123095afbc5ab6acddf6",
+    "parameter_words.bin": "bf9612506cca3d429d12b421962357083cee94844c6c52ed31f2567ae84e3dec",
+    "reference.npz": "e0293d24f6dbf313e3ba3d0493e9e42477cb8a73157e7e80f60defb14e7db47d"
+  },
+  "parallel_lanes": 2,
+  "partial_sum_bounds": {
+    "conv1": {
+      "absolute_sum_bound_including_rounding": 4429254656,
+      "signed_accumulator_bits": 38
+    },
+    "conv2": {
+      "absolute_sum_bound_including_rounding": 6442504192,
+      "signed_accumulator_bits": 38
+    },
+    "fc1": {
+      "absolute_sum_bound_including_rounding": 47244668928,
+      "signed_accumulator_bits": 38
+    },
+    "fc2": {
+      "absolute_sum_bound_including_rounding": 4295045120,
+      "signed_accumulator_bits": 38
+    }
+  },
+  "parent_manifest_sha256": "a92eb2a64cc0d2f35fa1428c246a1e96a140fbe10fc1aa90f56442570a1f230d",
+  "parent_generated_sha256": {
+    "precision_cnn.h": "b32a8f35a17eba0c9cfbfdae9fdb9a5cc9d111356432d923e2c47041046fa959",
+    "precision_cnn.cpp": "3d114d27c4c0248b7ba1d0720cca19a86853d06a02750c715970fc571cdb4d56",
+    "tb_precision_cnn.cpp": "1d67ae07d1b2227ce0506c839de775e3088c226594889a9d2b8835679449efa9",
+    "precision.cfg": "99564253035e5cbb955ea1c2997de5e47cce9f5b9cb3b1a31fc12831f03d2e29",
+    "vectors/precision_test.bin": "a2c5502fe163fd17bcf75f3683849777130a487dcbeb123095afbc5ab6acddf6",
+    "parameter_words.bin": "bf9612506cca3d429d12b421962357083cee94844c6c52ed31f2567ae84e3dec",
+    "reference.npz": "e0293d24f6dbf313e3ba3d0493e9e42477cb8a73157e7e80f60defb14e7db47d"
+  },
+  "regression_samples": 24,
+  "validation": "Requires new C simulation, synthesis and C/RTL co-simulation; no speedup claimed"
+}
