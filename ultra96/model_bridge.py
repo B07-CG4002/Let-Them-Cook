@@ -51,6 +51,7 @@ class Bridge:
     """Owns the listener, the current runner connection and its send queue."""
 
     def __init__(self, queue_size=QUEUE_SIZE):
+        self.channels = tuple(CHANNELS)
         self.queue_size = queue_size
         self.counts = dict(samples_sent=0, samples_dropped_no_runner=0, samples_dropped_full=0,
                            results=0, results_refused=0, bad_lines=0, connections=0)
@@ -86,7 +87,7 @@ class Bridge:
         """Make conn the runner connection (replacing any other) and serve it on two threads."""
         sends = queue.Queue(self.queue_size)
         # The hello is queued before on_sample can see this queue, so it is always first.
-        sends.put(json.dumps(dict(type="hello", format=FORMAT, channels=list(CHANNELS)),
+        sends.put(json.dumps(dict(type="hello", format=FORMAT, channels=list(self.channels)),
                              separators=(",", ":")))
         with self._lock:
             previous, self._current = self._current, (conn, sends)
@@ -273,3 +274,16 @@ def start(emit):
 
 def on_sample(device_id, boot_id, seq, uptime_ms, values):
     _BRIDGE.on_sample(device_id, boot_id, seq, uptime_ms, values)
+
+
+def configure_sensor_version(version):
+    """Called before model start; never change a connected runner's contract."""
+    if type(version) is not int or version not in (3,4):
+        raise ValueError("sensor version must be 3 or 4")
+    if _BRIDGE._listener is not None or _BRIDGE._current is not None:
+        raise RuntimeError("cannot change sensor version after bridge start")
+    if version == 4:
+        from common.sensor_v4 import CHANNELS as selected
+    else:
+        selected = CHANNELS
+    _BRIDGE.channels = tuple(selected)

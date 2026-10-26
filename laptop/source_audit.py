@@ -57,8 +57,11 @@ class SourceStats:
                 raise ValueError(f"source statistics {name} must be uint32")
 
 
-def parse_source_stats(data: bytes, *, expected_device_id: Optional[int] = None) -> SourceStats:
+def parse_source_stats(data: bytes, *, expected_device_id: Optional[int] = None,
+                       sensor_version: int = 3) -> SourceStats:
     """Parse the exact protected 36-byte source-statistics value."""
+    if type(sensor_version) is not int or sensor_version not in (3,4):
+        raise ValueError("sensor_version must be 3 or 4")
     if (expected_device_id is not None
             and (type(expected_device_id) is not int
                  or expected_device_id not in (1, 2))):
@@ -72,7 +75,8 @@ def parse_source_stats(data: bytes, *, expected_device_id: Optional[int] = None)
         raise ValueError("source statistics reserved bytes must be zero")
     (magic, device_id, flags, boot_id, next_seq, submitted, failures,
      idle, unread, refused) = _SOURCE_STATS.unpack(raw)
-    if magic != SOURCE_STATS_MAGIC:
+    expected_magic = SOURCE_STATS_MAGIC if sensor_version == 3 else b"LCS4"
+    if magic != expected_magic:
         raise ValueError("invalid source statistics magic; flash this board with the current firmware")
     if flags & ~_KNOWN_FLAGS:
         raise ValueError("source statistics flags contain unknown bits")

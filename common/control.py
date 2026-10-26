@@ -32,7 +32,9 @@ def chunk_size(mtu):
     return min(MAX_CHUNK_SIZE, mtu - 3 - HEADER_SIZE)
 
 
-def _validate(frame, mtu):
+def _validate(frame, mtu, sensor_version=VERSION):
+    if type(sensor_version) is not int or sensor_version not in (3,4):
+        raise ValueError("sensor_version must be 3 or 4")
     limit = chunk_size(mtu)
     if not isinstance(frame, ControlFrame):
         raise ValueError('expected ControlFrame')
@@ -52,8 +54,12 @@ def _validate(frame, mtu):
             raise ValueError('error response must not contain success payload')
         return
     if opcode == COMMAND:
-        packet = decode_packet(frame.payload)
-        if (frame.offset or packet.version != VERSION or packet.device_id != frame.device_id
+        if sensor_version == 4:
+            from common.sensor_v4 import decode_packet as selected_decoder
+        else:
+            selected_decoder = decode_packet
+        packet = selected_decoder(frame.payload)
+        if (frame.offset or packet.version != sensor_version or packet.device_id != frame.device_id
                 or packet.seq != frame.request_id):
             raise ValueError('uncorrelated command sensor packet')
     elif opcode == SET_RATE:
@@ -85,20 +91,20 @@ def _validate(frame, mtu):
         raise ValueError('abort has no payload and offset zero')
 
 
-def encode_control(frame, *, mtu=517):
-    _validate(frame, mtu)
+def encode_control(frame, *, mtu=517, sensor_version=VERSION):
+    _validate(frame, mtu, sensor_version)
     return _HEADER.pack(b'B7', 1, frame.opcode, frame.device_id, frame.status,
                         frame.request_id, frame.offset) + frame.payload
 
 
-def decode_control(data, *, mtu=517):
+def decode_control(data, *, mtu=517, sensor_version=VERSION):
     if not isinstance(data, (bytes, bytearray, memoryview)) or len(data) < HEADER_SIZE:
         raise ValueError('truncated control header')
     magic, version, opcode, device, status, request, offset = _HEADER.unpack_from(data)
     if magic != b'B7' or version != 1:
         raise ValueError('unsupported control magic/version')
     frame = ControlFrame(opcode, device, request, offset, bytes(data[HEADER_SIZE:]), status)
-    _validate(frame, mtu)
+    _validate(frame, mtu, sensor_version)
     return frame
 
 
@@ -116,6 +122,12 @@ def parse_file_metadata(payload):
     return length, payload[4:]
 
 
-def transformed_values(values):
-    packet = SensorPacket(1, 0, 0, 0, values)
+def transformed_values(values, *, sensor_version=VERSION):
+    if type(sensor_version) is not int or sensor_version not in (3,4):
+        raise ValueError("sensor_version must be 3 or 4")
+    if sensor_version == 4:
+        from common.sensor_v4 import SensorPacket as selected_packet
+    else:
+        selected_packet = SensorPacket
+    packet = selected_packet(1, 0, 0, 0, values)
     return tuple(-32768 if value == 32767 else value + 1 for value in packet.values)

@@ -1,7 +1,7 @@
 """TLS-only B07 Communications service. Ingestion ACKs and Phone results use separate ports.
 
 Each newly accepted stream sample goes to the model (ultra96.model); its results go to the
-one subscribed phone. Only protocol version 3 is accepted.
+one subscribed phone. Sensor protocol defaults to v3; v4 requires explicit selection.
 """
 import argparse
 import asyncio
@@ -122,13 +122,16 @@ class ResultQueue:
 class CommsServer:
     def __init__(self, ssl_context, session_id="ltc-comms", ingest_port=8888, gateway_port=9999,
                  *, observer=None, rng=None, max_namespaces=128, max_commands=4096, model=None,
-                 ingest_idle_timeout=INGEST_IDLE_TIMEOUT):
+                 ingest_idle_timeout=INGEST_IDLE_TIMEOUT, sensor_version=3):
         if (not isinstance(ssl_context, ssl.SSLContext)
                 or ssl_context.minimum_version < ssl.TLSVersion.TLSv1_2):
             raise ValueError("server requires TLS >=1.2")
         if (not isinstance(ingest_idle_timeout, (int, float)) or isinstance(ingest_idle_timeout, bool)
                 or not math.isfinite(ingest_idle_timeout) or ingest_idle_timeout <= 0):
             raise ValueError("ingest idle timeout must be positive finite seconds")
+        if type(sensor_version) is not int or sensor_version not in (3,4):
+            raise ValueError("sensor_version must be 3 or 4")
+        self.sensor_version = sensor_version
         self.ingest_idle_timeout = float(ingest_idle_timeout)
         self.ssl_context = ssl_context
         self.session_id = validate_session(session_id)
@@ -170,8 +173,15 @@ class CommsServer:
                         "idle_evicted": 0, "accept_retries": 0, "accept_failures": 0}
         if observer is not None:
             self.metrics["observer_errors"] = 0
-        self.model = ModelPort(DummyModel(self._rng) if model is None else model,
-                               self._model_result, self.metrics)
+        selected_model = DummyModel(self._rng) if model is None else model
+        configure = getattr(selected_model, "configure_sensor_version", None)
+        if callable(configure):
+            configure(sensor_version)
+        converter = None
+        if sensor_version == 4:
+            from common.sensor_v4 import physical_values as converter
+        self.model = ModelPort(selected_model, self._model_result, self.metrics,
+                               physical_converter=converter)
         self.model_start_seconds = None
 
     def _observe(self, event, **fields):
@@ -326,7 +336,7 @@ class CommsServer:
                 frame = await read_frame(reader, idle_timeout=self.ingest_idle_timeout)
             finally:
                 self._waiting_ingest.pop(task, None)
-            message = validate_message(frame, "SENSOR_BATCH", self.session_id)
+            message = validate_message(frame, "SENSOR_BATCH", self.session_id, sensor_version=self.sensor_version)
             duplicate = self._duplicate(message)
             if duplicate:
                 self.metrics["duplicates"] += 1
@@ -342,7 +352,7 @@ class CommsServer:
                                          message["uptime_ms"], message["values"])
                 else:
                     # Commands test the control path; they never reach the model.
-                    result = dict(v=VERSION, type="GESTURE_RESULT", **trace_fields(message))
+                    result = dict(v=self.sensor_version, type="GESTURE_RESULT", **trace_fields(message))
                     result.update(result_id=result_identity(message),
                                   gesture=self._rng.choice(DUMMY_GESTURES), confidence=1.0)
                     self.monitor.published(result)
@@ -380,9 +390,9 @@ class CommsServer:
         self._emitted[result_id] = None
         if len(self._emitted) > 4096:
             self._emitted.popitem(last=False)
-        result = dict(v=VERSION, type="GESTURE_RESULT", result_id=result_id, gesture=gesture,
+        result = dict(v=self.sensor_version, type="GESTURE_RESULT", result_id=result_id, gesture=gesture,
                       confidence=confidence, **identity)
-        validate_message(result, "GESTURE_RESULT", self.session_id)
+        validate_message(result, "GESTURE_RESULT", self.session_id, sensor_version=self.sensor_version)
         self.metrics["model_results"] += 1
         self.monitor.published(result)
         self._observe("model_result", **identity)
@@ -572,7 +582,8 @@ async def _run_service(args, observer=None):
                           ingest_port=args.ingest_port, gateway_port=args.gateway_port,
                           observer=observer, model=model,
                           ingest_idle_timeout=getattr(args, "ingest_idle_timeout",
-                                                      INGEST_IDLE_TIMEOUT))
+                                                      INGEST_IDLE_TIMEOUT),
+                          sensor_version=getattr(args, "sensor_version", 3))
     try:
         await service.start()
     except ModelStartError as exc:
@@ -627,6 +638,7 @@ def _ingest_idle_timeout(value):
 
 def _parser():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--sensor-version", type=int, choices=(3,4), default=3)
     parser.add_argument("--cert", required=True)
     parser.add_argument("--key", required=True)
     parser.add_argument("--session-id", default="ltc-comms")

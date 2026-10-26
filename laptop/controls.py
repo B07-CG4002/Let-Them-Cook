@@ -24,7 +24,14 @@ from common.wire import ProtocolError
 
 
 class ControlChannel:
-    def __init__(self, device_id, *, timeout=3.0, evidence=None, bounded=None):
+    def __init__(self, device_id, *, timeout=3.0, evidence=None, bounded=None, sensor_version=3):
+        if type(sensor_version) is not int or sensor_version not in (3,4):
+            raise ValueError("sensor_version must be 3 or 4")
+        self.sensor_version = sensor_version
+        self._sensor_v4 = None
+        if sensor_version == 4:
+            from common import sensor_v4
+            self._sensor_v4 = sensor_v4
         if device_id not in (1, 2) or timeout <= 0:
             raise ValueError("invalid control device/timeout")
         self.device_id, self.timeout, self.evidence = device_id, timeout, evidence
@@ -60,6 +67,21 @@ class ControlChannel:
         except BaseException:
             task.cancel()
             raise
+
+    def _encode_control(self, frame, *, mtu):
+        if self.sensor_version == 3:
+            return encode_control(frame, mtu=mtu)
+        return encode_control(frame, mtu=mtu, sensor_version=4)
+
+    def _decode_control(self, data, *, mtu):
+        if self.sensor_version == 3:
+            return decode_control(data, mtu=mtu)
+        return decode_control(data, mtu=mtu, sensor_version=4)
+
+    def _transformed_values(self, values):
+        if self.sensor_version == 3:
+            return transformed_values(values)
+        return transformed_values(values, sensor_version=4)
 
     def next_id(self):
         identity = self._next_id
@@ -109,7 +131,7 @@ class ControlChannel:
                 self.errors += 1
                 continue
             try:
-                response = decode_control(data, mtu=self.client.mtu_size)
+                response = self._decode_control(data, mtu=self.client.mtu_size)
                 identity = (response.opcode, response.request_id, response.offset)
                 if identity in self._recent:
                     self.duplicates += 1
@@ -145,7 +167,7 @@ class ControlChannel:
         consumed = False
         try:
             await self._bounded(self._native_write(client,
-                encode_control(request, mtu=client.mtu_size)), self.timeout)
+                self._encode_control(request, mtu=client.mtu_size)), self.timeout)
             if generation != self._generation:
                 raise ConnectionError("BLE disconnected during control write")
             result = await asyncio.wait_for(response, self.timeout)
@@ -182,19 +204,19 @@ class ControlChannel:
         async with self._serial:
             if generation != self._generation:
                 raise ConnectionError("command belongs to a disconnected BLE generation")
-            if (packet.version != VERSION or packet.device_id != self.device_id or
+            if (packet.version != self.sensor_version or packet.device_id != self.device_id or
                     packet.boot_id != self.boot_id or packet.uptime_ms != 0):
-                raise ValueError("command requires current boot, device, v3 and uptime zero")
+                raise ValueError("command requires current boot, device, selected sensor version and uptime zero")
             self.log("command_original", direction="laptop->ESP", request_id=packet.seq,
                      boot_id=packet.boot_id, values=list(packet.values),
-                     expected_values=list(transformed_values(packet.values)))
+                     expected_values=list(self._transformed_values(packet.values)))
             response = await self._exchange(ControlFrame(COMMAND, self.device_id,
-                packet.seq, payload=encode_packet(packet)))
-            modified = decode_packet(response.payload)
-            if (response.offset != 0 or modified.version != VERSION or
+                packet.seq, payload=(self._sensor_v4.encode_packet if self._sensor_v4 else encode_packet)(packet)))
+            modified = (self._sensor_v4.decode_packet if self._sensor_v4 else decode_packet)(response.payload)
+            if (response.offset != 0 or modified.version != self.sensor_version or
                     modified.device_id != packet.device_id or modified.boot_id != packet.boot_id
                     or modified.seq != packet.seq
-                    or modified.values != transformed_values(packet.values)):
+                    or modified.values != self._transformed_values(packet.values)):
                 raise ProtocolError("ESP command transformation or identity mismatch")
             self.log("command_modified", direction="ESP->laptop", request_id=packet.seq,
                      boot_id=modified.boot_id, uptime_ms=modified.uptime_ms,
