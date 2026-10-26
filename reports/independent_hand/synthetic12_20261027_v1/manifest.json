@@ -1,0 +1,104 @@
+{
+  "version": 1,
+  "status": "prepared_not_synthesized",
+  "top": "gesture_cnn_hand_u2_cache",
+  "scope": "synthetic_contract_test_only",
+  "final_gesture_accuracy_validated": false,
+  "format": {
+    "activation_bits": 32,
+    "activation_fraction": 18,
+    "weight_bits": 22,
+    "weight_fraction": 21,
+    "accumulator_bits": 64,
+    "axi_carrier_bits": 32
+  },
+  "part": "xazu3eg-sbva484-1-i",
+  "clock_target_ns": 10,
+  "parallel_lanes": 2,
+  "cache_slots": 2,
+  "regression_samples": 8,
+  "cache_control_cases": 17,
+  "full_range_accumulator_absolute_bound": 3175037737297248256,
+  "numeric_screen_settings": {
+    "threshold": 0.7,
+    "threshold_rule": "gt",
+    "max_probability_error": 0.01
+  },
+  "generator_sha256": {
+    "hand_hls_prepare.py": "5f7c80463100979e67a669e2d2b1246cbc3c9cf81ddd726661a3595fc5ffa461",
+    "precision_sweep.py": "b14efae40a5914aa1f6d9713f67dc008e6cd9aead9302f99a1f356df902fd61f",
+    "precision_hls_prepare.py": "53ebdb640302d7f55d57e29f2c7f2b39d7ec5c0b3264dbf053437ffc05957c0e",
+    "precision_hls_unroll2.py": "4946ff33ec6efd83fc99e4cfa175890091441a3a2db6eb20ff5194144051a1a4",
+    "precision_hls_cache.py": "91ef5bcde6a51165558a3fb33247f88bfd86f5f1c62c76a9016b72f82c732839"
+  },
+  "models": [
+    {
+      "hand": "LEFT",
+      "device_id": 1,
+      "cache_slot": 0,
+      "model_id": 100,
+      "validation_samples": 4,
+      "provenance": {
+        "synthetic_seed": 42
+      },
+      "numeric_screen": {
+        "samples": 4,
+        "class_agreement": 4,
+        "class_changes": 0,
+        "threshold_decision_changes": 0,
+        "emitted_label_changes": 0,
+        "max_probability_error": 3.7284179410512763e-07,
+        "max_logit_error": 2.1355535773735085e-06,
+        "changed_class_indices": [],
+        "changed_filtered_indices": []
+      },
+      "clipping_events": 0
+    },
+    {
+      "hand": "RIGHT",
+      "device_id": 2,
+      "cache_slot": 1,
+      "model_id": 101,
+      "validation_samples": 4,
+      "provenance": {
+        "synthetic_seed": 43
+      },
+      "numeric_screen": {
+        "samples": 4,
+        "class_agreement": 4,
+        "class_changes": 0,
+        "threshold_decision_changes": 0,
+        "emitted_label_changes": 0,
+        "max_probability_error": 3.050674030474765e-07,
+        "max_logit_error": 2.280996041516964e-06,
+        "changed_class_indices": [],
+        "changed_filtered_indices": []
+      },
+      "clipping_events": 0
+    }
+  ],
+  "generated_sha256": {
+    "hand_cnn.cpp": "306fce7b791ffaf3a1bc6c77c76fd2308d20ebe08826a59527b232dc754199bc",
+    "hand_cnn.h": "0ea048beedfd7a0ac8024f0db7b4611dc202a4c18fc2916e5ce7c673d88ba1fa",
+    "hand.cfg": "c31fbb4d35afbf8a98363829ffc59b87a844cf7f39cedcea1bddea05adeaa3a6",
+    "tb_hand_cnn.cpp": "348f00543cc2da4813eb40c9dacf0ed1ec23d7b20ff734c1f08dc855b120ef68",
+    "hand_perf_warm.cfg": "12f325da21d09168a77c439c498ae4a2983f13a801ba36d0feb7238260262817",
+    "hand_perf_cold.cfg": "df40e62c37195ae99bcf3b9ff6c04cfa84d49280687db28c674b65659f180f29",
+    "left/parameter_words.bin": "5e9bc8edee254dc97ec8e63f0ae0a9c657a6f5e9cae36f9184534255a8ce8a95",
+    "left/normalization.npz": "1e4c6a00e962b006e90d979a3e4e4b9e3a0aeeb75cd745f10d980b3983d2e962",
+    "left/config.json": "e5d17eb2819518af9f7d6ecbedea9735cf8893d9a62e1ecda6993a75d8a4f05a",
+    "right/parameter_words.bin": "440c9f771858bb991d082f39e249686223292df81591820021232b5218c0b9b1",
+    "right/normalization.npz": "1e4c6a00e962b006e90d979a3e4e4b9e3a0aeeb75cd745f10d980b3983d2e962",
+    "right/config.json": "e5d17eb2819518af9f7d6ecbedea9735cf8893d9a62e1ecda6993a75d8a4f05a",
+    "vectors/hand_test.bin": "84effcb5def2911d2eb8b41f12bfcb72d83616e22f445b46b86a2addf6f1b09b",
+    "hand_contract.json": "3a4a343a5a814f9d53fa72478672fd9c77c760858e55072c13dc817411ce3feb"
+  },
+  "pending": [
+    "Vitis C simulation",
+    "HLS synthesis",
+    "C/RTL co-simulation",
+    "Vivado implementation and bit/HWH export",
+    "physical-board validation",
+    "v4 communications, independent-hand worker and game integration"
+  ]
+}
