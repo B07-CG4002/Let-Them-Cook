@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "top": "gesture_cnn_precision_u2_cache",
+  "slots": 2,
+  "arguments": [
+    "input_words",
+    "parameter_words",
+    "logit_words",
+    "cache_slot",
+    "model_id",
+    "cache_command"
+  ],
+  "commands": {
+    "AUTO_INFER": 0,
+    "FORCE_RELOAD_INFER": 1,
+    "INVALIDATE_ALL": 2
+  },
+  "return_status": {
+    "HIT": 0,
+    "LOADED": 1,
+    "INVALID_CONTROL": 2,
+    "INVALIDATED": 3
+  },
+  "rules": [
+    "All scalar controls and return status use unsigned32 via AXI4-Lite.",
+    "AUTO loads when the selected slot is invalid or its model_id differs.",
+    "An AUTO hit deliberately ignores parameter_words; its buffer must still be a valid allocated pointer.",
+    "Use a different model_id or FORCE_RELOAD after changing parameter bytes.",
+    "The host must map model IDs to model hashes without reusing an ID for different parameters unless forcing reload.",
+    "INVALIDATE_ALL clears both valid flags, writes zero output, returns INVALIDATED and performs no inference.",
+    "Invalid slot (>=2) or command (>2) writes zero output and returns INVALID_CONTROL without changing slots.",
+    "Hardware reset explicitly clears cache valid flags; parameter memories need not be reset.",
+    "One call at a time: two slots share one CNN compute engine.",
+    "Slots contain parameter sets, not independent input windows or gameplay state.",
+    "This benchmark still requires the legacy 22-feature/eight-class model shape and A16/F6 W12/F13 contract.",
+    "Use the generated register map for later drivers; do not reuse production register offsets."
+  ]
+}
