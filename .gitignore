@@ -99,3 +99,6 @@ nlviewcommon.logfile
 
 # Preserve model split manifests despite the existing *.csv rule
 !/models/hand_*/split_manifest.csv
+# Three-flex hardware checks and fresh recordings
+/data/hand_flex3_checks/
+/data/hand_flex3/
