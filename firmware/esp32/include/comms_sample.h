@@ -21,7 +21,11 @@ constexpr bool kOutOfRangeDrop = COMMS_OUT_OF_RANGE_DROP != 0;
 // against real glove samples.
 constexpr float kChannelScale[kChannelCount] = {
     10000.0f, 10000.0f, 10000.0f, 100.0f, 100.0f, 100.0f,
-    100.0f, 100.0f, 100.0f, 10000.0f, 10000.0f};
+    100.0f, 100.0f, 100.0f, 10000.0f, 10000.0f
+#if COMMS_FLEX3_GLOVE
+    , 10000.0f
+#endif
+};
 
 struct SampleScaleStats {
   uint32_t clamped;   // channel values clamped to an int16 limit

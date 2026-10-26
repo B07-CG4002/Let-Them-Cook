@@ -15,6 +15,10 @@ constexpr int SDA_PIN = 21;
 constexpr int SCL_PIN = 22;
 constexpr int FLEX1_PIN = 34;
 constexpr int FLEX2_PIN = 35;
+#if COMMS_FLEX3_GLOVE
+constexpr int FLEX3_PIN = 39;
+float latestFlex3 = 0.0f;
+#endif
 
 constexpr uint8_t PWR_MGMT_1 = 0x6B;
 constexpr uint8_t CONFIG = 0x1A;
@@ -68,7 +72,7 @@ float gyroBiasX = 0.0f;
 float gyroBiasY = 0.0f;
 float gyroBiasZ = 0.0f;
 
-float latestSample[11] = {0.0f};
+float latestSample[GLOVE_SENSOR_CHANNEL_COUNT] = {0.0f};
 float latestFlex1 = 0.0f;
 float latestFlex2 = 0.0f;
 
@@ -288,8 +292,8 @@ void getLinearAcceleration(float ax, float ay, float az,
   linearAz = az - gravityZ;
 }
 
-bool finiteSample(const float values[11]) {
-  for (uint8_t i = 0; i < 11; ++i) {
+bool finiteSample(const float values[GLOVE_SENSOR_CHANNEL_COUNT]) {
+  for (uint8_t i = 0; i < GLOVE_SENSOR_CHANNEL_COUNT; ++i) {
     if (!isfinite(values[i])) {
       return false;
     }
@@ -390,7 +394,7 @@ void inferMovement() {
 }
 #endif
 
-void updateMovementClassifier(const float sample[11], uint32_t nowUs) {
+void updateMovementClassifier(const float sample[GLOVE_SENSOR_CHANNEL_COUNT], uint32_t nowUs) {
 #if MOVEMENT_MODEL_TRAINED
   if (lastMovementSampleUs != 0 &&
       static_cast<uint32_t>(nowUs - lastMovementSampleUs) <
@@ -435,6 +439,9 @@ bool gloveBegin() {
   integralFeedbackX = integralFeedbackY = integralFeedbackZ = 0.0f;
   gyroBiasX = gyroBiasY = gyroBiasZ = 0.0f;
   latestFlex1 = latestFlex2 = 0.0f;
+#if COMMS_FLEX3_GLOVE
+  latestFlex3 = 0.0f;
+#endif
   lastFlexUpdateUs = 0;
 
   if (!Wire.begin(SDA_PIN, SCL_PIN)) {
@@ -458,6 +465,10 @@ bool gloveBegin() {
   analogReadResolution(12);
   pinMode(FLEX1_PIN, INPUT);
   pinMode(FLEX2_PIN, INPUT);
+#if COMMS_FLEX3_GLOVE
+  pinMode(FLEX3_PIN, INPUT);
+  Serial.println("flex_inputs flex1_gpio=34 flex2_gpio=35 flex3_gpio=39 channels=12");
+#endif
 
   // The calibration wait also gives the IMU time to settle after configuration.
   if (!calibrateGyroscope()) {
@@ -520,14 +531,20 @@ void gloveUpdate() {
       static_cast<uint32_t>(now - lastFlexUpdateUs) >= FLEX_UPDATE_INTERVAL_US) {
     latestFlex1 = static_cast<float>(analogRead(FLEX1_PIN)) / 4095.0f;
     latestFlex2 = static_cast<float>(analogRead(FLEX2_PIN)) / 4095.0f;
+#if COMMS_FLEX3_GLOVE
+    latestFlex3 = static_cast<float>(analogRead(FLEX3_PIN)) / 4095.0f;
+#endif
     lastFlexUpdateUs = now;
   }
 
-  const float newSample[11] = {
+  const float newSample[GLOVE_SENSOR_CHANNEL_COUNT] = {
       linearAx, linearAy, linearAz,
       gx, gy, gz,
       yaw, pitch, roll,
       latestFlex1, latestFlex2,
+#if COMMS_FLEX3_GLOVE
+      latestFlex3,
+#endif
   };
   if (!finiteSample(newSample)) {
     sampleValid = false;
@@ -535,7 +552,7 @@ void gloveUpdate() {
     return;
   }
 
-  for (uint8_t i = 0; i < 11; ++i) {
+  for (uint8_t i = 0; i < GLOVE_SENSOR_CHANNEL_COUNT; ++i) {
     latestSample[i] = newSample[i];
   }
   sampleTimeUs = micros();
@@ -543,7 +560,7 @@ void gloveUpdate() {
   updateMovementClassifier(newSample, now);
 }
 
-bool gloveRead(float out[11]) {
+bool gloveRead(float out[GLOVE_SENSOR_CHANNEL_COUNT]) {
   if (out == nullptr) {
     return false;
   }
@@ -551,13 +568,13 @@ bool gloveRead(float out[11]) {
   const uint32_t ageUs = micros() - sampleTimeUs;
   if (!initialized || !sampleValid || sampleTimeUs == 0 ||
       ageUs > MAX_SAMPLE_AGE_US || !finiteSample(latestSample)) {
-    for (uint8_t i = 0; i < 11; ++i) {
+    for (uint8_t i = 0; i < GLOVE_SENSOR_CHANNEL_COUNT; ++i) {
       out[i] = 0.0f;
     }
     return false;
   }
 
-  for (uint8_t i = 0; i < 11; ++i) {
+  for (uint8_t i = 0; i < GLOVE_SENSOR_CHANNEL_COUNT; ++i) {
     out[i] = latestSample[i];
   }
   return true;

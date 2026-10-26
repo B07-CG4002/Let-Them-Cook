@@ -65,7 +65,7 @@ void gloveUpdate();
 // can be seconds apart. true = out holds one current sample: ax ay az (g),
 // gx gy gz (deg/s), yaw pitch roll (deg), flex1 flex2 (0..1). false = no valid
 // sample now. Must not wait.
-bool gloveRead(float out[11]);
+bool gloveRead(float out[]); // 11 channels normally; 12 with COMMS_FLEX3_GLOVE=1.
 // Right after a successful gloveRead: true = MOVING (send this sample),
 // false = IDLE (skip it). Must not wait.
 bool gloveShouldSend();

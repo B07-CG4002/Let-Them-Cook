@@ -4,16 +4,21 @@
 #include <stdint.h>
 #include "comms_fixtures.h"
 
+#ifndef COMMS_FLEX3_GLOVE
+#define COMMS_FLEX3_GLOVE 0
+#endif
+static_assert(COMMS_FLEX3_GLOVE == 0 || COMMS_FLEX3_GLOVE == 1, "COMMS_FLEX3_GLOVE must be 0 or 1");
+
 namespace comms {
 
-// Protocol version 3, the only version produced or accepted: a 16-byte header
-// and 11 int16 channels (ax ay az gx gy gz yaw pitch roll flex1 flex2).
-constexpr uint8_t kPacketVersion = 3;
+// Legacy: v3, 38 bytes, 11 channels. Opt-in COMMS_FLEX3_GLOVE=1:
+// v4, 40 bytes, appending flex3 (GPIO39) after flex2. Same 16-byte header.
+constexpr uint8_t kPacketVersion = COMMS_FLEX3_GLOVE ? 4 : 3;
 constexpr size_t kPacketHeaderSize = 16;
-constexpr size_t kChannelCount = 11;
+constexpr size_t kChannelCount = COMMS_FLEX3_GLOVE ? 12 : 11;
 constexpr size_t kPacketSize = kPacketHeaderSize + kChannelCount * 2;
-static_assert(kPacketSize == 38, "a version 3 sensor packet is 38 bytes");
-static_assert(sizeof(kDummyFixtures[0]) / sizeof(kDummyFixtures[0][0]) == kChannelCount,
+static_assert(kPacketSize == (COMMS_FLEX3_GLOVE ? 40 : 38), "sensor packet layout");
+static_assert(sizeof(kDummyFixtures[0]) / sizeof(kDummyFixtures[0][0]) == 11,
               "each fixture row needs 11 channels; run python -m tools.generate_dummy_fixtures");
 
 inline void writeUint32Le(uint8_t* output, uint32_t value) {
@@ -52,8 +57,9 @@ inline bool serializeFixturePacket(uint8_t* output, size_t capacity,
                                    uint8_t deviceId, uint32_t bootId, uint32_t seq,
                                    uint32_t uptimeMs, uint32_t randomWord) {
   static_assert(kDummyFixtureCount > 1, "random source needs multiple fixtures");
-  return serializePacket(output, capacity, deviceId, bootId, seq, uptimeMs,
-                         kDummyFixtures[randomWord % kDummyFixtureCount]);
+  int16_t values[kChannelCount] = {};
+  for (size_t i = 0; i < 11; ++i) values[i] = kDummyFixtures[randomWord % kDummyFixtureCount][i];
+  return serializePacket(output, capacity, deviceId, bootId, seq, uptimeMs, values);
 }
 
 }  // namespace comms

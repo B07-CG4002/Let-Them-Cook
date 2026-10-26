@@ -8,7 +8,8 @@
 
 namespace comms {
 
-// <4sBB2xIIIIIII>: LCS3, device ID, flags, 2 reserved zero bytes, then seven
+// <4sBB2xIIIIIII>: LCS3 (legacy) or LCS4 (three-flex), device ID, flags,
+// 2 reserved zero bytes, then seven
 // uint32 totals since boot.
 constexpr size_t kSourceStatsSize = 36;
 // Flags bit 0: a gated source, which skips ticks while the glove is IDLE.
@@ -17,7 +18,7 @@ constexpr uint8_t kSourceFlagGated = 0x01;
 // (comms_send_queue.h). A laptop that predates it refuses the unknown bit
 // before subscribing instead of counting such notifications as malformed.
 constexpr uint8_t kSourceFlagBatched = 0x02;
-static_assert(kPacketVersion == 3, "update the LCS3 source statistics marker");
+static_assert(kPacketVersion == (COMMS_FLEX3_GLOVE ? 4 : 3), "update the LCS3 source statistics marker");
 
 struct SourceStats {
   uint32_t bootId;
@@ -48,12 +49,12 @@ inline bool serializeSourceStats(uint8_t* output, size_t capacity, uint8_t devic
     return false;
   }
 
-  // LCS3 follows the packet version, so an audited laptop bridge refuses a
-  // board still running version 2 firmware (LCS1) before it subscribes.
+  // Match the sensor packet version. Legacy bridges refuse LCS4 before
+  // subscribing; the separate three-flex recorder explicitly requires LCS4.
   output[0] = 'L';
   output[1] = 'C';
   output[2] = 'S';
-  output[3] = '3';
+  output[3] = COMMS_FLEX3_GLOVE ? '4' : '3';
   output[4] = deviceId;
   output[5] = static_cast<uint8_t>((gated ? kSourceFlagGated : 0) | kSourceFlagBatched);
   output[6] = 0;
