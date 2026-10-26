@@ -26,9 +26,9 @@ inline bool dummyMoving(uint32_t nowMs, uint32_t movingMs, uint32_t idleMs) {
 // their bytes after passing through the sensor path.
 inline void dummyFixtureSample(uint32_t randomWord, float* out) {
   static_assert(kDummyFixtureCount > 1, "random source needs multiple fixtures");
-  const int16_t (&row)[kChannelCount] = kDummyFixtures[randomWord % kDummyFixtureCount];
+  const int16_t (&row)[11] = kDummyFixtures[randomWord % kDummyFixtureCount];
   for (size_t channel = 0; channel < kChannelCount; ++channel) {
-    out[channel] = row[channel] / kChannelScale[channel];
+    out[channel] = channel < 11 ? row[channel] / kChannelScale[channel] : 0.0f;
   }
 }
 

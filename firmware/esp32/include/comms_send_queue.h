@@ -9,7 +9,7 @@
 namespace comms {
 
 // One sensor notification carries 1 to kMaxPacketsPerNotification whole
-// version-3 packets back to back, oldest first. Six packets (228 bytes) plus
+// packets back to back, oldest first. Six packets (228 bytes in v3, 240 in v4) plus
 // the ATT (3) and L2CAP (4) headers fit one 251-byte link-layer packet when the
 // link uses the LE data length extension.
 constexpr size_t kMaxPacketsPerNotification = 6;
