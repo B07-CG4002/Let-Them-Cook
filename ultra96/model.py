@@ -108,8 +108,9 @@ class ModelPort:
     except model_results_late, which is counted under a lock.
     """
 
-    def __init__(self, model, deliver, metrics):
+    def __init__(self, model, deliver, metrics, *, physical_converter=None):
         self.model = model
+        self._physical_converter = physical_converter
         self.name = model_name(model)
         self._deliver = deliver
         self.metrics = metrics
@@ -152,7 +153,7 @@ class ModelPort:
         self.metrics["model_samples"] += 1
         started = time.perf_counter()
         try:
-            self.model.on_sample(device_id, boot_id, seq, uptime_ms, physical_values(values))
+            self.model.on_sample(device_id, boot_id, seq, uptime_ms, (self._physical_converter or physical_values)(values))
         except (Exception, SystemExit) as exc:  # a model's sys.exit() must not end the service
             self.metrics["model_errors"] += 1
             self.warn("error", "model on_sample raised %s", type(exc).__name__)

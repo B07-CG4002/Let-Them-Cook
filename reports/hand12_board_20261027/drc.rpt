@@ -1,0 +1,338 @@
+Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2026 Advanced Micro Devices, Inc. All Rights Reserved.
+---------------------------------------------------------------------------------------------------------------------------------------------
+| Tool Version : Vivado v.2026.1 (win64) Build 6511674 Tue Jun 16 11:02:23 MDT 2026
+| Date         : Tue Oct 27 14:04:11 2026
+| Host         : WENREELAPTOP running 64-bit major release  (build 9200)
+| Command      : report_drc -file C:/cg4/h12/results/drc.rpt
+| Design       : multiply_accumulate_wrapper
+| Device       : xazu3eg-sbva484-1-i
+| Speed File   : -1
+| Design State : Fully Routed
+---------------------------------------------------------------------------------------------------------------------------------------------
+
+Report DRC
+
+Table of Contents
+-----------------
+1. REPORT SUMMARY
+2. REPORT DETAILS
+
+1. REPORT SUMMARY
+-----------------
+            Netlist: netlist
+          Floorplan: impl_1
+      Design limits: <entire design considered>
+           Ruledeck: default
+             Max checks: <unlimited>
+             Checks found: 60
++--------+----------+------------------------+--------+
+| Rule   | Severity | Description            | Checks |
++--------+----------+------------------------+--------+
+| DPIP-2 | Warning  | Input pipelining       | 20     |
+| DPOP-3 | Warning  | PREG Output pipelining | 20     |
+| DPOP-4 | Warning  | MREG Output pipelining | 20     |
++--------+----------+------------------------+--------+
+
+2. REPORT DETAILS
+-----------------
+DPIP-2#1 Warning
+Input pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC1_DOT_fu_1019/mul_31ns_22s_53_1_1_U25/tmp_product input multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC1_DOT_fu_1019/mul_31ns_22s_53_1_1_U25/tmp_product/B[17:0] is not pipelined. Pipelining DSP48 input will improve performance.
+Related violations: <none>
+
+DPIP-2#2 Warning
+Input pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC1_DOT_fu_1019/mul_31ns_22s_53_1_1_U25/tmp_product__0 input multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC1_DOT_fu_1019/mul_31ns_22s_53_1_1_U25/tmp_product__0/B[17:0] is not pipelined. Pipelining DSP48 input will improve performance.
+Related violations: <none>
+
+DPIP-2#3 Warning
+Input pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC1_DOT_fu_1019/mul_31ns_22s_53_1_1_U26/tmp_product input multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC1_DOT_fu_1019/mul_31ns_22s_53_1_1_U26/tmp_product/B[17:0] is not pipelined. Pipelining DSP48 input will improve performance.
+Related violations: <none>
+
+DPIP-2#4 Warning
+Input pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC1_DOT_fu_1019/mul_31ns_22s_53_1_1_U26/tmp_product__0 input multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC1_DOT_fu_1019/mul_31ns_22s_53_1_1_U26/tmp_product__0/B[17:0] is not pipelined. Pipelining DSP48 input will improve performance.
+Related violations: <none>
+
+DPIP-2#5 Warning
+Input pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_31ns_22s_53_1_1_U54/tmp_product input multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_31ns_22s_53_1_1_U54/tmp_product/A[29:0] is not pipelined. Pipelining DSP48 input will improve performance.
+Related violations: <none>
+
+DPIP-2#6 Warning
+Input pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_31ns_22s_53_1_1_U54/tmp_product input multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_31ns_22s_53_1_1_U54/tmp_product/B[17:0] is not pipelined. Pipelining DSP48 input will improve performance.
+Related violations: <none>
+
+DPIP-2#7 Warning
+Input pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_31ns_22s_53_1_1_U54/tmp_product__0 input multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_31ns_22s_53_1_1_U54/tmp_product__0/A[29:0] is not pipelined. Pipelining DSP48 input will improve performance.
+Related violations: <none>
+
+DPIP-2#8 Warning
+Input pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_31ns_22s_53_1_1_U54/tmp_product__0 input multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_31ns_22s_53_1_1_U54/tmp_product__0/B[17:0] is not pipelined. Pipelining DSP48 input will improve performance.
+Related violations: <none>
+
+DPIP-2#9 Warning
+Input pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_31ns_22s_53_1_1_U55/tmp_product input multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_31ns_22s_53_1_1_U55/tmp_product/A[29:0] is not pipelined. Pipelining DSP48 input will improve performance.
+Related violations: <none>
+
+DPIP-2#10 Warning
+Input pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_31ns_22s_53_1_1_U55/tmp_product input multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_31ns_22s_53_1_1_U55/tmp_product/B[17:0] is not pipelined. Pipelining DSP48 input will improve performance.
+Related violations: <none>
+
+DPIP-2#11 Warning
+Input pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_31ns_22s_53_1_1_U55/tmp_product__0 input multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_31ns_22s_53_1_1_U55/tmp_product__0/A[29:0] is not pipelined. Pipelining DSP48 input will improve performance.
+Related violations: <none>
+
+DPIP-2#12 Warning
+Input pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_31ns_22s_53_1_1_U55/tmp_product__0 input multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_31ns_22s_53_1_1_U55/tmp_product__0/B[17:0] is not pipelined. Pipelining DSP48 input will improve performance.
+Related violations: <none>
+
+DPIP-2#13 Warning
+Input pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U56/tmp_product input multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U56/tmp_product/A[29:0] is not pipelined. Pipelining DSP48 input will improve performance.
+Related violations: <none>
+
+DPIP-2#14 Warning
+Input pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U56/tmp_product input multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U56/tmp_product/B[17:0] is not pipelined. Pipelining DSP48 input will improve performance.
+Related violations: <none>
+
+DPIP-2#15 Warning
+Input pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U56/tmp_product__0 input multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U56/tmp_product__0/A[29:0] is not pipelined. Pipelining DSP48 input will improve performance.
+Related violations: <none>
+
+DPIP-2#16 Warning
+Input pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U56/tmp_product__0 input multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U56/tmp_product__0/B[17:0] is not pipelined. Pipelining DSP48 input will improve performance.
+Related violations: <none>
+
+DPIP-2#17 Warning
+Input pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/tmp_product input multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/tmp_product/A[29:0] is not pipelined. Pipelining DSP48 input will improve performance.
+Related violations: <none>
+
+DPIP-2#18 Warning
+Input pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/tmp_product input multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/tmp_product/B[17:0] is not pipelined. Pipelining DSP48 input will improve performance.
+Related violations: <none>
+
+DPIP-2#19 Warning
+Input pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/tmp_product__0 input multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/tmp_product__0/A[29:0] is not pipelined. Pipelining DSP48 input will improve performance.
+Related violations: <none>
+
+DPIP-2#20 Warning
+Input pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/tmp_product__0 input multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/tmp_product__0/B[17:0] is not pipelined. Pipelining DSP48 input will improve performance.
+Related violations: <none>
+
+DPOP-3#1 Warning
+PREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC1_DOT_fu_1019/mul_31ns_22s_53_1_1_U25/tmp_product output multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC1_DOT_fu_1019/mul_31ns_22s_53_1_1_U25/tmp_product/P[47:0] is not pipelined (PREG=0). Pipelining the DSP48 output will improve performance and often saves power so it is suggested whenever possible to fully pipeline this function.  If this DSP48 function was inferred, it is suggested to describe an additional register stage after this function.  If the DSP48 was instantiated in the design, it is suggested to set the PREG attribute to 1.
+Related violations: <none>
+
+DPOP-3#2 Warning
+PREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC1_DOT_fu_1019/mul_31ns_22s_53_1_1_U25/tmp_product__0 output multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC1_DOT_fu_1019/mul_31ns_22s_53_1_1_U25/tmp_product__0/P[47:0] is not pipelined (PREG=0). Pipelining the DSP48 output will improve performance and often saves power so it is suggested whenever possible to fully pipeline this function.  If this DSP48 function was inferred, it is suggested to describe an additional register stage after this function.  If the DSP48 was instantiated in the design, it is suggested to set the PREG attribute to 1.
+Related violations: <none>
+
+DPOP-3#3 Warning
+PREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC1_DOT_fu_1019/mul_31ns_22s_53_1_1_U26/tmp_product output multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC1_DOT_fu_1019/mul_31ns_22s_53_1_1_U26/tmp_product/P[47:0] is not pipelined (PREG=0). Pipelining the DSP48 output will improve performance and often saves power so it is suggested whenever possible to fully pipeline this function.  If this DSP48 function was inferred, it is suggested to describe an additional register stage after this function.  If the DSP48 was instantiated in the design, it is suggested to set the PREG attribute to 1.
+Related violations: <none>
+
+DPOP-3#4 Warning
+PREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC1_DOT_fu_1019/mul_31ns_22s_53_1_1_U26/tmp_product__0 output multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC1_DOT_fu_1019/mul_31ns_22s_53_1_1_U26/tmp_product__0/P[47:0] is not pipelined (PREG=0). Pipelining the DSP48 output will improve performance and often saves power so it is suggested whenever possible to fully pipeline this function.  If this DSP48 function was inferred, it is suggested to describe an additional register stage after this function.  If the DSP48 was instantiated in the design, it is suggested to set the PREG attribute to 1.
+Related violations: <none>
+
+DPOP-3#5 Warning
+PREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC2_DOT_fu_1040/mul_31ns_22s_53_1_1_U39/tmp_product output multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC2_DOT_fu_1040/mul_31ns_22s_53_1_1_U39/tmp_product/P[47:0] is not pipelined (PREG=0). Pipelining the DSP48 output will improve performance and often saves power so it is suggested whenever possible to fully pipeline this function.  If this DSP48 function was inferred, it is suggested to describe an additional register stage after this function.  If the DSP48 was instantiated in the design, it is suggested to set the PREG attribute to 1.
+Related violations: <none>
+
+DPOP-3#6 Warning
+PREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC2_DOT_fu_1040/mul_31ns_22s_53_1_1_U39/tmp_product__0 output multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC2_DOT_fu_1040/mul_31ns_22s_53_1_1_U39/tmp_product__0/P[47:0] is not pipelined (PREG=0). Pipelining the DSP48 output will improve performance and often saves power so it is suggested whenever possible to fully pipeline this function.  If this DSP48 function was inferred, it is suggested to describe an additional register stage after this function.  If the DSP48 was instantiated in the design, it is suggested to set the PREG attribute to 1.
+Related violations: <none>
+
+DPOP-3#7 Warning
+PREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC2_DOT_fu_1040/mul_31ns_22s_53_1_1_U40/tmp_product output multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC2_DOT_fu_1040/mul_31ns_22s_53_1_1_U40/tmp_product/P[47:0] is not pipelined (PREG=0). Pipelining the DSP48 output will improve performance and often saves power so it is suggested whenever possible to fully pipeline this function.  If this DSP48 function was inferred, it is suggested to describe an additional register stage after this function.  If the DSP48 was instantiated in the design, it is suggested to set the PREG attribute to 1.
+Related violations: <none>
+
+DPOP-3#8 Warning
+PREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC2_DOT_fu_1040/mul_31ns_22s_53_1_1_U40/tmp_product__0 output multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC2_DOT_fu_1040/mul_31ns_22s_53_1_1_U40/tmp_product__0/P[47:0] is not pipelined (PREG=0). Pipelining the DSP48 output will improve performance and often saves power so it is suggested whenever possible to fully pipeline this function.  If this DSP48 function was inferred, it is suggested to describe an additional register stage after this function.  If the DSP48 was instantiated in the design, it is suggested to set the PREG attribute to 1.
+Related violations: <none>
+
+DPOP-3#9 Warning
+PREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_31ns_22s_53_1_1_U54/tmp_product output multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_31ns_22s_53_1_1_U54/tmp_product/P[47:0] is not pipelined (PREG=0). Pipelining the DSP48 output will improve performance and often saves power so it is suggested whenever possible to fully pipeline this function.  If this DSP48 function was inferred, it is suggested to describe an additional register stage after this function.  If the DSP48 was instantiated in the design, it is suggested to set the PREG attribute to 1.
+Related violations: <none>
+
+DPOP-3#10 Warning
+PREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_31ns_22s_53_1_1_U54/tmp_product__0 output multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_31ns_22s_53_1_1_U54/tmp_product__0/P[47:0] is not pipelined (PREG=0). Pipelining the DSP48 output will improve performance and often saves power so it is suggested whenever possible to fully pipeline this function.  If this DSP48 function was inferred, it is suggested to describe an additional register stage after this function.  If the DSP48 was instantiated in the design, it is suggested to set the PREG attribute to 1.
+Related violations: <none>
+
+DPOP-3#11 Warning
+PREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_31ns_22s_53_1_1_U55/tmp_product output multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_31ns_22s_53_1_1_U55/tmp_product/P[47:0] is not pipelined (PREG=0). Pipelining the DSP48 output will improve performance and often saves power so it is suggested whenever possible to fully pipeline this function.  If this DSP48 function was inferred, it is suggested to describe an additional register stage after this function.  If the DSP48 was instantiated in the design, it is suggested to set the PREG attribute to 1.
+Related violations: <none>
+
+DPOP-3#12 Warning
+PREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_31ns_22s_53_1_1_U55/tmp_product__0 output multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_31ns_22s_53_1_1_U55/tmp_product__0/P[47:0] is not pipelined (PREG=0). Pipelining the DSP48 output will improve performance and often saves power so it is suggested whenever possible to fully pipeline this function.  If this DSP48 function was inferred, it is suggested to describe an additional register stage after this function.  If the DSP48 was instantiated in the design, it is suggested to set the PREG attribute to 1.
+Related violations: <none>
+
+DPOP-3#13 Warning
+PREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U56/tmp_product output multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U56/tmp_product/P[47:0] is not pipelined (PREG=0). Pipelining the DSP48 output will improve performance and often saves power so it is suggested whenever possible to fully pipeline this function.  If this DSP48 function was inferred, it is suggested to describe an additional register stage after this function.  If the DSP48 was instantiated in the design, it is suggested to set the PREG attribute to 1.
+Related violations: <none>
+
+DPOP-3#14 Warning
+PREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U56/tmp_product__0 output multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U56/tmp_product__0/P[47:0] is not pipelined (PREG=0). Pipelining the DSP48 output will improve performance and often saves power so it is suggested whenever possible to fully pipeline this function.  If this DSP48 function was inferred, it is suggested to describe an additional register stage after this function.  If the DSP48 was instantiated in the design, it is suggested to set the PREG attribute to 1.
+Related violations: <none>
+
+DPOP-3#15 Warning
+PREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/tmp_product output multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/tmp_product/P[47:0] is not pipelined (PREG=0). Pipelining the DSP48 output will improve performance and often saves power so it is suggested whenever possible to fully pipeline this function.  If this DSP48 function was inferred, it is suggested to describe an additional register stage after this function.  If the DSP48 was instantiated in the design, it is suggested to set the PREG attribute to 1.
+Related violations: <none>
+
+DPOP-3#16 Warning
+PREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/tmp_product__0 output multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/tmp_product__0/P[47:0] is not pipelined (PREG=0). Pipelining the DSP48 output will improve performance and often saves power so it is suggested whenever possible to fully pipeline this function.  If this DSP48 function was inferred, it is suggested to describe an additional register stage after this function.  If the DSP48 was instantiated in the design, it is suggested to set the PREG attribute to 1.
+Related violations: <none>
+
+DPOP-3#17 Warning
+PREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_6ns_8ns_13_1_1_U60/tmp_product output multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_6ns_8ns_13_1_1_U60/tmp_product/P[47:0] is not pipelined (PREG=0). Pipelining the DSP48 output will improve performance and often saves power so it is suggested whenever possible to fully pipeline this function.  If this DSP48 function was inferred, it is suggested to describe an additional register stage after this function.  If the DSP48 was instantiated in the design, it is suggested to set the PREG attribute to 1.
+Related violations: <none>
+
+DPOP-3#18 Warning
+PREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_6ns_8ns_13_1_1_U61/tmp_product output multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_6ns_8ns_13_1_1_U61/tmp_product/P[47:0] is not pipelined (PREG=0). Pipelining the DSP48 output will improve performance and often saves power so it is suggested whenever possible to fully pipeline this function.  If this DSP48 function was inferred, it is suggested to describe an additional register stage after this function.  If the DSP48 was instantiated in the design, it is suggested to set the PREG attribute to 1.
+Related violations: <none>
+
+DPOP-3#19 Warning
+PREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_7ns_9ns_15_1_1_U64/tmp_product output multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_7ns_9ns_15_1_1_U64/tmp_product/P[47:0] is not pipelined (PREG=0). Pipelining the DSP48 output will improve performance and often saves power so it is suggested whenever possible to fully pipeline this function.  If this DSP48 function was inferred, it is suggested to describe an additional register stage after this function.  If the DSP48 was instantiated in the design, it is suggested to set the PREG attribute to 1.
+Related violations: <none>
+
+DPOP-3#20 Warning
+PREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_7ns_9ns_15_1_1_U65/tmp_product output multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_7ns_9ns_15_1_1_U65/tmp_product/P[47:0] is not pipelined (PREG=0). Pipelining the DSP48 output will improve performance and often saves power so it is suggested whenever possible to fully pipeline this function.  If this DSP48 function was inferred, it is suggested to describe an additional register stage after this function.  If the DSP48 was instantiated in the design, it is suggested to set the PREG attribute to 1.
+Related violations: <none>
+
+DPOP-4#1 Warning
+MREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC1_DOT_fu_1019/mul_31ns_22s_53_1_1_U25/tmp_product multiplier stage multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC1_DOT_fu_1019/mul_31ns_22s_53_1_1_U25/tmp_product/P[47:0] is not pipelined (MREG=0). Pipelining the multiplier function will improve performance and will save significant power so it is suggested whenever possible to fully pipeline this function.  If this multiplier was inferred, it is suggested to describe an additional register stage after this function.  If there is no registered adder/accumulator following the multiply function, two pipeline stages are suggested to allow both the MREG and PREG registers to be used.  If the DSP48 was instantiated in the design, it is suggested to set both the MREG and PREG attributes to 1 when performing multiply functions.
+Related violations: <none>
+
+DPOP-4#2 Warning
+MREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC1_DOT_fu_1019/mul_31ns_22s_53_1_1_U25/tmp_product__0 multiplier stage multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC1_DOT_fu_1019/mul_31ns_22s_53_1_1_U25/tmp_product__0/P[47:0] is not pipelined (MREG=0). Pipelining the multiplier function will improve performance and will save significant power so it is suggested whenever possible to fully pipeline this function.  If this multiplier was inferred, it is suggested to describe an additional register stage after this function.  If there is no registered adder/accumulator following the multiply function, two pipeline stages are suggested to allow both the MREG and PREG registers to be used.  If the DSP48 was instantiated in the design, it is suggested to set both the MREG and PREG attributes to 1 when performing multiply functions.
+Related violations: <none>
+
+DPOP-4#3 Warning
+MREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC1_DOT_fu_1019/mul_31ns_22s_53_1_1_U26/tmp_product multiplier stage multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC1_DOT_fu_1019/mul_31ns_22s_53_1_1_U26/tmp_product/P[47:0] is not pipelined (MREG=0). Pipelining the multiplier function will improve performance and will save significant power so it is suggested whenever possible to fully pipeline this function.  If this multiplier was inferred, it is suggested to describe an additional register stage after this function.  If there is no registered adder/accumulator following the multiply function, two pipeline stages are suggested to allow both the MREG and PREG registers to be used.  If the DSP48 was instantiated in the design, it is suggested to set both the MREG and PREG attributes to 1 when performing multiply functions.
+Related violations: <none>
+
+DPOP-4#4 Warning
+MREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC1_DOT_fu_1019/mul_31ns_22s_53_1_1_U26/tmp_product__0 multiplier stage multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC1_DOT_fu_1019/mul_31ns_22s_53_1_1_U26/tmp_product__0/P[47:0] is not pipelined (MREG=0). Pipelining the multiplier function will improve performance and will save significant power so it is suggested whenever possible to fully pipeline this function.  If this multiplier was inferred, it is suggested to describe an additional register stage after this function.  If there is no registered adder/accumulator following the multiply function, two pipeline stages are suggested to allow both the MREG and PREG registers to be used.  If the DSP48 was instantiated in the design, it is suggested to set both the MREG and PREG attributes to 1 when performing multiply functions.
+Related violations: <none>
+
+DPOP-4#5 Warning
+MREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC2_DOT_fu_1040/mul_31ns_22s_53_1_1_U39/tmp_product multiplier stage multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC2_DOT_fu_1040/mul_31ns_22s_53_1_1_U39/tmp_product/P[47:0] is not pipelined (MREG=0). Pipelining the multiplier function will improve performance and will save significant power so it is suggested whenever possible to fully pipeline this function.  If this multiplier was inferred, it is suggested to describe an additional register stage after this function.  If there is no registered adder/accumulator following the multiply function, two pipeline stages are suggested to allow both the MREG and PREG registers to be used.  If the DSP48 was instantiated in the design, it is suggested to set both the MREG and PREG attributes to 1 when performing multiply functions.
+Related violations: <none>
+
+DPOP-4#6 Warning
+MREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC2_DOT_fu_1040/mul_31ns_22s_53_1_1_U39/tmp_product__0 multiplier stage multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC2_DOT_fu_1040/mul_31ns_22s_53_1_1_U39/tmp_product__0/P[47:0] is not pipelined (MREG=0). Pipelining the multiplier function will improve performance and will save significant power so it is suggested whenever possible to fully pipeline this function.  If this multiplier was inferred, it is suggested to describe an additional register stage after this function.  If there is no registered adder/accumulator following the multiply function, two pipeline stages are suggested to allow both the MREG and PREG registers to be used.  If the DSP48 was instantiated in the design, it is suggested to set both the MREG and PREG attributes to 1 when performing multiply functions.
+Related violations: <none>
+
+DPOP-4#7 Warning
+MREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC2_DOT_fu_1040/mul_31ns_22s_53_1_1_U40/tmp_product multiplier stage multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC2_DOT_fu_1040/mul_31ns_22s_53_1_1_U40/tmp_product/P[47:0] is not pipelined (MREG=0). Pipelining the multiplier function will improve performance and will save significant power so it is suggested whenever possible to fully pipeline this function.  If this multiplier was inferred, it is suggested to describe an additional register stage after this function.  If there is no registered adder/accumulator following the multiply function, two pipeline stages are suggested to allow both the MREG and PREG registers to be used.  If the DSP48 was instantiated in the design, it is suggested to set both the MREG and PREG attributes to 1 when performing multiply functions.
+Related violations: <none>
+
+DPOP-4#8 Warning
+MREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC2_DOT_fu_1040/mul_31ns_22s_53_1_1_U40/tmp_product__0 multiplier stage multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/grp_gesture_cnn_hand_u2_cache_Pipeline_FC2_DOT_fu_1040/mul_31ns_22s_53_1_1_U40/tmp_product__0/P[47:0] is not pipelined (MREG=0). Pipelining the multiplier function will improve performance and will save significant power so it is suggested whenever possible to fully pipeline this function.  If this multiplier was inferred, it is suggested to describe an additional register stage after this function.  If there is no registered adder/accumulator following the multiply function, two pipeline stages are suggested to allow both the MREG and PREG registers to be used.  If the DSP48 was instantiated in the design, it is suggested to set both the MREG and PREG attributes to 1 when performing multiply functions.
+Related violations: <none>
+
+DPOP-4#9 Warning
+MREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_31ns_22s_53_1_1_U54/tmp_product multiplier stage multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_31ns_22s_53_1_1_U54/tmp_product/P[47:0] is not pipelined (MREG=0). Pipelining the multiplier function will improve performance and will save significant power so it is suggested whenever possible to fully pipeline this function.  If this multiplier was inferred, it is suggested to describe an additional register stage after this function.  If there is no registered adder/accumulator following the multiply function, two pipeline stages are suggested to allow both the MREG and PREG registers to be used.  If the DSP48 was instantiated in the design, it is suggested to set both the MREG and PREG attributes to 1 when performing multiply functions.
+Related violations: <none>
+
+DPOP-4#10 Warning
+MREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_31ns_22s_53_1_1_U54/tmp_product__0 multiplier stage multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_31ns_22s_53_1_1_U54/tmp_product__0/P[47:0] is not pipelined (MREG=0). Pipelining the multiplier function will improve performance and will save significant power so it is suggested whenever possible to fully pipeline this function.  If this multiplier was inferred, it is suggested to describe an additional register stage after this function.  If there is no registered adder/accumulator following the multiply function, two pipeline stages are suggested to allow both the MREG and PREG registers to be used.  If the DSP48 was instantiated in the design, it is suggested to set both the MREG and PREG attributes to 1 when performing multiply functions.
+Related violations: <none>
+
+DPOP-4#11 Warning
+MREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_31ns_22s_53_1_1_U55/tmp_product multiplier stage multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_31ns_22s_53_1_1_U55/tmp_product/P[47:0] is not pipelined (MREG=0). Pipelining the multiplier function will improve performance and will save significant power so it is suggested whenever possible to fully pipeline this function.  If this multiplier was inferred, it is suggested to describe an additional register stage after this function.  If there is no registered adder/accumulator following the multiply function, two pipeline stages are suggested to allow both the MREG and PREG registers to be used.  If the DSP48 was instantiated in the design, it is suggested to set both the MREG and PREG attributes to 1 when performing multiply functions.
+Related violations: <none>
+
+DPOP-4#12 Warning
+MREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_31ns_22s_53_1_1_U55/tmp_product__0 multiplier stage multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_31ns_22s_53_1_1_U55/tmp_product__0/P[47:0] is not pipelined (MREG=0). Pipelining the multiplier function will improve performance and will save significant power so it is suggested whenever possible to fully pipeline this function.  If this multiplier was inferred, it is suggested to describe an additional register stage after this function.  If there is no registered adder/accumulator following the multiply function, two pipeline stages are suggested to allow both the MREG and PREG registers to be used.  If the DSP48 was instantiated in the design, it is suggested to set both the MREG and PREG attributes to 1 when performing multiply functions.
+Related violations: <none>
+
+DPOP-4#13 Warning
+MREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U56/tmp_product multiplier stage multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U56/tmp_product/P[47:0] is not pipelined (MREG=0). Pipelining the multiplier function will improve performance and will save significant power so it is suggested whenever possible to fully pipeline this function.  If this multiplier was inferred, it is suggested to describe an additional register stage after this function.  If there is no registered adder/accumulator following the multiply function, two pipeline stages are suggested to allow both the MREG and PREG registers to be used.  If the DSP48 was instantiated in the design, it is suggested to set both the MREG and PREG attributes to 1 when performing multiply functions.
+Related violations: <none>
+
+DPOP-4#14 Warning
+MREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U56/tmp_product__0 multiplier stage multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U56/tmp_product__0/P[47:0] is not pipelined (MREG=0). Pipelining the multiplier function will improve performance and will save significant power so it is suggested whenever possible to fully pipeline this function.  If this multiplier was inferred, it is suggested to describe an additional register stage after this function.  If there is no registered adder/accumulator following the multiply function, two pipeline stages are suggested to allow both the MREG and PREG registers to be used.  If the DSP48 was instantiated in the design, it is suggested to set both the MREG and PREG attributes to 1 when performing multiply functions.
+Related violations: <none>
+
+DPOP-4#15 Warning
+MREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/tmp_product multiplier stage multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/tmp_product/P[47:0] is not pipelined (MREG=0). Pipelining the multiplier function will improve performance and will save significant power so it is suggested whenever possible to fully pipeline this function.  If this multiplier was inferred, it is suggested to describe an additional register stage after this function.  If there is no registered adder/accumulator following the multiply function, two pipeline stages are suggested to allow both the MREG and PREG registers to be used.  If the DSP48 was instantiated in the design, it is suggested to set both the MREG and PREG attributes to 1 when performing multiply functions.
+Related violations: <none>
+
+DPOP-4#16 Warning
+MREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/tmp_product__0 multiplier stage multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/tmp_product__0/P[47:0] is not pipelined (MREG=0). Pipelining the multiplier function will improve performance and will save significant power so it is suggested whenever possible to fully pipeline this function.  If this multiplier was inferred, it is suggested to describe an additional register stage after this function.  If there is no registered adder/accumulator following the multiply function, two pipeline stages are suggested to allow both the MREG and PREG registers to be used.  If the DSP48 was instantiated in the design, it is suggested to set both the MREG and PREG attributes to 1 when performing multiply functions.
+Related violations: <none>
+
+DPOP-4#17 Warning
+MREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_6ns_8ns_13_1_1_U60/tmp_product multiplier stage multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_6ns_8ns_13_1_1_U60/tmp_product/P[47:0] is not pipelined (MREG=0). Pipelining the multiplier function will improve performance and will save significant power so it is suggested whenever possible to fully pipeline this function.  If this multiplier was inferred, it is suggested to describe an additional register stage after this function.  If there is no registered adder/accumulator following the multiply function, two pipeline stages are suggested to allow both the MREG and PREG registers to be used.  If the DSP48 was instantiated in the design, it is suggested to set both the MREG and PREG attributes to 1 when performing multiply functions.
+Related violations: <none>
+
+DPOP-4#18 Warning
+MREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_6ns_8ns_13_1_1_U61/tmp_product multiplier stage multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_6ns_8ns_13_1_1_U61/tmp_product/P[47:0] is not pipelined (MREG=0). Pipelining the multiplier function will improve performance and will save significant power so it is suggested whenever possible to fully pipeline this function.  If this multiplier was inferred, it is suggested to describe an additional register stage after this function.  If there is no registered adder/accumulator following the multiply function, two pipeline stages are suggested to allow both the MREG and PREG registers to be used.  If the DSP48 was instantiated in the design, it is suggested to set both the MREG and PREG attributes to 1 when performing multiply functions.
+Related violations: <none>
+
+DPOP-4#19 Warning
+MREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_7ns_9ns_15_1_1_U64/tmp_product multiplier stage multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_7ns_9ns_15_1_1_U64/tmp_product/P[47:0] is not pipelined (MREG=0). Pipelining the multiplier function will improve performance and will save significant power so it is suggested whenever possible to fully pipeline this function.  If this multiplier was inferred, it is suggested to describe an additional register stage after this function.  If there is no registered adder/accumulator following the multiply function, two pipeline stages are suggested to allow both the MREG and PREG registers to be used.  If the DSP48 was instantiated in the design, it is suggested to set both the MREG and PREG attributes to 1 when performing multiply functions.
+Related violations: <none>
+
+DPOP-4#20 Warning
+MREG Output pipelining  
+DSP multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_7ns_9ns_15_1_1_U65/tmp_product multiplier stage multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_7ns_9ns_15_1_1_U65/tmp_product/P[47:0] is not pipelined (MREG=0). Pipelining the multiplier function will improve performance and will save significant power so it is suggested whenever possible to fully pipeline this function.  If this multiplier was inferred, it is suggested to describe an additional register stage after this function.  If there is no registered adder/accumulator following the multiply function, two pipeline stages are suggested to allow both the MREG and PREG registers to be used.  If the DSP48 was instantiated in the design, it is suggested to set both the MREG and PREG attributes to 1 when performing multiply functions.
+Related violations: <none>
+
+

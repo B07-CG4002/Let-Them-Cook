@@ -17,7 +17,13 @@ def _time(value):
 
 
 class GoodputMeter:
-    def __init__(self, window_seconds=5.0):
+    def __init__(self, window_seconds=5.0, *, sensor_version=3):
+        if type(sensor_version) is not int or sensor_version not in (3,4):
+            raise ValueError("sensor_version must be 3 or 4")
+        self._packet_type, self._packet_size = SensorPacket, PACKET_SIZE
+        if sensor_version == 4:
+            from common import sensor_v4
+            self._packet_type, self._packet_size = sensor_v4.SensorPacket, sensor_v4.PACKET_SIZE
         self.window_seconds = _time(window_seconds)
         if self.window_seconds <= 0:
             raise ValueError('window must be positive')
@@ -44,7 +50,7 @@ class GoodputMeter:
 
     def record(self, packet, received_at):
         received_at = _time(received_at)
-        if not isinstance(packet, SensorPacket):
+        if not isinstance(packet, self._packet_type):
             return False
         with self._lock:
             key = packet.device_id, packet.boot_id
@@ -84,7 +90,7 @@ class GoodputMeter:
             elapsed = 0 if self._start is None else end - self._start
             self._prune(end)
             rolling_elapsed = min(elapsed, self.window_seconds)
-            packet_bytes = self._packets * PACKET_SIZE
+            packet_bytes = self._packets * self._packet_size
             return {
                 'boundary': 'unique valid sensor packet bytes at laptop reception',
                 'interval': 'steady observation; excludes startup and final draining',
@@ -92,7 +98,7 @@ class GoodputMeter:
                 'packets': self._packets,
                 'elapsed_seconds': elapsed,
                 'average_kbps': packet_bytes * 8 / elapsed / 1000 if elapsed else 0.0,
-                'rolling_kbps': len(self._ticks) * PACKET_SIZE * 8 / rolling_elapsed / 1000
+                'rolling_kbps': len(self._ticks) * self._packet_size * 8 / rolling_elapsed / 1000
                     if rolling_elapsed else 0.0,
                 'rolling_elapsed_seconds': rolling_elapsed,
                 'tracking_overflow': self.tracking_overflow,

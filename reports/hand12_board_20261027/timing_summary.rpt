@@ -1,0 +1,752 @@
+Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2026 Advanced Micro Devices, Inc. All Rights Reserved.
+--------------------------------------------------------------------------------------------------------------------------------------------------
+| Tool Version      : Vivado v.2026.1 (win64) Build 6511674 Tue Jun 16 11:02:23 MDT 2026
+| Date              : Tue Oct 27 14:03:49 2026
+| Host              : WENREELAPTOP running 64-bit major release  (build 9200)
+| Command           : report_timing_summary -report_unconstrained -file C:/cg4/h12/results/timing_summary.rpt
+| Design            : multiply_accumulate_wrapper
+| Device            : xazu3eg-sbva484
+| Speed File        : -1  PRODUCTION 1.31 05-04-2022
+| Design State      : Routed
+| Temperature Grade : I
+--------------------------------------------------------------------------------------------------------------------------------------------------
+
+Timing Summary Report
+
+------------------------------------------------------------------------------------------------
+| Timer Settings
+| --------------
+------------------------------------------------------------------------------------------------
+
+  Enable Multi Corner Analysis               :  Yes
+  Enable Pessimism Removal                   :  Yes
+  Pessimism Removal Resolution               :  Nearest Common Node
+  Enable Input Delay Default Clock           :  No
+  Enable Preset / Clear Arcs                 :  No
+  Disable Flight Delays                      :  No
+  Ignore I/O Paths                           :  No
+  Timing Early Launch at Borrowing Latches   :  No
+  Borrow Time for Max Delay Exceptions       :  Yes
+  Merge Timing Exceptions                    :  Yes
+  Inter-SLR Compensation                     :  Conservative
+
+  Corner  Analyze    Analyze    
+  Name    Max Paths  Min Paths  
+  ------  ---------  ---------  
+  Slow    Yes        Yes        
+  Fast    Yes        Yes        
+
+
+------------------------------------------------------------------------------------------------
+| Report Methodology
+| ------------------
+------------------------------------------------------------------------------------------------
+
+No report available as report_methodology has not been run prior. Run report_methodology on the current design for the summary of methodology violations.
+
+
+
+check_timing report
+
+Table of Contents
+-----------------
+1. checking no_clock (0)
+2. checking constant_clock (0)
+3. checking pulse_width_clock (0)
+4. checking unconstrained_internal_endpoints (0)
+5. checking no_input_delay (0)
+6. checking no_output_delay (0)
+7. checking multiple_clock (0)
+8. checking generated_clocks (0)
+9. checking loops (0)
+10. checking partial_input_delay (0)
+11. checking partial_output_delay (0)
+12. checking latch_loops (0)
+
+1. checking no_clock (0)
+------------------------
+ There are 0 register/latch pins with no clock.
+
+
+2. checking constant_clock (0)
+------------------------------
+ There are 0 register/latch pins with constant_clock.
+
+
+3. checking pulse_width_clock (0)
+---------------------------------
+ There are 0 register/latch pins which need pulse_width check
+
+
+4. checking unconstrained_internal_endpoints (0)
+------------------------------------------------
+ There are 0 pins that are not constrained for maximum delay.
+
+ There are 0 pins that are not constrained for maximum delay due to constant clock.
+
+
+5. checking no_input_delay (0)
+------------------------------
+ There are 0 input ports with no input delay specified.
+
+ There are 0 input ports with no input delay but user has a false path constraint.
+
+
+6. checking no_output_delay (0)
+-------------------------------
+ There are 0 ports with no output delay specified.
+
+ There are 0 ports with no output delay but user has a false path constraint
+
+ There are 0 ports with no output delay but with a timing clock defined on it or propagating through it
+
+
+7. checking multiple_clock (0)
+------------------------------
+ There are 0 register/latch pins with multiple clocks.
+
+
+8. checking generated_clocks (0)
+--------------------------------
+ There are 0 generated clocks that are not connected to a clock source.
+
+
+9. checking loops (0)
+---------------------
+ There are 0 combinational loops in the design.
+
+
+10. checking partial_input_delay (0)
+------------------------------------
+ There are 0 input ports with partial input delay specified.
+
+
+11. checking partial_output_delay (0)
+-------------------------------------
+ There are 0 ports with partial output delay specified.
+
+
+12. checking latch_loops (0)
+----------------------------
+ There are 0 combinational latch loops in the design through latch input
+
+
+
+------------------------------------------------------------------------------------------------
+| Design Timing Summary
+| ---------------------
+------------------------------------------------------------------------------------------------
+
+    WNS(ns)      TNS(ns)  TNS Failing Endpoints  TNS Total Endpoints      WHS(ns)      THS(ns)  THS Failing Endpoints  THS Total Endpoints     WPWS(ns)     TPWS(ns)  TPWS Failing Endpoints  TPWS Total Endpoints  
+    -------      -------  ---------------------  -------------------      -------      -------  ---------------------  -------------------     --------     --------  ----------------------  --------------------  
+      1.282        0.000                      0                40967        0.010        0.000                      0                40967        3.500        0.000                       0                 12415  
+
+
+All user specified timing constraints are met.
+
+
+------------------------------------------------------------------------------------------------
+| Clock Summary
+| -------------
+------------------------------------------------------------------------------------------------
+
+Clock     Waveform(ns)       Period(ns)      Frequency(MHz)
+-----     ------------       ----------      --------------
+clk_pl_0  {0.000 5.000}      10.000          100.000         
+
+
+------------------------------------------------------------------------------------------------
+| Intra Clock Table
+| -----------------
+------------------------------------------------------------------------------------------------
+
+Clock             WNS(ns)      TNS(ns)  TNS Failing Endpoints  TNS Total Endpoints      WHS(ns)      THS(ns)  THS Failing Endpoints  THS Total Endpoints     WPWS(ns)     TPWS(ns)  TPWS Failing Endpoints  TPWS Total Endpoints  
+-----             -------      -------  ---------------------  -------------------      -------      -------  ---------------------  -------------------     --------     --------  ----------------------  --------------------  
+clk_pl_0            1.282        0.000                      0                40967        0.010        0.000                      0                40967        3.500        0.000                       0                 12415  
+
+
+------------------------------------------------------------------------------------------------
+| Inter Clock Table
+| -----------------
+------------------------------------------------------------------------------------------------
+
+From Clock    To Clock          WNS(ns)      TNS(ns)  TNS Failing Endpoints  TNS Total Endpoints      WHS(ns)      THS(ns)  THS Failing Endpoints  THS Total Endpoints  
+----------    --------          -------      -------  ---------------------  -------------------      -------      -------  ---------------------  -------------------  
+
+
+------------------------------------------------------------------------------------------------
+| Other Path Groups Table
+| -----------------------
+------------------------------------------------------------------------------------------------
+
+Path Group    From Clock    To Clock          WNS(ns)      TNS(ns)  TNS Failing Endpoints  TNS Total Endpoints      WHS(ns)      THS(ns)  THS Failing Endpoints  THS Total Endpoints  
+----------    ----------    --------          -------      -------  ---------------------  -------------------      -------      -------  ---------------------  -------------------  
+
+
+------------------------------------------------------------------------------------------------
+| User Ignored Path Table
+| -----------------------
+------------------------------------------------------------------------------------------------
+
+Path Group    From Clock    To Clock    
+----------    ----------    --------    
+(none)                      clk_pl_0      
+(none)        clk_pl_0      clk_pl_0      
+
+
+------------------------------------------------------------------------------------------------
+| Unconstrained Path Table
+| ------------------------
+------------------------------------------------------------------------------------------------
+
+Path Group    From Clock    To Clock    
+----------    ----------    --------    
+(none)                      clk_pl_0      
+
+
+------------------------------------------------------------------------------------------------
+| Timing Details
+| --------------
+------------------------------------------------------------------------------------------------
+
+
+---------------------------------------------------------------------------------------------------
+From Clock:  clk_pl_0
+  To Clock:  clk_pl_0
+
+Setup :            0  Failing Endpoints,  Worst Slack        1.282ns,  Total Violation        0.000ns
+Hold  :            0  Failing Endpoints,  Worst Slack        0.010ns,  Total Violation        0.000ns
+PW    :            0  Failing Endpoints,  Worst Slack        3.500ns,  Total Violation        0.000ns
+---------------------------------------------------------------------------------------------------
+
+
+Max Delay Paths
+--------------------------------------------------------------------------------------
+Slack (MET) :             1.282ns  (required time - arrival time)
+  Source:                 multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/p_ZZ25gesture_cnn_hand_u2_cachePK6ap_intILi32EES2_PS0_jjjE7weights_0_1_U/ram_reg_bram_0/CLKBWRCLK
+                            (rising edge-triggered cell RAMB36E2 clocked by clk_pl_0  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/add_ln116_1_reg_3051_reg[57]/D
+                            (rising edge-triggered cell FDRE clocked by clk_pl_0  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Path Group:             clk_pl_0
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            10.000ns  (clk_pl_0 rise@10.000ns - clk_pl_0 rise@0.000ns)
+  Data Path Delay:        8.486ns  (logic 6.038ns (71.153%)  route 2.448ns (28.847%))
+  Logic Levels:           22  (CARRY8=5 DSP_A_B_DATA=1 DSP_ALU=2 DSP_M_DATA=1 DSP_MULTIPLIER=1 DSP_OUTPUT=2 DSP_PREADD_DATA=1 LUT5=1 LUT6=1 RAMB36E2=7)
+  Clock Path Skew:        -0.086ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    1.875ns = ( 11.875 - 10.000 ) 
+    Source Clock Delay      (SCD):    2.127ns
+    Clock Pessimism Removal (CPR):    0.166ns
+  Clock Uncertainty:      0.174ns  ((TSJ^2 + DJ^2)^1/2) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Discrete Jitter          (DJ):    0.340ns
+    Phase Error              (PE):    0.000ns
+  Clock Net Delay (Source):      1.920ns (routing 0.638ns, distribution 1.282ns)
+  Clock Net Delay (Destination): 1.708ns (routing 0.576ns, distribution 1.132ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk_pl_0 rise edge)
+                                                      0.000     0.000 r  <hidden>
+    PS8_X0Y0             PS8                          0.000     0.000 r  multiply_accumulate_i/zynq_ultra_ps_e_0/inst/PS8_i/PLCLK[0]
+                         net (fo=1, routed)           0.178     0.178    multiply_accumulate_i/zynq_ultra_ps_e_0/inst/pl_clk_unbuffered[0]
+    BUFG_PS_X0Y58        BUFG_PS (Prop_BUFG_PS_I_O)
+                                                      0.029     0.207 r  multiply_accumulate_i/zynq_ultra_ps_e_0/inst/buffer_pl_clk_0.PL_CLK_0_BUFG/O
+    X0Y1 (CLOCK_ROOT)    net (fo=12485, routed)       1.920     2.127    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/p_ZZ25gesture_cnn_hand_u2_cachePK6ap_intILi32EES2_PS0_jjjE7weights_0_1_U/ap_clk
+    RAMB36_X0Y0          RAMB36E2                                     r  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/p_ZZ25gesture_cnn_hand_u2_cachePK6ap_intILi32EES2_PS0_jjjE7weights_0_1_U/ram_reg_bram_0/CLKBWRCLK
+  -------------------------------------------------------------------    -------------------
+    RAMB36_X0Y0          RAMB36E2 (Prop_RAMB36E2_RAMB36_CLKBWRCLK_CASDOUTB[13])
+                                                      1.133     3.260 f  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/p_ZZ25gesture_cnn_hand_u2_cachePK6ap_intILi32EES2_PS0_jjjE7weights_0_1_U/ram_reg_bram_0/CASDOUTB[13]
+                         net (fo=1, routed)           0.028     3.288    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/p_ZZ25gesture_cnn_hand_u2_cachePK6ap_intILi32EES2_PS0_jjjE7weights_0_1_U/ram_reg_bram_0_n_59
+    RAMB36_X0Y1          RAMB36E2 (Prop_RAMB36E2_RAMB36_CASDINB[13]_CASDOUTB[13])
+                                                      0.220     3.508 f  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/p_ZZ25gesture_cnn_hand_u2_cachePK6ap_intILi32EES2_PS0_jjjE7weights_0_1_U/ram_reg_bram_1/CASDOUTB[13]
+                         net (fo=1, routed)           0.028     3.536    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/p_ZZ25gesture_cnn_hand_u2_cachePK6ap_intILi32EES2_PS0_jjjE7weights_0_1_U/ram_reg_bram_1_n_59
+    RAMB36_X0Y2          RAMB36E2 (Prop_RAMB36E2_RAMB36_CASDINB[13]_CASDOUTB[13])
+                                                      0.220     3.756 f  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/p_ZZ25gesture_cnn_hand_u2_cachePK6ap_intILi32EES2_PS0_jjjE7weights_0_1_U/ram_reg_bram_2/CASDOUTB[13]
+                         net (fo=1, routed)           0.028     3.784    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/p_ZZ25gesture_cnn_hand_u2_cachePK6ap_intILi32EES2_PS0_jjjE7weights_0_1_U/ram_reg_bram_2_n_59
+    RAMB36_X0Y3          RAMB36E2 (Prop_RAMB36E2_RAMB36_CASDINB[13]_CASDOUTB[13])
+                                                      0.220     4.004 f  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/p_ZZ25gesture_cnn_hand_u2_cachePK6ap_intILi32EES2_PS0_jjjE7weights_0_1_U/ram_reg_bram_3/CASDOUTB[13]
+                         net (fo=1, routed)           0.028     4.032    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/p_ZZ25gesture_cnn_hand_u2_cachePK6ap_intILi32EES2_PS0_jjjE7weights_0_1_U/ram_reg_bram_3_n_59
+    RAMB36_X0Y4          RAMB36E2 (Prop_RAMB36E2_RAMB36_CASDINB[13]_CASDOUTB[13])
+                                                      0.220     4.252 f  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/p_ZZ25gesture_cnn_hand_u2_cachePK6ap_intILi32EES2_PS0_jjjE7weights_0_1_U/ram_reg_bram_4/CASDOUTB[13]
+                         net (fo=1, routed)           0.028     4.280    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/p_ZZ25gesture_cnn_hand_u2_cachePK6ap_intILi32EES2_PS0_jjjE7weights_0_1_U/ram_reg_bram_4_n_59
+    RAMB36_X0Y5          RAMB36E2 (Prop_RAMB36E2_RAMB36_CASDINB[13]_CASDOUTB[13])
+                                                      0.220     4.500 f  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/p_ZZ25gesture_cnn_hand_u2_cachePK6ap_intILi32EES2_PS0_jjjE7weights_0_1_U/ram_reg_bram_5/CASDOUTB[13]
+                         net (fo=1, routed)           0.028     4.528    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/p_ZZ25gesture_cnn_hand_u2_cachePK6ap_intILi32EES2_PS0_jjjE7weights_0_1_U/ram_reg_bram_5_n_59
+    RAMB36_X0Y6          RAMB36E2 (Prop_RAMB36E2_RAMB36_CASDINB[13]_CASDOUTB[13])
+                                                      0.220     4.748 f  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/p_ZZ25gesture_cnn_hand_u2_cachePK6ap_intILi32EES2_PS0_jjjE7weights_0_1_U/ram_reg_bram_6/CASDOUTB[13]
+                         net (fo=1, routed)           0.028     4.776    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/p_ZZ25gesture_cnn_hand_u2_cachePK6ap_intILi32EES2_PS0_jjjE7weights_0_1_U/ram_reg_bram_6_n_59
+    RAMB36_X0Y7          RAMB36E2 (Prop_RAMB36E2_RAMB36_CASDINB[13]_DOUTBDOUT[13])
+                                                      0.120     4.896 f  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/p_ZZ25gesture_cnn_hand_u2_cachePK6ap_intILi32EES2_PS0_jjjE7weights_0_1_U/ram_reg_bram_7/DOUTBDOUT[13]
+                         net (fo=2, routed)           0.829     5.725    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/p_ZZ25gesture_cnn_hand_u2_cachePK6ap_intILi32EES2_PS0_jjjE7weights_0_1_U/ram_reg_bram_7_n_123
+    SLICE_X18Y35         LUT6 (Prop_G6LUT_SLICEL_I5_O)
+                                                      0.147     5.872 f  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/p_ZZ25gesture_cnn_hand_u2_cachePK6ap_intILi32EES2_PS0_jjjE7weights_0_1_U/tmp_product_i_26__0/O
+                         net (fo=4, routed)           0.893     6.765    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/tmp_product/A[13]
+    DSP48E2_X4Y8         DSP_A_B_DATA (Prop_DSP_A_B_DATA_DSP48E2_A[13]_A2_DATA[13])
+                                                      0.241     7.006 r  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/tmp_product/DSP_A_B_DATA_INST/A2_DATA[13]
+                         net (fo=1, routed)           0.000     7.006    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/tmp_product/DSP_A_B_DATA.A2_DATA<13>
+    DSP48E2_X4Y8         DSP_PREADD_DATA (Prop_DSP_PREADD_DATA_DSP48E2_A2_DATA[13]_A2A1[13])
+                                                      0.098     7.104 r  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/tmp_product/DSP_PREADD_DATA_INST/A2A1[13]
+                         net (fo=1, routed)           0.000     7.104    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/tmp_product/DSP_PREADD_DATA.A2A1<13>
+    DSP48E2_X4Y8         DSP_MULTIPLIER (Prop_DSP_MULTIPLIER_DSP48E2_A2A1[13]_U[34])
+                                                      0.647     7.751 f  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/tmp_product/DSP_MULTIPLIER_INST/U[34]
+                         net (fo=1, routed)           0.000     7.751    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/tmp_product/DSP_MULTIPLIER.U<34>
+    DSP48E2_X4Y8         DSP_M_DATA (Prop_DSP_M_DATA_DSP48E2_U[34]_U_DATA[34])
+                                                      0.059     7.810 r  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/tmp_product/DSP_M_DATA_INST/U_DATA[34]
+                         net (fo=1, routed)           0.000     7.810    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/tmp_product/DSP_M_DATA.U_DATA<34>
+    DSP48E2_X4Y8         DSP_ALU (Prop_DSP_ALU_DSP48E2_U_DATA[34]_ALU_OUT[47])
+                                                      0.699     8.509 f  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/tmp_product/DSP_ALU_INST/ALU_OUT[47]
+                         net (fo=1, routed)           0.000     8.509    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/tmp_product/DSP_ALU.ALU_OUT<47>
+    DSP48E2_X4Y8         DSP_OUTPUT (Prop_DSP_OUTPUT_DSP48E2_ALU_OUT[47]_PCOUT[47])
+                                                      0.159     8.668 r  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/tmp_product/DSP_OUTPUT_INST/PCOUT[47]
+                         net (fo=1, routed)           0.016     8.684    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/tmp_product__0/PCIN[47]
+    DSP48E2_X4Y9         DSP_ALU (Prop_DSP_ALU_DSP48E2_PCIN[47]_ALU_OUT[8])
+                                                      0.698     9.382 f  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/tmp_product__0/DSP_ALU_INST/ALU_OUT[8]
+                         net (fo=1, routed)           0.000     9.382    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/tmp_product__0/DSP_ALU.ALU_OUT<8>
+    DSP48E2_X4Y9         DSP_OUTPUT (Prop_DSP_OUTPUT_DSP48E2_ALU_OUT[8]_P[8])
+                                                      0.141     9.523 r  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/tmp_product__0/DSP_OUTPUT_INST/P[8]
+                         net (fo=2, routed)           0.361     9.884    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/tmp_product__1[25]
+    SLICE_X44Y24         LUT5 (Prop_B6LUT_SLICEL_I0_O)
+                                                      0.177    10.061 r  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/add_ln116_1_reg_3051[31]_i_8/O
+                         net (fo=1, routed)           0.010    10.071    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/add_ln116_1_reg_3051[31]_i_8_n_5
+    SLICE_X44Y24         CARRY8 (Prop_CARRY8_SLICEL_S[1]_CO[7])
+                                                      0.233    10.304 r  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/add_ln116_1_reg_3051_reg[31]_i_1/CO[7]
+                         net (fo=1, routed)           0.028    10.332    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/add_ln116_1_reg_3051_reg[31]_i_1_n_5
+    SLICE_X44Y25         CARRY8 (Prop_CARRY8_SLICEL_CI_CO[7])
+                                                      0.023    10.355 r  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/add_ln116_1_reg_3051_reg[39]_i_1/CO[7]
+                         net (fo=1, routed)           0.028    10.383    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/add_ln116_1_reg_3051_reg[39]_i_1_n_5
+    SLICE_X44Y26         CARRY8 (Prop_CARRY8_SLICEL_CI_CO[7])
+                                                      0.023    10.406 r  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/add_ln116_1_reg_3051_reg[47]_i_1/CO[7]
+                         net (fo=1, routed)           0.028    10.434    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/add_ln116_1_reg_3051_reg[47]_i_1_n_5
+    SLICE_X44Y27         CARRY8 (Prop_CARRY8_SLICEL_CI_CO[7])
+                                                      0.023    10.457 r  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/add_ln116_1_reg_3051_reg[55]_i_1/CO[7]
+                         net (fo=1, routed)           0.028    10.485    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/add_ln116_1_reg_3051_reg[55]_i_1_n_5
+    SLICE_X44Y28         CARRY8 (Prop_CARRY8_SLICEL_CI_O[1])
+                                                      0.097    10.582 r  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_32s_22s_54_1_1_U57/add_ln116_1_reg_3051_reg[57]_i_1/O[1]
+                         net (fo=1, routed)           0.031    10.613    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/add_ln116_1_fu_1746_p2[57]
+    SLICE_X44Y28         FDRE                                         r  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/add_ln116_1_reg_3051_reg[57]/D
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk_pl_0 rise edge)
+                                                     10.000    10.000 r  <hidden>
+    PS8_X0Y0             PS8                          0.000    10.000 r  multiply_accumulate_i/zynq_ultra_ps_e_0/inst/PS8_i/PLCLK[0]
+                         net (fo=1, routed)           0.140    10.140    multiply_accumulate_i/zynq_ultra_ps_e_0/inst/pl_clk_unbuffered[0]
+    BUFG_PS_X0Y58        BUFG_PS (Prop_BUFG_PS_I_O)
+                                                      0.027    10.167 r  multiply_accumulate_i/zynq_ultra_ps_e_0/inst/buffer_pl_clk_0.PL_CLK_0_BUFG/O
+    X0Y1 (CLOCK_ROOT)    net (fo=12485, routed)       1.708    11.875    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/ap_clk
+    SLICE_X44Y28         FDRE                                         r  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/add_ln116_1_reg_3051_reg[57]/C
+                         clock pessimism              0.166    12.041    <hidden>
+                         clock uncertainty           -0.174    11.867    <hidden>
+    SLICE_X44Y28         FDRE (Setup_BFF_SLICEL_C_D)
+                                                      0.027    11.894    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/add_ln116_1_reg_3051_reg[57]
+  -------------------------------------------------------------------
+                         required time                         11.894    <hidden>
+                         arrival time                         -10.613    <hidden>
+  -------------------------------------------------------------------
+                         slack                                  1.282    <hidden>
+
+
+
+
+
+Min Delay Paths
+--------------------------------------------------------------------------------------
+Slack (MET) :             0.010ns  (arrival time - required time)
+  Source:                 multiply_accumulate_i/axi_smc_1/inst/switchboards/w_switchboard/inst/gen_mi[0].inst_opipe_payld/gen_pipe[1].pipe_reg[1][90]/C
+                            (rising edge-triggered cell FDRE clocked by clk_pl_0  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            multiply_accumulate_i/axi_smc_1/inst/m00_nodes/m00_w_node/inst/inst_mi_handler/gen_normal_area.inst_fifo_node_payld/gen_xpm_memory_fifo.inst_fifo/gen_mem_rep[0].inst_xpm_memory/xpm_memory_base_inst/gen_wr_a.gen_word_narrow.mem_reg_0_31_84_97/RAMD/I
+                            (rising edge-triggered cell RAMD32 clocked by clk_pl_0  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Path Group:             clk_pl_0
+  Path Type:              Hold (Min at Slow Process Corner)
+  Requirement:            0.000ns  (clk_pl_0 rise@0.000ns - clk_pl_0 rise@0.000ns)
+  Data Path Delay:        0.265ns  (logic 0.070ns (26.415%)  route 0.195ns (73.585%))
+  Logic Levels:           0  
+  Clock Path Skew:        0.175ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    2.058ns
+    Source Clock Delay      (SCD):    1.722ns
+    Clock Pessimism Removal (CPR):    0.161ns
+  Clock Net Delay (Source):      1.555ns (routing 0.576ns, distribution 0.979ns)
+  Clock Net Delay (Destination): 1.851ns (routing 0.638ns, distribution 1.213ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk_pl_0 rise edge)
+                                                      0.000     0.000 r  <hidden>
+    PS8_X0Y0             PS8                          0.000     0.000 r  multiply_accumulate_i/zynq_ultra_ps_e_0/inst/PS8_i/PLCLK[0]
+                         net (fo=1, routed)           0.140     0.140    multiply_accumulate_i/zynq_ultra_ps_e_0/inst/pl_clk_unbuffered[0]
+    BUFG_PS_X0Y58        BUFG_PS (Prop_BUFG_PS_I_O)
+                                                      0.027     0.167 r  multiply_accumulate_i/zynq_ultra_ps_e_0/inst/buffer_pl_clk_0.PL_CLK_0_BUFG/O
+    X0Y1 (CLOCK_ROOT)    net (fo=12485, routed)       1.555     1.722    multiply_accumulate_i/axi_smc_1/inst/switchboards/w_switchboard/inst/gen_mi[0].inst_opipe_payld/aclk
+    SLICE_X4Y10          FDRE                                         r  multiply_accumulate_i/axi_smc_1/inst/switchboards/w_switchboard/inst/gen_mi[0].inst_opipe_payld/gen_pipe[1].pipe_reg[1][90]/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X4Y10          FDRE (Prop_GFF_SLICEM_C_Q)
+                                                      0.070     1.792 r  multiply_accumulate_i/axi_smc_1/inst/switchboards/w_switchboard/inst/gen_mi[0].inst_opipe_payld/gen_pipe[1].pipe_reg[1][90]/Q
+                         net (fo=1, routed)           0.195     1.987    multiply_accumulate_i/axi_smc_1/inst/m00_nodes/m00_w_node/inst/inst_mi_handler/gen_normal_area.inst_fifo_node_payld/gen_xpm_memory_fifo.inst_fifo/gen_mem_rep[0].inst_xpm_memory/xpm_memory_base_inst/gen_wr_a.gen_word_narrow.mem_reg_0_31_84_97/DID0
+    SLICE_X1Y10          RAMD32                                       r  multiply_accumulate_i/axi_smc_1/inst/m00_nodes/m00_w_node/inst/inst_mi_handler/gen_normal_area.inst_fifo_node_payld/gen_xpm_memory_fifo.inst_fifo/gen_mem_rep[0].inst_xpm_memory/xpm_memory_base_inst/gen_wr_a.gen_word_narrow.mem_reg_0_31_84_97/RAMD/I
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk_pl_0 rise edge)
+                                                      0.000     0.000 r  <hidden>
+    PS8_X0Y0             PS8                          0.000     0.000 r  multiply_accumulate_i/zynq_ultra_ps_e_0/inst/PS8_i/PLCLK[0]
+                         net (fo=1, routed)           0.178     0.178    multiply_accumulate_i/zynq_ultra_ps_e_0/inst/pl_clk_unbuffered[0]
+    BUFG_PS_X0Y58        BUFG_PS (Prop_BUFG_PS_I_O)
+                                                      0.029     0.207 r  multiply_accumulate_i/zynq_ultra_ps_e_0/inst/buffer_pl_clk_0.PL_CLK_0_BUFG/O
+    X0Y1 (CLOCK_ROOT)    net (fo=12485, routed)       1.851     2.058    multiply_accumulate_i/axi_smc_1/inst/m00_nodes/m00_w_node/inst/inst_mi_handler/gen_normal_area.inst_fifo_node_payld/gen_xpm_memory_fifo.inst_fifo/gen_mem_rep[0].inst_xpm_memory/xpm_memory_base_inst/gen_wr_a.gen_word_narrow.mem_reg_0_31_84_97/WCLK
+    SLICE_X1Y10          RAMD32                                       r  multiply_accumulate_i/axi_smc_1/inst/m00_nodes/m00_w_node/inst/inst_mi_handler/gen_normal_area.inst_fifo_node_payld/gen_xpm_memory_fifo.inst_fifo/gen_mem_rep[0].inst_xpm_memory/xpm_memory_base_inst/gen_wr_a.gen_word_narrow.mem_reg_0_31_84_97/RAMD/CLK
+                         clock pessimism             -0.161     1.897    <hidden>
+    SLICE_X1Y10          RAMD32 (Hold_D5LUT_SLICEM_CLK_I)
+                                                      0.080     1.977    multiply_accumulate_i/axi_smc_1/inst/m00_nodes/m00_w_node/inst/inst_mi_handler/gen_normal_area.inst_fifo_node_payld/gen_xpm_memory_fifo.inst_fifo/gen_mem_rep[0].inst_xpm_memory/xpm_memory_base_inst/gen_wr_a.gen_word_narrow.mem_reg_0_31_84_97/RAMD
+  -------------------------------------------------------------------
+                         required time                         -1.977    <hidden>
+                         arrival time                           1.987    <hidden>
+  -------------------------------------------------------------------
+                         slack                                  0.010    <hidden>
+
+
+
+
+
+Pulse Width Checks
+--------------------------------------------------------------------------------------
+Clock Name:         clk_pl_0
+Waveform(ns):       { 0.000 5.000 }
+Period(ns):         10.000
+Sources:            { multiply_accumulate_i/zynq_ultra_ps_e_0/inst/PS8_i/PLCLK[0] }
+
+Check Type        Corner  Lib Pin          Reference Pin  Required(ns)  Actual(ns)  Slack(ns)  Location  Pin
+Min Period        n/a     PS8/MAXIGP2ACLK  n/a            3.000         10.000      7.000      PS8_X0Y0  multiply_accumulate_i/zynq_ultra_ps_e_0/inst/PS8_i/MAXIGP2ACLK
+Low Pulse Width   Slow    PS8/MAXIGP2ACLK  n/a            1.500         5.000       3.500      PS8_X0Y0  multiply_accumulate_i/zynq_ultra_ps_e_0/inst/PS8_i/MAXIGP2ACLK
+High Pulse Width  Slow    PS8/MAXIGP2ACLK  n/a            1.500         5.000       3.500      PS8_X0Y0  multiply_accumulate_i/zynq_ultra_ps_e_0/inst/PS8_i/MAXIGP2ACLK
+
+
+
+--------------------------------------------------------------------------------------
+Path Group:  (none)
+From Clock:  
+  To Clock:  clk_pl_0
+
+Max Delay             1 Endpoint
+Min Delay             1 Endpoint
+--------------------------------------------------------------------------------------
+
+
+Max Delay Paths
+--------------------------------------------------------------------------------------
+Slack:                    inf
+  Source:                 multiply_accumulate_i/zynq_ultra_ps_e_0/inst/PS8_i/EMIOGPIOO[95]
+                            (internal pin)
+  Destination:            multiply_accumulate_i/rst_ps8_0_99M/U0/EXT_LPF/ACTIVE_LOW_EXT.ACT_LO_EXT/syncstages_ff_reg[0]/D
+                            (rising edge-triggered cell FDRE clocked by clk_pl_0  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Path Group:             (none)
+  Path Type:              Setup (Max at Slow Process Corner)
+  Data Path Delay:        2.186ns  (logic 0.064ns (2.928%)  route 2.122ns (97.072%))
+  Logic Levels:           1  (LUT1=1)
+  Clock Uncertainty:      0.172ns  ((TSJ^2 + DJ^2)^1/2) / 2 + PE
+    Total System Jitter     (TSJ):    0.050ns
+    Discrete Jitter          (DJ):    0.340ns
+    Phase Error              (PE):    0.000ns
+  Clock Net Delay (Destination): 1.563ns (routing 0.576ns, distribution 0.987ns)
+  Timing Exception:       False Path
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+    PS8_X0Y0             PS8                          0.000     0.000 f  multiply_accumulate_i/zynq_ultra_ps_e_0/inst/PS8_i/EMIOGPIOO[95]
+                         net (fo=1, routed)           1.827     1.827    multiply_accumulate_i/rst_ps8_0_99M/U0/EXT_LPF/ext_reset_in
+    SLICE_X27Y43         LUT1 (Prop_H6LUT_SLICEL_I0_O)
+                                                      0.064     1.891 r  multiply_accumulate_i/rst_ps8_0_99M/U0/EXT_LPF/ACTIVE_LOW_EXT.ACT_LO_EXT_i_1/O
+                         net (fo=1, routed)           0.295     2.186    multiply_accumulate_i/rst_ps8_0_99M/U0/EXT_LPF/ACTIVE_LOW_EXT.ACT_LO_EXT/src_in
+    SLICE_X27Y43         FDRE                                         r  multiply_accumulate_i/rst_ps8_0_99M/U0/EXT_LPF/ACTIVE_LOW_EXT.ACT_LO_EXT/syncstages_ff_reg[0]/D
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk_pl_0 rise edge)
+                                                      0.000     0.000 r  <hidden>
+    PS8_X0Y0             PS8                          0.000     0.000 r  multiply_accumulate_i/zynq_ultra_ps_e_0/inst/PS8_i/PLCLK[0]
+                         net (fo=1, routed)           0.140     0.140    multiply_accumulate_i/zynq_ultra_ps_e_0/inst/pl_clk_unbuffered[0]
+    BUFG_PS_X0Y58        BUFG_PS (Prop_BUFG_PS_I_O)
+                                                      0.027     0.167 r  multiply_accumulate_i/zynq_ultra_ps_e_0/inst/buffer_pl_clk_0.PL_CLK_0_BUFG/O
+    X0Y1 (CLOCK_ROOT)    net (fo=12485, routed)       1.563     1.730    multiply_accumulate_i/rst_ps8_0_99M/U0/EXT_LPF/ACTIVE_LOW_EXT.ACT_LO_EXT/dest_clk
+    SLICE_X27Y43         FDRE                                         r  multiply_accumulate_i/rst_ps8_0_99M/U0/EXT_LPF/ACTIVE_LOW_EXT.ACT_LO_EXT/syncstages_ff_reg[0]/C
+
+
+
+
+
+Min Delay Paths
+--------------------------------------------------------------------------------------
+Slack:                    inf
+  Source:                 multiply_accumulate_i/zynq_ultra_ps_e_0/inst/PS8_i/EMIOGPIOO[95]
+                            (internal pin)
+  Destination:            multiply_accumulate_i/rst_ps8_0_99M/U0/EXT_LPF/ACTIVE_LOW_EXT.ACT_LO_EXT/syncstages_ff_reg[0]/D
+                            (rising edge-triggered cell FDRE clocked by clk_pl_0  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Path Group:             (none)
+  Path Type:              Hold (Min at Fast Process Corner)
+  Data Path Delay:        0.990ns  (logic 0.023ns (2.323%)  route 0.967ns (97.677%))
+  Logic Levels:           1  (LUT1=1)
+  Clock Uncertainty:      0.172ns  ((TSJ^2 + DJ^2)^1/2) / 2 + PE
+    Total System Jitter     (TSJ):    0.050ns
+    Discrete Jitter          (DJ):    0.340ns
+    Phase Error              (PE):    0.000ns
+  Clock Net Delay (Destination): 1.027ns (routing 0.365ns, distribution 0.662ns)
+  Timing Exception:       False Path
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+    PS8_X0Y0             PS8                          0.000     0.000 f  multiply_accumulate_i/zynq_ultra_ps_e_0/inst/PS8_i/EMIOGPIOO[95]
+                         net (fo=1, routed)           0.858     0.858    multiply_accumulate_i/rst_ps8_0_99M/U0/EXT_LPF/ext_reset_in
+    SLICE_X27Y43         LUT1 (Prop_H6LUT_SLICEL_I0_O)
+                                                      0.023     0.881 r  multiply_accumulate_i/rst_ps8_0_99M/U0/EXT_LPF/ACTIVE_LOW_EXT.ACT_LO_EXT_i_1/O
+                         net (fo=1, routed)           0.109     0.990    multiply_accumulate_i/rst_ps8_0_99M/U0/EXT_LPF/ACTIVE_LOW_EXT.ACT_LO_EXT/src_in
+    SLICE_X27Y43         FDRE                                         r  multiply_accumulate_i/rst_ps8_0_99M/U0/EXT_LPF/ACTIVE_LOW_EXT.ACT_LO_EXT/syncstages_ff_reg[0]/D
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk_pl_0 rise edge)
+                                                      0.000     0.000 r  <hidden>
+    PS8_X0Y0             PS8                          0.000     0.000 r  multiply_accumulate_i/zynq_ultra_ps_e_0/inst/PS8_i/PLCLK[0]
+                         net (fo=1, routed)           0.120     0.120    multiply_accumulate_i/zynq_ultra_ps_e_0/inst/pl_clk_unbuffered[0]
+    BUFG_PS_X0Y58        BUFG_PS (Prop_BUFG_PS_I_O)
+                                                      0.018     0.138 r  multiply_accumulate_i/zynq_ultra_ps_e_0/inst/buffer_pl_clk_0.PL_CLK_0_BUFG/O
+    X0Y1 (CLOCK_ROOT)    net (fo=12485, routed)       1.027     1.165    multiply_accumulate_i/rst_ps8_0_99M/U0/EXT_LPF/ACTIVE_LOW_EXT.ACT_LO_EXT/dest_clk
+    SLICE_X27Y43         FDRE                                         r  multiply_accumulate_i/rst_ps8_0_99M/U0/EXT_LPF/ACTIVE_LOW_EXT.ACT_LO_EXT/syncstages_ff_reg[0]/C
+
+
+
+
+
+--------------------------------------------------------------------------------------
+Path Group:  (none)
+From Clock:  clk_pl_0
+  To Clock:  clk_pl_0
+
+Max Delay            59 Endpoints
+Min Delay            59 Endpoints
+--------------------------------------------------------------------------------------
+
+
+Max Delay Paths
+--------------------------------------------------------------------------------------
+Slack:                    inf
+  Source:                 multiply_accumulate_i/rst_ps8_0_99M/U0/ACTIVE_LOW_PR_OUT_DFF[0].FDRE_PER_N/C
+                            (rising edge-triggered cell FDRE clocked by clk_pl_0  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            multiply_accumulate_i/axi_smc/inst/sc_ul/inst/cdc_aresetn/syncstages_ff_reg[0]/D
+                            (rising edge-triggered cell FDRE clocked by clk_pl_0  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Path Group:             (none)
+  Path Type:              Setup (Max at Slow Process Corner)
+  Data Path Delay:        4.808ns  (logic 0.096ns (1.997%)  route 4.712ns (98.003%))
+  Logic Levels:           0  
+  Clock Path Skew:        -0.326ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    1.736ns
+    Source Clock Delay      (SCD):    2.062ns
+    Clock Pessimism Removal (CPR):    0.000ns
+  Clock Uncertainty:      0.174ns  ((TSJ^2 + DJ^2)^1/2) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Discrete Jitter          (DJ):    0.340ns
+    Phase Error              (PE):    0.000ns
+  Clock Net Delay (Source):      1.855ns (routing 0.638ns, distribution 1.217ns)
+  Clock Net Delay (Destination): 1.569ns (routing 0.576ns, distribution 0.993ns)
+  Timing Exception:       False Path
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk_pl_0 rise edge)
+                                                      0.000     0.000 r  <hidden>
+    PS8_X0Y0             PS8                          0.000     0.000 r  multiply_accumulate_i/zynq_ultra_ps_e_0/inst/PS8_i/PLCLK[0]
+                         net (fo=1, routed)           0.178     0.178    multiply_accumulate_i/zynq_ultra_ps_e_0/inst/pl_clk_unbuffered[0]
+    BUFG_PS_X0Y58        BUFG_PS (Prop_BUFG_PS_I_O)
+                                                      0.029     0.207 r  multiply_accumulate_i/zynq_ultra_ps_e_0/inst/buffer_pl_clk_0.PL_CLK_0_BUFG/O
+    X0Y1 (CLOCK_ROOT)    net (fo=12485, routed)       1.855     2.062    multiply_accumulate_i/rst_ps8_0_99M/U0/slowest_sync_clk
+    SLICE_X30Y44         FDRE                                         r  multiply_accumulate_i/rst_ps8_0_99M/U0/ACTIVE_LOW_PR_OUT_DFF[0].FDRE_PER_N/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X30Y44         FDRE (Prop_EFF_SLICEL_C_Q)
+                                                      0.096     2.158 r  multiply_accumulate_i/rst_ps8_0_99M/U0/ACTIVE_LOW_PR_OUT_DFF[0].FDRE_PER_N/Q
+                         net (fo=2231, routed)        4.712     6.869    multiply_accumulate_i/axi_smc/inst/sc_ul/inst/cdc_aresetn/src_rst
+    SLICE_X5Y134         FDRE                                         r  multiply_accumulate_i/axi_smc/inst/sc_ul/inst/cdc_aresetn/syncstages_ff_reg[0]/D
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk_pl_0 rise edge)
+                                                      0.000     0.000 r  <hidden>
+    PS8_X0Y0             PS8                          0.000     0.000 r  multiply_accumulate_i/zynq_ultra_ps_e_0/inst/PS8_i/PLCLK[0]
+                         net (fo=1, routed)           0.140     0.140    multiply_accumulate_i/zynq_ultra_ps_e_0/inst/pl_clk_unbuffered[0]
+    BUFG_PS_X0Y58        BUFG_PS (Prop_BUFG_PS_I_O)
+                                                      0.027     0.167 r  multiply_accumulate_i/zynq_ultra_ps_e_0/inst/buffer_pl_clk_0.PL_CLK_0_BUFG/O
+    X0Y1 (CLOCK_ROOT)    net (fo=12485, routed)       1.569     1.736    multiply_accumulate_i/axi_smc/inst/sc_ul/inst/cdc_aresetn/dest_clk
+    SLICE_X5Y134         FDRE                                         r  multiply_accumulate_i/axi_smc/inst/sc_ul/inst/cdc_aresetn/syncstages_ff_reg[0]/C
+
+
+
+
+
+Min Delay Paths
+--------------------------------------------------------------------------------------
+Slack:                    inf
+  Source:                 multiply_accumulate_i/axi_smc_1/inst/clk_map/psr_aclk/U0/ACTIVE_LOW_BSR_OUT_DFF[0].FDRE_BSR_N/C
+                            (rising edge-triggered cell FDRE clocked by clk_pl_0  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            multiply_accumulate_i/axi_smc_1/inst/s01_entry_pipeline/s01_mmu/inst/xpm_cdc_async_rst_inst/arststages_ff_reg[0]/CLR
+                            (removal check against rising-edge clock clk_pl_0  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Path Group:             (none)
+  Path Type:              Removal (Min at Fast Process Corner)
+  Data Path Delay:        0.191ns  (logic 0.039ns (20.414%)  route 0.152ns (79.586%))
+  Logic Levels:           0  
+  Clock Path Skew:        0.148ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    1.146ns
+    Source Clock Delay      (SCD):    0.999ns
+    Clock Pessimism Removal (CPR):    -0.000ns
+  Clock Uncertainty:      0.174ns  ((TSJ^2 + DJ^2)^1/2) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Discrete Jitter          (DJ):    0.340ns
+    Phase Error              (PE):    0.000ns
+  Clock Net Delay (Source):      0.888ns (routing 0.324ns, distribution 0.564ns)
+  Clock Net Delay (Destination): 1.008ns (routing 0.365ns, distribution 0.643ns)
+  Timing Exception:       False Path
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk_pl_0 rise edge)
+                                                      0.000     0.000 r  <hidden>
+    PS8_X0Y0             PS8                          0.000     0.000 r  multiply_accumulate_i/zynq_ultra_ps_e_0/inst/PS8_i/PLCLK[0]
+                         net (fo=1, routed)           0.094     0.094    multiply_accumulate_i/zynq_ultra_ps_e_0/inst/pl_clk_unbuffered[0]
+    BUFG_PS_X0Y58        BUFG_PS (Prop_BUFG_PS_I_O)
+                                                      0.017     0.111 r  multiply_accumulate_i/zynq_ultra_ps_e_0/inst/buffer_pl_clk_0.PL_CLK_0_BUFG/O
+    X0Y1 (CLOCK_ROOT)    net (fo=12485, routed)       0.888     0.999    multiply_accumulate_i/axi_smc_1/inst/clk_map/psr_aclk/U0/aclk
+    SLICE_X10Y32         FDRE                                         r  multiply_accumulate_i/axi_smc_1/inst/clk_map/psr_aclk/U0/ACTIVE_LOW_BSR_OUT_DFF[0].FDRE_BSR_N/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X10Y32         FDRE (Prop_DFF_SLICEL_C_Q)
+                                                      0.039     1.038 r  multiply_accumulate_i/axi_smc_1/inst/clk_map/psr_aclk/U0/ACTIVE_LOW_BSR_OUT_DFF[0].FDRE_BSR_N/Q
+                         net (fo=57, routed)          0.152     1.190    multiply_accumulate_i/axi_smc_1/inst/s01_entry_pipeline/s01_mmu/inst/xpm_cdc_async_rst_inst/src_arst
+    SLICE_X10Y33         FDCE                                         f  multiply_accumulate_i/axi_smc_1/inst/s01_entry_pipeline/s01_mmu/inst/xpm_cdc_async_rst_inst/arststages_ff_reg[0]/CLR  (IS_INVERTED)
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk_pl_0 rise edge)
+                                                      0.000     0.000 r  <hidden>
+    PS8_X0Y0             PS8                          0.000     0.000 r  multiply_accumulate_i/zynq_ultra_ps_e_0/inst/PS8_i/PLCLK[0]
+                         net (fo=1, routed)           0.120     0.120    multiply_accumulate_i/zynq_ultra_ps_e_0/inst/pl_clk_unbuffered[0]
+    BUFG_PS_X0Y58        BUFG_PS (Prop_BUFG_PS_I_O)
+                                                      0.018     0.138 r  multiply_accumulate_i/zynq_ultra_ps_e_0/inst/buffer_pl_clk_0.PL_CLK_0_BUFG/O
+    X0Y1 (CLOCK_ROOT)    net (fo=12485, routed)       1.008     1.146    multiply_accumulate_i/axi_smc_1/inst/s01_entry_pipeline/s01_mmu/inst/xpm_cdc_async_rst_inst/dest_clk
+    SLICE_X10Y33         FDCE                                         r  multiply_accumulate_i/axi_smc_1/inst/s01_entry_pipeline/s01_mmu/inst/xpm_cdc_async_rst_inst/arststages_ff_reg[0]/C
+
+
+
+
+
+--------------------------------------------------------------------------------------
+Path Group:  (none)
+From Clock:  
+  To Clock:  clk_pl_0
+
+Max Delay           158 Endpoints
+Min Delay           158 Endpoints
+--------------------------------------------------------------------------------------
+
+
+Max Delay Paths
+--------------------------------------------------------------------------------------
+Slack:                    inf
+  Source:                 multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_7ns_9ns_15_1_1_U65/tmp_product/DSP_A_B_DATA_INST/B2_DATA[9]
+                            (internal pin)
+  Destination:            multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/gesture_cnn_hand_u2_cache_ap_int_const_ap_int_const_ap_int_unsigned_int_unsig_2_U/ram_reg_bram_0/ADDRBWRADDR[11]
+                            (rising edge-triggered cell RAMB36E2 clocked by clk_pl_0  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Path Group:             (none)
+  Path Type:              Setup (Max at Slow Process Corner)
+  Data Path Delay:        4.233ns  (logic 2.185ns (51.615%)  route 2.048ns (48.385%))
+  Logic Levels:           8  (DSP_ALU=1 DSP_M_DATA=1 DSP_MULTIPLIER=1 DSP_OUTPUT=1 DSP_PREADD_DATA=1 LUT3=1 LUT5=1 LUT6=1)
+  Clock Uncertainty:      0.172ns  ((TSJ^2 + DJ^2)^1/2) / 2 + PE
+    Total System Jitter     (TSJ):    0.050ns
+    Discrete Jitter          (DJ):    0.340ns
+    Phase Error              (PE):    0.000ns
+  Clock Net Delay (Destination): 1.745ns (routing 0.576ns, distribution 1.169ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+    DSP48E2_X2Y15        DSP_A_B_DATA                 0.000     0.000 r  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_7ns_9ns_15_1_1_U65/tmp_product/DSP_A_B_DATA_INST/B2_DATA[9]
+                         net (fo=1, routed)           0.000     0.000    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_7ns_9ns_15_1_1_U65/tmp_product/DSP_A_B_DATA.B2_DATA<9>
+    DSP48E2_X2Y15        DSP_PREADD_DATA (Prop_DSP_PREADD_DATA_DSP48E2_B2_DATA[9]_B2B1[9])
+                                                      0.092     0.092 r  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_7ns_9ns_15_1_1_U65/tmp_product/DSP_PREADD_DATA_INST/B2B1[9]
+                         net (fo=1, routed)           0.000     0.092    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_7ns_9ns_15_1_1_U65/tmp_product/DSP_PREADD_DATA.B2B1<9>
+    DSP48E2_X2Y15        DSP_MULTIPLIER (Prop_DSP_MULTIPLIER_DSP48E2_B2B1[9]_U[10])
+                                                      0.737     0.829 f  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_7ns_9ns_15_1_1_U65/tmp_product/DSP_MULTIPLIER_INST/U[10]
+                         net (fo=1, routed)           0.000     0.829    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_7ns_9ns_15_1_1_U65/tmp_product/DSP_MULTIPLIER.U<10>
+    DSP48E2_X2Y15        DSP_M_DATA (Prop_DSP_M_DATA_DSP48E2_U[10]_U_DATA[10])
+                                                      0.059     0.888 r  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_7ns_9ns_15_1_1_U65/tmp_product/DSP_M_DATA_INST/U_DATA[10]
+                         net (fo=1, routed)           0.000     0.888    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_7ns_9ns_15_1_1_U65/tmp_product/DSP_M_DATA.U_DATA<10>
+    DSP48E2_X2Y15        DSP_ALU (Prop_DSP_ALU_DSP48E2_U_DATA[10]_ALU_OUT[10])
+                                                      0.699     1.587 r  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_7ns_9ns_15_1_1_U65/tmp_product/DSP_ALU_INST/ALU_OUT[10]
+                         net (fo=1, routed)           0.000     1.587    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_7ns_9ns_15_1_1_U65/tmp_product/DSP_ALU.ALU_OUT<10>
+    DSP48E2_X2Y15        DSP_OUTPUT (Prop_DSP_OUTPUT_DSP48E2_ALU_OUT[10]_P[10])
+                                                      0.141     1.728 f  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_7ns_9ns_15_1_1_U65/tmp_product/DSP_OUTPUT_INST/P[10]
+                         net (fo=6, routed)           0.979     2.707    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/urem_7ns_3ns_5_11_1_U63/P[1]
+    SLICE_X45Y35         LUT6 (Prop_G6LUT_SLICEM_I4_O)
+                                                      0.116     2.823 r  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/urem_7ns_3ns_5_11_1_U63/ram_reg_bram_0_i_68/O
+                         net (fo=2, routed)           0.162     2.985    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_7ns_9ns_15_1_1_U65/ram_reg_bram_0
+    SLICE_X45Y35         LUT3 (Prop_D5LUT_SLICEM_I2_O)
+                                                      0.167     3.152 r  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_7ns_9ns_15_1_1_U65/ram_reg_bram_0_i_67/O
+                         net (fo=4, routed)           0.226     3.378    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_7ns_9ns_15_1_1_U65/ram_reg_bram_0_i_67_n_5
+    SLICE_X44Y35         LUT5 (Prop_D6LUT_SLICEL_I2_O)
+                                                      0.174     3.552 r  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_7ns_9ns_15_1_1_U65/ram_reg_bram_0_i_13__4/O
+                         net (fo=2, routed)           0.681     4.233    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/gesture_cnn_hand_u2_cache_ap_int_const_ap_int_const_ap_int_unsigned_int_unsig_2_U/ADDRBWRADDR[6]
+    RAMB36_X5Y4          RAMB36E2                                     r  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/gesture_cnn_hand_u2_cache_ap_int_const_ap_int_const_ap_int_unsigned_int_unsig_2_U/ram_reg_bram_0/ADDRBWRADDR[11]
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk_pl_0 rise edge)
+                                                      0.000     0.000 r  <hidden>
+    PS8_X0Y0             PS8                          0.000     0.000 r  multiply_accumulate_i/zynq_ultra_ps_e_0/inst/PS8_i/PLCLK[0]
+                         net (fo=1, routed)           0.140     0.140    multiply_accumulate_i/zynq_ultra_ps_e_0/inst/pl_clk_unbuffered[0]
+    BUFG_PS_X0Y58        BUFG_PS (Prop_BUFG_PS_I_O)
+                                                      0.027     0.167 r  multiply_accumulate_i/zynq_ultra_ps_e_0/inst/buffer_pl_clk_0.PL_CLK_0_BUFG/O
+    X0Y1 (CLOCK_ROOT)    net (fo=12485, routed)       1.745     1.912    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/gesture_cnn_hand_u2_cache_ap_int_const_ap_int_const_ap_int_unsigned_int_unsig_2_U/ap_clk
+    RAMB36_X5Y4          RAMB36E2                                     r  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/gesture_cnn_hand_u2_cache_ap_int_const_ap_int_const_ap_int_unsigned_int_unsig_2_U/ram_reg_bram_0/CLKBWRCLK
+
+
+
+
+
+Min Delay Paths
+--------------------------------------------------------------------------------------
+Slack:                    inf
+  Source:                 multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_6ns_8ns_13_1_1_U61/tmp_product/DSP_A_B_DATA_INST/B2_DATA[7]
+                            (internal pin)
+  Destination:            multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/tmp_8_reg_3020_reg[0]/D
+                            (rising edge-triggered cell FDRE clocked by clk_pl_0  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Path Group:             (none)
+  Path Type:              Hold (Min at Fast Process Corner)
+  Data Path Delay:        0.351ns  (logic 0.250ns (71.225%)  route 0.101ns (28.775%))
+  Logic Levels:           5  (DSP_ALU=1 DSP_M_DATA=1 DSP_MULTIPLIER=1 DSP_OUTPUT=1 DSP_PREADD_DATA=1)
+  Clock Uncertainty:      0.172ns  ((TSJ^2 + DJ^2)^1/2) / 2 + PE
+    Total System Jitter     (TSJ):    0.050ns
+    Discrete Jitter          (DJ):    0.340ns
+    Phase Error              (PE):    0.000ns
+  Clock Net Delay (Destination): 1.134ns (routing 0.365ns, distribution 0.769ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+    DSP48E2_X4Y7         DSP_A_B_DATA                 0.000     0.000 r  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_6ns_8ns_13_1_1_U61/tmp_product/DSP_A_B_DATA_INST/B2_DATA[7]
+                         net (fo=1, routed)           0.000     0.000    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_6ns_8ns_13_1_1_U61/tmp_product/DSP_A_B_DATA.B2_DATA<7>
+    DSP48E2_X4Y7         DSP_PREADD_DATA (Prop_DSP_PREADD_DATA_DSP48E2_B2_DATA[7]_B2B1[7])
+                                                      0.020     0.020 r  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_6ns_8ns_13_1_1_U61/tmp_product/DSP_PREADD_DATA_INST/B2B1[7]
+                         net (fo=1, routed)           0.000     0.020    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_6ns_8ns_13_1_1_U61/tmp_product/DSP_PREADD_DATA.B2B1<7>
+    DSP48E2_X4Y7         DSP_MULTIPLIER (Prop_DSP_MULTIPLIER_DSP48E2_B2B1[7]_U[8])
+                                                      0.075     0.095 f  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_6ns_8ns_13_1_1_U61/tmp_product/DSP_MULTIPLIER_INST/U[8]
+                         net (fo=1, routed)           0.000     0.095    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_6ns_8ns_13_1_1_U61/tmp_product/DSP_MULTIPLIER.U<8>
+    DSP48E2_X4Y7         DSP_M_DATA (Prop_DSP_M_DATA_DSP48E2_U[8]_U_DATA[8])
+                                                      0.012     0.107 r  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_6ns_8ns_13_1_1_U61/tmp_product/DSP_M_DATA_INST/U_DATA[8]
+                         net (fo=1, routed)           0.000     0.107    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_6ns_8ns_13_1_1_U61/tmp_product/DSP_M_DATA.U_DATA<8>
+    DSP48E2_X4Y7         DSP_ALU (Prop_DSP_ALU_DSP48E2_U_DATA[8]_ALU_OUT[8])
+                                                      0.113     0.220 f  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_6ns_8ns_13_1_1_U61/tmp_product/DSP_ALU_INST/ALU_OUT[8]
+                         net (fo=1, routed)           0.000     0.220    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_6ns_8ns_13_1_1_U61/tmp_product/DSP_ALU.ALU_OUT<8>
+    DSP48E2_X4Y7         DSP_OUTPUT (Prop_DSP_OUTPUT_DSP48E2_ALU_OUT[8]_P[8])
+                                                      0.030     0.250 r  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/mul_6ns_8ns_13_1_1_U61/tmp_product/DSP_OUTPUT_INST/P[8]
+                         net (fo=1, routed)           0.101     0.351    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/I35[0]
+    SLICE_X44Y16         FDRE                                         r  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/tmp_8_reg_3020_reg[0]/D
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk_pl_0 rise edge)
+                                                      0.000     0.000 r  <hidden>
+    PS8_X0Y0             PS8                          0.000     0.000 r  multiply_accumulate_i/zynq_ultra_ps_e_0/inst/PS8_i/PLCLK[0]
+                         net (fo=1, routed)           0.120     0.120    multiply_accumulate_i/zynq_ultra_ps_e_0/inst/pl_clk_unbuffered[0]
+    BUFG_PS_X0Y58        BUFG_PS (Prop_BUFG_PS_I_O)
+                                                      0.018     0.138 r  multiply_accumulate_i/zynq_ultra_ps_e_0/inst/buffer_pl_clk_0.PL_CLK_0_BUFG/O
+    X0Y1 (CLOCK_ROOT)    net (fo=12485, routed)       1.134     1.272    multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/ap_clk
+    SLICE_X44Y16         FDRE                                         r  multiply_accumulate_i/gesture_cnn_hand_u2_cache_0/inst/tmp_8_reg_3020_reg[0]/C
+
+
+
+
+

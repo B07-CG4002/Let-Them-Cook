@@ -50,8 +50,11 @@ class BridgeConfig:
     controls_enabled: bool = False
     source_rate: Optional[int] = None
     seed: Optional[int] = None
+    sensor_version: int = 3
 
     def __post_init__(self):
+        if type(self.sensor_version) is not int or self.sensor_version not in (3,4):
+            raise ValueError("sensor_version must be 3 or 4")
         if self.host != "127.0.0.1":
             raise ValueError("bridge must connect to its local SSH forward at 127.0.0.1")
         if type(self.port) is not int or not 1 <= self.port <= 65535:
@@ -213,6 +216,12 @@ class _PipelineCleanupError(RuntimeError):
 class Bridge:
     def __init__(self, config, *, connector=None, clock=time.monotonic, evidence=None):
         self.config = config
+        self._sensor_v4 = None
+        if config.sensor_version == 4:
+            from common import sensor_v4
+            self._sensor_v4 = sensor_v4
+        self.packet_size = self._sensor_v4.PACKET_SIZE if self._sensor_v4 else PACKET_SIZE
+        self.sensor_mtu_floor = self._sensor_v4.SENSOR_MTU_FLOOR if self._sensor_v4 else SENSOR_MTU_FLOOR
         self.clock = clock
         self.inbox = RawInbox(config.queue_capacity)
         self.metrics = Metrics()
@@ -244,17 +253,28 @@ class Bridge:
         # that proves they stopped. A gated board's coverage is judged over it.
         self.source_ticking_since = None
         self.source_ticking_until = None
-        self.goodput = GoodputMeter()
+        self.goodput = GoodputMeter() if config.sensor_version == 3 else GoodputMeter(sensor_version=4)
         self.evidence = evidence
         self.negotiated_mtu = None
         self.source_rate_confirmed = None
         self.connection_parameters = None
         self.rng = random.Random(config.seed) if config.seed is not None else None
         self.control = (ControlChannel(config.expected_device_id, timeout=config.io_timeout,
-                                       evidence=evidence, bounded=self._bounded)
+                                       evidence=evidence, bounded=self._bounded,
+                                       **({"sensor_version": 4} if config.sensor_version == 4 else {}))
                         if config.controls_enabled else None)
         self.commands = (CommandPipeline(self.control, self.forward_command)
                          if self.control is not None else None)
+
+    def _codec(self, name, *args):
+        # Keep v3 global lookup so existing dependency-injected tests still work.
+        function = getattr(self._sensor_v4, name) if self._sensor_v4 else globals()[name]
+        return function(*args)
+
+    def _parse_stats(self, data, *, expected_device_id=None):
+        if self.config.sensor_version == 3:
+            return parse_source_stats(data, expected_device_id=expected_device_id)
+        return parse_source_stats(data, expected_device_id=expected_device_id, sensor_version=4)
 
     def log(self, kind, **fields):
         if self.evidence is not None:
@@ -263,8 +283,8 @@ class Bridge:
     def submit_command(self):
         if self.control is None:
             return False
-        packet = SensorPacket(self.config.expected_device_id, self.control.boot_id or 0,
-                              self.control.next_id(), 0, choose_fixture(self.rng))
+        packet = self._codec("SensorPacket", self.config.expected_device_id, self.control.boot_id or 0,
+                              self.control.next_id(), 0, self._codec("choose_fixture", self.rng))
         return self.commands.submit(packet)
 
     async def forward_command(self, packet, request_id):
@@ -298,7 +318,7 @@ class Bridge:
         """
         received_at = self.clock()
         try:
-            pieces = split_notification(data)
+            pieces = self._codec("split_notification", data)
         except (ValueError, TypeError):
             pieces = (bytes(data),)
         accepted = 0
@@ -307,7 +327,7 @@ class Bridge:
                 continue
             accepted += 1
             try:
-                packet = decode_packet(piece)
+                packet = self._codec("decode_packet", piece)
                 if (self.config.expected_device_id is None or
                         packet.device_id == self.config.expected_device_id):
                     self.goodput.record(packet, received_at)
@@ -422,7 +442,7 @@ class Bridge:
     def _prepare_item(self, item):
         self.metrics.received += 1
         try:
-            packet = decode_packet(item.payload)
+            packet = self._codec("decode_packet", item.payload)
             if self.source_audit is not None:
                 self.source_audit.received(packet)
             if (self.config.expected_device_id is not None
@@ -738,8 +758,8 @@ class Bridge:
                 characteristic = service.get_characteristic(SENSOR_UUID) if service else None
                 if characteristic is None or "notify" not in characteristic.properties:
                     raise ValueError("B07 Communications sensor Notify characteristic missing")
-                if client.mtu_size < SENSOR_MTU_FLOOR:
-                    raise ValueError("current ATT MTU cannot carry {}-byte sensor packet".format(PACKET_SIZE))
+                if client.mtu_size < self.sensor_mtu_floor:
+                    raise ValueError("current ATT MTU cannot carry {}-byte sensor packet".format(self.packet_size))
                 self.negotiated_mtu = client.mtu_size
                 if not self.config.diagnostic_unprotected:
                     from laptop.windows_pairing import require_authenticated_bond
@@ -765,7 +785,7 @@ class Bridge:
                     try:
                         raw_snapshot = await self._bounded(client.read_gatt_char(SOURCE_STATS_UUID),
                                                            self.config.connect_timeout)
-                        snapshot = parse_source_stats(
+                        snapshot = self._parse_stats(
                             raw_snapshot,
                             expected_device_id=self.config.expected_device_id)
                     except Exception:
@@ -857,7 +877,7 @@ class Bridge:
                                     raise asyncio.TimeoutError("source cleanup budget exhausted")
                                 # Arduino can ACK a CCCD write before its callback.
                                 # An uncached source read is the firmware mutex barrier.
-                                quiesced_snapshot = parse_source_stats(await self._bounded(
+                                quiesced_snapshot = self._parse_stats(await self._bounded(
                                     client.read_gatt_char(SOURCE_STATS_UUID, use_cached=False), remaining),
                                     expected_device_id=self.config.expected_device_id)
                                 quiesced_at = self.clock()
@@ -915,7 +935,7 @@ class Bridge:
                             if remaining <= 0:
                                 raise asyncio.TimeoutError("source cleanup budget exhausted")
                             read_options = {"use_cached": False} if quiesced_snapshot is not None else {}
-                            final = parse_source_stats(
+                            final = self._parse_stats(
                                 await self._bounded(client.read_gatt_char(SOURCE_STATS_UUID, **read_options),
                                                     remaining),
                                 expected_device_id=self.config.expected_device_id)
@@ -992,8 +1012,8 @@ class Bridge:
         active_event.set()
         try:
             while stop_event is None or not stop_event.is_set():
-                self.enqueue(1, encode_packet(SensorPacket(device_id, boot_id, seq,
-                    int(seq * 1000 / rate) & 0xffffffff, choose_fixture(self.rng))))
+                self.enqueue(1, self._codec("encode_packet", self._codec("SensorPacket", device_id, boot_id, seq,
+                    int(seq * 1000 / rate) & 0xffffffff, self._codec("choose_fixture", self.rng))))
                 seq = (seq + 1) & 0xffffffff
                 if stop_event is None:
                     await asyncio.sleep(1.0 / rate)
@@ -1039,7 +1059,8 @@ class Bridge:
                     sensor_goodput=self.goodput.report(self.clock()),
                     commands=self.commands.summary() if self.commands is not None else None,
                     controls=self.control.summary() if self.control is not None else None,
-                    configuration={"address": self.config.address,
+                    configuration={"sensor_version": self.config.sensor_version,
+                                   "address": self.config.address,
                                    "negotiated_att_mtu": self.negotiated_mtu,
                                    "source_rate_requested_hz": self.config.source_rate,
                                    "source_rate_confirmed_hz": self.source_rate_confirmed,
@@ -1083,6 +1104,11 @@ class Bridge:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--sensor-version", type=int, choices=(3,4), default=3)
+    parser.add_argument("--device", type=int, choices=(1,2), help="expected physical glove device ID")
+    parser.add_argument("--source-audit", action="store_true")
+    parser.add_argument("--controls", action="store_true", help="authenticated controls; requires --source-audit and --device")
+    parser.add_argument("--source-rate", type=int, help="rate command; use with --controls")
     parser.add_argument("--ca", required=True)
     parser.add_argument("--port", type=int, default=18888)
     parser.add_argument("--session-id", default="ltc-comms")
@@ -1098,7 +1124,9 @@ def main():
     async def run():
         bridge = Bridge(BridgeConfig(ca_file=args.ca, port=args.port, session_id=args.session_id,
             queue_capacity=args.queue_capacity, freshness=args.freshness, address=args.address,
-            diagnostic_unprotected=args.diagnostic_unprotected))
+            diagnostic_unprotected=args.diagnostic_unprotected, sensor_version=args.sensor_version,
+            expected_device_id=args.device, source_audit=args.source_audit,
+            controls_enabled=args.controls, source_rate=args.source_rate))
         return await bridge.run(args.duration, args.target, args.mock)
     summary = asyncio.run(run())
     print(json.dumps(summary, sort_keys=True))

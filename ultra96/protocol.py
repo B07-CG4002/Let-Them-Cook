@@ -124,12 +124,14 @@ def validate_session(session_id):
     return session_id
 
 
-def validate_message(message, expected_type=None, session_id=None):
+def validate_message(message, expected_type=None, session_id=None, *, sensor_version=VERSION):
     """Validate one protocol-version-3 message (subscription and monitor envelopes are version 1).
 
     request_id is always present in data messages: null for samples and model
     results, uint32 equal to seq for commands.
     """
+    if type(sensor_version) is not int or sensor_version not in (3,4):
+        raise ProtocolError("sensor_version must be 3 or 4")
     if not isinstance(message, dict):
         raise ProtocolError("message must be an object")
     kind = message.get("type")
@@ -138,7 +140,7 @@ def validate_message(message, expected_type=None, session_id=None):
     if expected_type is not None and kind != expected_type:
         raise ProtocolError("unexpected message type")
     version = message.get("v")
-    if type(version) is not int or version != _VERSIONS[kind]:
+    if type(version) is not int or version != (sensor_version if kind in ("SENSOR_BATCH", "INGEST_ACK", "GESTURE_RESULT") else _VERSIONS[kind]):
         raise ProtocolError("unsupported protocol version")
     if set(message) != _FIELDS[kind]:
         raise ProtocolError("unknown message type or unexpected fields")
@@ -160,9 +162,9 @@ def validate_message(message, expected_type=None, session_id=None):
         if not _integer(message["uptime_ms"], 0, 0xFFFFFFFF):
             raise ProtocolError("invalid uptime_ms")
         values = message["values"]
-        if (not isinstance(values, list) or len(values) != CHANNEL_COUNT
+        if (not isinstance(values, list) or len(values) != (CHANNEL_COUNT if sensor_version == 3 else 12)
                 or any(not _integer(value, -32768, 32767) for value in values)):
-            raise ProtocolError("values must contain exactly eleven int16 integers")
+            raise ProtocolError("values must contain exactly {} int16 integers".format(11 if sensor_version == 3 else 12))
     elif kind == "INGEST_ACK":
         if message["status"] not in ("accepted", "duplicate"):
             raise ProtocolError("invalid acknowledgement status")

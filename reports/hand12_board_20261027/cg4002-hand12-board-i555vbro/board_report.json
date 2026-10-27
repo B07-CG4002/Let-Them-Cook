@@ -1,0 +1,820 @@
+{
+  "status": "passed",
+  "scope": "synthetic FPGA arithmetic/cache regression; not real gesture accuracy",
+  "golden_samples": 8,
+  "exact_word_mismatches": 0,
+  "golden_class_agreement": 8,
+  "max_golden_logit_error": 2.280808985233307e-06,
+  "cache_status_errors": 0,
+  "calls": [
+    {
+      "mode": "golden_alternating",
+      "index": 0,
+      "device_id": 1,
+      "exact_words": true,
+      "cache_status": 1,
+      "expected_cache_status": 1,
+      "total_call_ms": 1.9495980814099312,
+      "stages_ms": {
+        "input_setup_ms": 0.2107592299580574,
+        "start_poll_ms": 0.982438214123249,
+        "output_read_ms": 0.11429563164710999
+      }
+    },
+    {
+      "mode": "golden_alternating",
+      "index": 1,
+      "device_id": 2,
+      "exact_words": true,
+      "cache_status": 1,
+      "expected_cache_status": 1,
+      "total_call_ms": 1.5954934060573578,
+      "stages_ms": {
+        "input_setup_ms": 0.20866841077804565,
+        "start_poll_ms": 1.0822927579283714,
+        "output_read_ms": 0.09456463158130646
+      }
+    },
+    {
+      "mode": "golden_alternating",
+      "index": 2,
+      "device_id": 1,
+      "exact_words": true,
+      "cache_status": 0,
+      "expected_cache_status": 0,
+      "total_call_ms": 1.2016091495752335,
+      "stages_ms": {
+        "input_setup_ms": 0.19845739006996155,
+        "start_poll_ms": 0.7329406216740608,
+        "output_read_ms": 0.09050220251083374
+      }
+    },
+    {
+      "mode": "golden_alternating",
+      "index": 3,
+      "device_id": 2,
+      "exact_words": true,
+      "cache_status": 0,
+      "expected_cache_status": 0,
+      "total_call_ms": 1.1984677985310555,
+      "stages_ms": {
+        "input_setup_ms": 0.19577797502279282,
+        "start_poll_ms": 0.7397197186946869,
+        "output_read_ms": 0.09255297482013702
+      }
+    },
+    {
+      "mode": "golden_alternating",
+      "index": 4,
+      "device_id": 1,
+      "exact_words": true,
+      "cache_status": 0,
+      "expected_cache_status": 0,
+      "total_call_ms": 1.185886561870575,
+      "stages_ms": {
+        "input_setup_ms": 0.19659847021102905,
+        "start_poll_ms": 0.7311291992664337,
+        "output_read_ms": 0.08986331522464752
+      }
+    },
+    {
+      "mode": "golden_alternating",
+      "index": 5,
+      "device_id": 2,
+      "exact_words": true,
+      "cache_status": 0,
+      "expected_cache_status": 0,
+      "total_call_ms": 1.18169654160738,
+      "stages_ms": {
+        "input_setup_ms": 0.19443780183792114,
+        "start_poll_ms": 0.731809064745903,
+        "output_read_ms": 0.08949451148509979
+      }
+    },
+    {
+      "mode": "golden_alternating",
+      "index": 6,
+      "device_id": 1,
+      "exact_words": true,
+      "cache_status": 0,
+      "expected_cache_status": 0,
+      "total_call_ms": 1.1768583208322525,
+      "stages_ms": {
+        "input_setup_ms": 0.19043684005737305,
+        "start_poll_ms": 0.7314505055546761,
+        "output_read_ms": 0.09123235940933228
+      }
+    },
+    {
+      "mode": "golden_alternating",
+      "index": 7,
+      "device_id": 2,
+      "exact_words": true,
+      "cache_status": 0,
+      "expected_cache_status": 0,
+      "total_call_ms": 1.1837482452392578,
+      "stages_ms": {
+        "input_setup_ms": 0.1964084804058075,
+        "start_poll_ms": 0.73188915848732,
+        "output_read_ms": 0.09023305028676987
+      }
+    },
+    {
+      "mode": "cold_reload",
+      "index": 0,
+      "device_id": 1,
+      "exact_words": true,
+      "cache_status": 1,
+      "expected_cache_status": 1,
+      "total_call_ms": 1.5262216329574585,
+      "stages_ms": {
+        "input_setup_ms": 0.1919381320476532,
+        "start_poll_ms": 1.0797232389450073,
+        "output_read_ms": 0.09006354957818985
+      }
+    },
+    {
+      "mode": "cold_reload",
+      "index": 1,
+      "device_id": 2,
+      "exact_words": true,
+      "cache_status": 1,
+      "expected_cache_status": 1,
+      "total_call_ms": 1.5612617135047913,
+      "stages_ms": {
+        "input_setup_ms": 0.19182730466127396,
+        "start_poll_ms": 1.115415245294571,
+        "output_read_ms": 0.09087380021810532
+      }
+    },
+    {
+      "mode": "cold_reload",
+      "index": 2,
+      "device_id": 1,
+      "exact_words": true,
+      "cache_status": 1,
+      "expected_cache_status": 1,
+      "total_call_ms": 1.5334412455558777,
+      "stages_ms": {
+        "input_setup_ms": 0.19674748182296753,
+        "start_poll_ms": 1.0798238217830658,
+        "output_read_ms": 0.09008310735225677
+      }
+    },
+    {
+      "mode": "cold_reload",
+      "index": 3,
+      "device_id": 2,
+      "exact_words": true,
+      "cache_status": 1,
+      "expected_cache_status": 1,
+      "total_call_ms": 1.5401626005768776,
+      "stages_ms": {
+        "input_setup_ms": 0.19046757370233536,
+        "start_poll_ms": 1.0913340374827385,
+        "output_read_ms": 0.09298324584960938
+      }
+    },
+    {
+      "mode": "cold_reload",
+      "index": 4,
+      "device_id": 1,
+      "exact_words": true,
+      "cache_status": 1,
+      "expected_cache_status": 1,
+      "total_call_ms": 1.5510013327002525,
+      "stages_ms": {
+        "input_setup_ms": 0.19732769578695297,
+        "start_poll_ms": 1.096583902835846,
+        "output_read_ms": 0.09066425263881683
+      }
+    },
+    {
+      "mode": "cold_reload",
+      "index": 5,
+      "device_id": 2,
+      "exact_words": true,
+      "cache_status": 1,
+      "expected_cache_status": 1,
+      "total_call_ms": 1.5468625351786613,
+      "stages_ms": {
+        "input_setup_ms": 0.19472837448120117,
+        "start_poll_ms": 1.09089445322752,
+        "output_read_ms": 0.09299255907535553
+      }
+    },
+    {
+      "mode": "cold_reload",
+      "index": 6,
+      "device_id": 1,
+      "exact_words": true,
+      "cache_status": 1,
+      "expected_cache_status": 1,
+      "total_call_ms": 1.5546530485153198,
+      "stages_ms": {
+        "input_setup_ms": 0.19840802997350693,
+        "start_poll_ms": 1.0941941291093826,
+        "output_read_ms": 0.09065307676792145
+      }
+    },
+    {
+      "mode": "cold_reload",
+      "index": 7,
+      "device_id": 2,
+      "exact_words": true,
+      "cache_status": 1,
+      "expected_cache_status": 1,
+      "total_call_ms": 1.5408322215080261,
+      "stages_ms": {
+        "input_setup_ms": 0.1935381442308426,
+        "start_poll_ms": 1.0929936543107033,
+        "output_read_ms": 0.08952431380748749
+      }
+    },
+    {
+      "mode": "cold_reload",
+      "index": 8,
+      "device_id": 1,
+      "exact_words": true,
+      "cache_status": 1,
+      "expected_cache_status": 1,
+      "total_call_ms": 1.5379320830106735,
+      "stages_ms": {
+        "input_setup_ms": 0.1916680485010147,
+        "start_poll_ms": 1.0948041453957558,
+        "output_read_ms": 0.08835364133119583
+      }
+    },
+    {
+      "mode": "cold_reload",
+      "index": 9,
+      "device_id": 2,
+      "exact_words": true,
+      "cache_status": 1,
+      "expected_cache_status": 1,
+      "total_call_ms": 1.5422618016600609,
+      "stages_ms": {
+        "input_setup_ms": 0.19618775695562363,
+        "start_poll_ms": 1.092463731765747,
+        "output_read_ms": 0.09031407535076141
+      }
+    },
+    {
+      "mode": "cold_reload",
+      "index": 10,
+      "device_id": 1,
+      "exact_words": true,
+      "cache_status": 1,
+      "expected_cache_status": 1,
+      "total_call_ms": 1.536012627184391,
+      "stages_ms": {
+        "input_setup_ms": 0.19128713756799698,
+        "start_poll_ms": 1.089584082365036,
+        "output_read_ms": 0.08995365351438522
+      }
+    },
+    {
+      "mode": "cold_reload",
+      "index": 11,
+      "device_id": 2,
+      "exact_words": true,
+      "cache_status": 1,
+      "expected_cache_status": 1,
+      "total_call_ms": 1.5683332458138466,
+      "stages_ms": {
+        "input_setup_ms": 0.222119502723217,
+        "start_poll_ms": 1.0905135422945023,
+        "output_read_ms": 0.08953362703323364
+      }
+    },
+    {
+      "mode": "cold_reload",
+      "index": 12,
+      "device_id": 1,
+      "exact_words": true,
+      "cache_status": 1,
+      "expected_cache_status": 1,
+      "total_call_ms": 1.5404019504785538,
+      "stages_ms": {
+        "input_setup_ms": 0.1914380118250847,
+        "start_poll_ms": 1.0911645367741585,
+        "output_read_ms": 0.09052269160747528
+      }
+    },
+    {
+      "mode": "cold_reload",
+      "index": 13,
+      "device_id": 2,
+      "exact_words": true,
+      "cache_status": 1,
+      "expected_cache_status": 1,
+      "total_call_ms": 1.544741913676262,
+      "stages_ms": {
+        "input_setup_ms": 0.19443780183792114,
+        "start_poll_ms": 1.0958444327116013,
+        "output_read_ms": 0.08964352309703827
+      }
+    },
+    {
+      "mode": "cold_reload",
+      "index": 14,
+      "device_id": 1,
+      "exact_words": true,
+      "cache_status": 1,
+      "expected_cache_status": 1,
+      "total_call_ms": 1.5384620055556297,
+      "stages_ms": {
+        "input_setup_ms": 0.19141659140586853,
+        "start_poll_ms": 1.09152402728796,
+        "output_read_ms": 0.090024434030056
+      }
+    },
+    {
+      "mode": "cold_reload",
+      "index": 15,
+      "device_id": 2,
+      "exact_words": true,
+      "cache_status": 1,
+      "expected_cache_status": 1,
+      "total_call_ms": 1.5353914350271225,
+      "stages_ms": {
+        "input_setup_ms": 0.19249692559242249,
+        "start_poll_ms": 1.09043437987566,
+        "output_read_ms": 0.08961372077465057
+      }
+    },
+    {
+      "mode": "warm_alternating",
+      "index": 0,
+      "device_id": 1,
+      "exact_words": true,
+      "cache_status": 0,
+      "expected_cache_status": 0,
+      "total_call_ms": 1.1493563652038574,
+      "stages_ms": {
+        "input_setup_ms": 0.1822570338845253,
+        "start_poll_ms": 0.7289489731192589,
+        "output_read_ms": 0.08694455027580261
+      }
+    },
+    {
+      "mode": "warm_alternating",
+      "index": 1,
+      "device_id": 2,
+      "exact_words": true,
+      "cache_status": 0,
+      "expected_cache_status": 0,
+      "total_call_ms": 1.2465603649616241,
+      "stages_ms": {
+        "input_setup_ms": 0.2579614520072937,
+        "start_poll_ms": 0.7395986467599869,
+        "output_read_ms": 0.0898139551281929
+      }
+    },
+    {
+      "mode": "warm_alternating",
+      "index": 2,
+      "device_id": 1,
+      "exact_words": true,
+      "cache_status": 0,
+      "expected_cache_status": 0,
+      "total_call_ms": 1.186717301607132,
+      "stages_ms": {
+        "input_setup_ms": 0.19067805260419846,
+        "start_poll_ms": 0.7384698837995529,
+        "output_read_ms": 0.0888332724571228
+      }
+    },
+    {
+      "mode": "warm_alternating",
+      "index": 3,
+      "device_id": 2,
+      "exact_words": true,
+      "cache_status": 0,
+      "expected_cache_status": 0,
+      "total_call_ms": 1.194528304040432,
+      "stages_ms": {
+        "input_setup_ms": 0.19523780792951584,
+        "start_poll_ms": 0.7406296208500862,
+        "output_read_ms": 0.09277369827032089
+      }
+    },
+    {
+      "mode": "warm_alternating",
+      "index": 4,
+      "device_id": 1,
+      "exact_words": true,
+      "cache_status": 0,
+      "expected_cache_status": 0,
+      "total_call_ms": 1.2256801128387451,
+      "stages_ms": {
+        "input_setup_ms": 0.2229493111371994,
+        "start_poll_ms": 0.7406994700431824,
+        "output_read_ms": 0.0918833538889885
+      }
+    },
+    {
+      "mode": "warm_alternating",
+      "index": 5,
+      "device_id": 2,
+      "exact_words": true,
+      "cache_status": 0,
+      "expected_cache_status": 0,
+      "total_call_ms": 1.1894488707184792,
+      "stages_ms": {
+        "input_setup_ms": 0.1948866993188858,
+        "start_poll_ms": 0.7383702322840691,
+        "output_read_ms": 0.08926447480916977
+      }
+    },
+    {
+      "mode": "warm_alternating",
+      "index": 6,
+      "device_id": 1,
+      "exact_words": true,
+      "cache_status": 0,
+      "expected_cache_status": 0,
+      "total_call_ms": 1.187697984278202,
+      "stages_ms": {
+        "input_setup_ms": 0.19338726997375488,
+        "start_poll_ms": 0.7391497492790222,
+        "output_read_ms": 0.09027402848005295
+      }
+    },
+    {
+      "mode": "warm_alternating",
+      "index": 7,
+      "device_id": 2,
+      "exact_words": true,
+      "cache_status": 0,
+      "expected_cache_status": 0,
+      "total_call_ms": 1.2167179957032204,
+      "stages_ms": {
+        "input_setup_ms": 0.2193395048379898,
+        "start_poll_ms": 0.7396098226308823,
+        "output_read_ms": 0.08941255509853363
+      }
+    },
+    {
+      "mode": "warm_alternating",
+      "index": 8,
+      "device_id": 1,
+      "exact_words": true,
+      "cache_status": 0,
+      "expected_cache_status": 0,
+      "total_call_ms": 1.1869370937347412,
+      "stages_ms": {
+        "input_setup_ms": 0.19207783043384552,
+        "start_poll_ms": 0.7381802424788475,
+        "output_read_ms": 0.089302659034729
+      }
+    },
+    {
+      "mode": "warm_alternating",
+      "index": 9,
+      "device_id": 2,
+      "exact_words": true,
+      "cache_status": 0,
+      "expected_cache_status": 0,
+      "total_call_ms": 1.18979811668396,
+      "stages_ms": {
+        "input_setup_ms": 0.19514840096235275,
+        "start_poll_ms": 0.7389402016997337,
+        "output_read_ms": 0.09006261825561523
+      }
+    },
+    {
+      "mode": "warm_alternating",
+      "index": 10,
+      "device_id": 1,
+      "exact_words": true,
+      "cache_status": 0,
+      "expected_cache_status": 0,
+      "total_call_ms": 1.2163389474153519,
+      "stages_ms": {
+        "input_setup_ms": 0.19528716802597046,
+        "start_poll_ms": 0.7624812424182892,
+        "output_read_ms": 0.09145308285951614
+      }
+    },
+    {
+      "mode": "warm_alternating",
+      "index": 11,
+      "device_id": 2,
+      "exact_words": true,
+      "cache_status": 0,
+      "expected_cache_status": 0,
+      "total_call_ms": 1.2042289599776268,
+      "stages_ms": {
+        "input_setup_ms": 0.2000676468014717,
+        "start_poll_ms": 0.7408503443002701,
+        "output_read_ms": 0.09049288928508759
+      }
+    },
+    {
+      "mode": "warm_alternating",
+      "index": 12,
+      "device_id": 1,
+      "exact_words": true,
+      "cache_status": 0,
+      "expected_cache_status": 0,
+      "total_call_ms": 1.1934684589505196,
+      "stages_ms": {
+        "input_setup_ms": 0.19227713346481323,
+        "start_poll_ms": 0.7402803748846054,
+        "output_read_ms": 0.0908244401216507
+      }
+    },
+    {
+      "mode": "warm_alternating",
+      "index": 13,
+      "device_id": 2,
+      "exact_words": true,
+      "cache_status": 0,
+      "expected_cache_status": 0,
+      "total_call_ms": 1.1904379352927208,
+      "stages_ms": {
+        "input_setup_ms": 0.19306782633066177,
+        "start_poll_ms": 0.7418403401970863,
+        "output_read_ms": 0.08906330913305283
+      }
+    },
+    {
+      "mode": "warm_alternating",
+      "index": 14,
+      "device_id": 1,
+      "exact_words": true,
+      "cache_status": 0,
+      "expected_cache_status": 0,
+      "total_call_ms": 1.1796476319432259,
+      "stages_ms": {
+        "input_setup_ms": 0.19065756350755692,
+        "start_poll_ms": 0.7391404360532761,
+        "output_read_ms": 0.08786283433437347
+      }
+    },
+    {
+      "mode": "warm_alternating",
+      "index": 15,
+      "device_id": 2,
+      "exact_words": true,
+      "cache_status": 0,
+      "expected_cache_status": 0,
+      "total_call_ms": 1.1819470673799515,
+      "stages_ms": {
+        "input_setup_ms": 0.19364804029464722,
+        "start_poll_ms": 0.7377089932560921,
+        "output_read_ms": 0.08863396942615509
+      }
+    },
+    {
+      "mode": "warm_alternating",
+      "index": 16,
+      "device_id": 1,
+      "exact_words": true,
+      "cache_status": 0,
+      "expected_cache_status": 0,
+      "total_call_ms": 1.1871177703142166,
+      "stages_ms": {
+        "input_setup_ms": 0.19010715186595917,
+        "start_poll_ms": 0.7419902831315994,
+        "output_read_ms": 0.08950382471084595
+      }
+    },
+    {
+      "mode": "warm_alternating",
+      "index": 17,
+      "device_id": 2,
+      "exact_words": true,
+      "cache_status": 0,
+      "expected_cache_status": 0,
+      "total_call_ms": 1.1861687526106834,
+      "stages_ms": {
+        "input_setup_ms": 0.19309669733047485,
+        "start_poll_ms": 0.7390500977635384,
+        "output_read_ms": 0.09036436676979065
+      }
+    },
+    {
+      "mode": "warm_alternating",
+      "index": 18,
+      "device_id": 1,
+      "exact_words": true,
+      "cache_status": 0,
+      "expected_cache_status": 0,
+      "total_call_ms": 1.1849375441670418,
+      "stages_ms": {
+        "input_setup_ms": 0.19137747585773468,
+        "start_poll_ms": 0.7399097084999084,
+        "output_read_ms": 0.08952431380748749
+      }
+    },
+    {
+      "mode": "warm_alternating",
+      "index": 19,
+      "device_id": 2,
+      "exact_words": true,
+      "cache_status": 0,
+      "expected_cache_status": 0,
+      "total_call_ms": 1.1923378333449364,
+      "stages_ms": {
+        "input_setup_ms": 0.19467808306217194,
+        "start_poll_ms": 0.7434096187353134,
+        "output_read_ms": 0.08973479270935059
+      }
+    },
+    {
+      "mode": "warm_alternating",
+      "index": 20,
+      "device_id": 1,
+      "exact_words": true,
+      "cache_status": 0,
+      "expected_cache_status": 0,
+      "total_call_ms": 1.1855373159050941,
+      "stages_ms": {
+        "input_setup_ms": 0.19158702343702316,
+        "start_poll_ms": 0.7402403280138969,
+        "output_read_ms": 0.08911453187465668
+      }
+    },
+    {
+      "mode": "warm_alternating",
+      "index": 21,
+      "device_id": 2,
+      "exact_words": true,
+      "cache_status": 0,
+      "expected_cache_status": 0,
+      "total_call_ms": 1.1868178844451904,
+      "stages_ms": {
+        "input_setup_ms": 0.19223801791667938,
+        "start_poll_ms": 0.7389001548290253,
+        "output_read_ms": 0.09126309305429459
+      }
+    },
+    {
+      "mode": "warm_alternating",
+      "index": 22,
+      "device_id": 1,
+      "exact_words": true,
+      "cache_status": 0,
+      "expected_cache_status": 0,
+      "total_call_ms": 1.196618191897869,
+      "stages_ms": {
+        "input_setup_ms": 0.1956867054104805,
+        "start_poll_ms": 0.7444098591804504,
+        "output_read_ms": 0.08923467248678207
+      }
+    },
+    {
+      "mode": "warm_alternating",
+      "index": 23,
+      "device_id": 2,
+      "exact_words": true,
+      "cache_status": 0,
+      "expected_cache_status": 0,
+      "total_call_ms": 1.1865263804793358,
+      "stages_ms": {
+        "input_setup_ms": 0.19531790167093277,
+        "start_poll_ms": 0.7391283288598061,
+        "output_read_ms": 0.08975435048341751
+      }
+    },
+    {
+      "mode": "warm_alternating",
+      "index": 24,
+      "device_id": 1,
+      "exact_words": true,
+      "cache_status": 0,
+      "expected_cache_status": 0,
+      "total_call_ms": 1.179778017103672,
+      "stages_ms": {
+        "input_setup_ms": 0.1927679404616356,
+        "start_poll_ms": 0.7371604442596436,
+        "output_read_ms": 0.08842255920171738
+      }
+    },
+    {
+      "mode": "warm_alternating",
+      "index": 25,
+      "device_id": 2,
+      "exact_words": true,
+      "cache_status": 0,
+      "expected_cache_status": 0,
+      "total_call_ms": 1.1869678273797035,
+      "stages_ms": {
+        "input_setup_ms": 0.1935875043272972,
+        "start_poll_ms": 0.7399003952741623,
+        "output_read_ms": 0.09017344564199448
+      }
+    },
+    {
+      "mode": "warm_alternating",
+      "index": 26,
+      "device_id": 1,
+      "exact_words": true,
+      "cache_status": 0,
+      "expected_cache_status": 0,
+      "total_call_ms": 1.1915182694792747,
+      "stages_ms": {
+        "input_setup_ms": 0.1956084743142128,
+        "start_poll_ms": 0.7393099367618561,
+        "output_read_ms": 0.08869264274835587
+      }
+    },
+    {
+      "mode": "warm_alternating",
+      "index": 27,
+      "device_id": 2,
+      "exact_words": true,
+      "cache_status": 0,
+      "expected_cache_status": 0,
+      "total_call_ms": 1.1833570897579193,
+      "stages_ms": {
+        "input_setup_ms": 0.1912880688905716,
+        "start_poll_ms": 0.7397197186946869,
+        "output_read_ms": 0.08864328265190125
+      }
+    },
+    {
+      "mode": "warm_alternating",
+      "index": 28,
+      "device_id": 1,
+      "exact_words": true,
+      "cache_status": 0,
+      "expected_cache_status": 0,
+      "total_call_ms": 1.1892970651388168,
+      "stages_ms": {
+        "input_setup_ms": 0.19213836640119553,
+        "start_poll_ms": 0.7404284551739693,
+        "output_read_ms": 0.09383447468280792
+      }
+    },
+    {
+      "mode": "warm_alternating",
+      "index": 29,
+      "device_id": 2,
+      "exact_words": true,
+      "cache_status": 0,
+      "expected_cache_status": 0,
+      "total_call_ms": 1.2247199192643166,
+      "stages_ms": {
+        "input_setup_ms": 0.21254923194646835,
+        "start_poll_ms": 0.7435092702507973,
+        "output_read_ms": 0.09184330701828003
+      }
+    },
+    {
+      "mode": "warm_alternating",
+      "index": 30,
+      "device_id": 1,
+      "exact_words": true,
+      "cache_status": 0,
+      "expected_cache_status": 0,
+      "total_call_ms": 1.1882474645972252,
+      "stages_ms": {
+        "input_setup_ms": 0.1935875043272972,
+        "start_poll_ms": 0.7391301915049553,
+        "output_read_ms": 0.08791312575340271
+      }
+    },
+    {
+      "mode": "warm_alternating",
+      "index": 31,
+      "device_id": 2,
+      "exact_words": true,
+      "cache_status": 0,
+      "expected_cache_status": 0,
+      "total_call_ms": 1.21275894343853,
+      "stages_ms": {
+        "input_setup_ms": 0.19355770200490952,
+        "start_poll_ms": 0.7390398532152176,
+        "output_read_ms": 0.11468492448329926
+      }
+    }
+  ],
+  "timing": {
+    "golden_alternating": {
+      "calls": 8,
+      "mean_ms": 1.3341697631403804,
+      "median_ms": 1.1921771802008152,
+      "p95_ms": 1.8256614450365303,
+      "max_ms": 1.9495980814099312
+    },
+    "cold_reload": {
+      "calls": 16,
+      "mean_ms": 1.5436233370564878,
+      "median_ms": 1.54061708599329,
+      "p95_ms": 1.563029596582055,
+      "max_ms": 1.5683332458138466
+    },
+    "warm_alternating": {
+      "calls": 32,
+      "mean_ms": 1.1938193056266755,
+      "median_ms": 1.188772264868021,
+      "p95_ms": 1.2251520063728094,
+      "max_ms": 1.2465603649616241
+    }
+  },
+  "timing_scope": "run_words input copy/flush, pointer/control writes, AXI start/poll, output invalidate/copy; excludes normalization, softmax, loading and transport",
+  "cache_scope": "first-load, force-reload and warm alternation; not all 17 RTL cache-control cases"
+}
