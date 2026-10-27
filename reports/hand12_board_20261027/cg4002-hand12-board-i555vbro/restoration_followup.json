@@ -1,0 +1,8 @@
+{
+  "created_utc": "2026-10-27T07:32:16.629967+00:00",
+  "restoration_verified_in_fresh_process": true,
+  "original_overlay_path": "/var/tmp/cg4002-week7-yanjie-20260907/model-runner/cnn_full_20261020/fpga/overlays/full_cnn/cnn_full_20261020.bit",
+  "original_overlay_sha256": "4a159424f60be3f10d089f81142c71d3450101e0440f7dcdfbd6c6d53f55cd54",
+  "observed_restored_worker_pid": 177087,
+  "note": "Original audit retained unchanged. Its restoration hash error came from stale process-local metadata in checker v1.0."
+}

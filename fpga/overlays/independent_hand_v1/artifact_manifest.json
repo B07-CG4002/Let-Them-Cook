@@ -1,0 +1,28 @@
+{
+  "status": "built_pending_board_validation",
+  "scope": "independent_hand_hardware_build_only",
+  "part": "xazu3eg-sbva484-1-i",
+  "instance": "gesture_cnn_hand_u2_cache_0",
+  "format": {
+    "activation_bits": 32,
+    "activation_fraction": 18,
+    "weight_bits": 22,
+    "weight_fraction": 21,
+    "accumulator_bits": 64,
+    "axi_carrier_bits": 32
+  },
+  "timing": {
+    "wns_ns": 1.282,
+    "whs_ns": 0.01,
+    "wpws_ns": 3.5
+  },
+  "hwh_source": "sources\\multiply_accumulate\\generated\\hw_handoff\\multiply_accumulate.hwh",
+  "sha256": {
+    "cnn_hand12_v1.bit": "b8d0407300c913fbde24143b6a632f62c0bf4021290d80fad575d32f59d6523d",
+    "cnn_hand12_v1.hwh": "935975fe769d0fda1a802c43c9a65430406a61dc02802f637df40f935660a790"
+  },
+  "input_manifest_sha256": "0249d5007928457c7b185d63a62c6f3fde26848ef057b6c399932d99e52b7a44",
+  "synthetic_weights_are_not_gesture_accuracy": true,
+  "physical_board_validated": false,
+  "production_deployment_changed": false
+}
