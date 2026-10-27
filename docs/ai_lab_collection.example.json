@@ -1,0 +1,5 @@
+[
+  {"capture":"train_capture/capture.jsonl","annotations":"train_capture/annotations_reviewed.json"},
+  {"capture":"validation_capture/capture.jsonl","annotations":"validation_capture/annotations_reviewed.json"},
+  {"capture":"test_capture/capture.jsonl","annotations":"test_capture/annotations_reviewed.json"}
+]
