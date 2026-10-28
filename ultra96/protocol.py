@@ -27,8 +27,12 @@ _FIELDS = {
     "MONITOR_UPDATE": _BASE | {"update", "uptime_seconds", "model", "subscriber", "identities",
                                "identity_limit", "devices", "service", "events", "events_dropped"},
 }
-# Subscription and monitor envelopes stay at version 1.
-_VERSIONS = {"SENSOR_BATCH": VERSION, "INGEST_ACK": VERSION, "GESTURE_RESULT": VERSION,
+# Subscription and monitor envelopes stay at version 1. Results stay at version 3 under
+# sensor protocol v4 too: both phone apps accept only v=3 results. Only SENSOR_BATCH and
+# INGEST_ACK follow the selected sensor version.
+RESULT_VERSION = VERSION
+_SENSOR_KINDS = ("SENSOR_BATCH", "INGEST_ACK")
+_VERSIONS = {"SENSOR_BATCH": VERSION, "INGEST_ACK": VERSION, "GESTURE_RESULT": RESULT_VERSION,
              "SUBSCRIBE": 1, "SUBSCRIBED": 1, "MONITOR": 1, "MONITORING": 1, "MONITOR_UPDATE": 1}
 _MONITOR_DEVICE = {"accepted", "duplicates", "results", "commands", "refused", "sent", "unsent"}
 _MONITOR_SERVICE = {"rejected", "client_limit", "idle_evicted", "subscribers", "replaced",
@@ -127,6 +131,8 @@ def validate_session(session_id):
 def validate_message(message, expected_type=None, session_id=None, *, sensor_version=VERSION):
     """Validate one protocol-version-3 message (subscription and monitor envelopes are version 1).
 
+    sensor_version (3, or an opt-in 4) sets the version of SENSOR_BATCH and INGEST_ACK and
+    the number of sample values; GESTURE_RESULT is version 3 whatever it is.
     request_id is always present in data messages: null for samples and model
     results, uint32 equal to seq for commands.
     """
@@ -140,7 +146,7 @@ def validate_message(message, expected_type=None, session_id=None, *, sensor_ver
     if expected_type is not None and kind != expected_type:
         raise ProtocolError("unexpected message type")
     version = message.get("v")
-    if type(version) is not int or version != (sensor_version if kind in ("SENSOR_BATCH", "INGEST_ACK", "GESTURE_RESULT") else _VERSIONS[kind]):
+    if type(version) is not int or version != (sensor_version if kind in _SENSOR_KINDS else _VERSIONS[kind]):
         raise ProtocolError("unsupported protocol version")
     if set(message) != _FIELDS[kind]:
         raise ProtocolError("unknown message type or unexpected fields")

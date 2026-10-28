@@ -5,8 +5,12 @@ import json
 import math
 from pathlib import Path
 
-from common.sensor import VERSION, SensorPacket, decode_packet
+# The v3 codec gets its own name: show_packet_examples uses "sensor" for a record.
+from common import sensor as sensor_v3, sensor_v4
 from ultra96.protocol import validate_session
+
+# Version 3 packets carry 11 values (38 bytes); version 4, the three-flex boards, 12 (40 bytes).
+CODECS = {sensor_v3.VERSION: sensor_v3, sensor_v4.VERSION: sensor_v4}
 
 
 def _object(pairs):
@@ -43,13 +47,45 @@ def _integer(value, low, high, field):
     return value
 
 
-def _version(row, field):
-    """Only protocol-version-3 captures are read; older ones are named as such."""
+def _version(row, field, expected=None):
+    """Only protocol-version-3 and version-4 captures are read; older ones are named as such.
+
+    expected is the capture's one version once known: a capture never mixes versions.
+    """
     version = row.get("version")
-    if type(version) is int and version != VERSION:
-        raise ValueError(f"{field} is protocol version {version}; this tool reads only version-{VERSION} "
-                         "captures (check older captures with the code from before version 3)")
-    return _integer(version, VERSION, VERSION, field)
+    if type(version) is int and version not in CODECS:
+        raise ValueError(f"{field} is protocol version {version}; this tool reads only version-3 "
+                         "captures (11 values) and version-4 captures (12 values, the three-flex "
+                         "boards); check older captures with the code from before version 3")
+    _integer(version, min(CODECS), max(CODECS), field)
+    if expected is not None and version != expected:
+        raise ValueError(f"{field} is protocol version {version} in a version-{expected} capture")
+    return version
+
+
+def report_sensor_version(report):
+    """The sensor version report.json names, or None when it predates the option.
+
+    The run metadata (laptop.dual_bridge) and each device's bridge configuration name
+    it; they must agree.
+    """
+    named = set()
+    run = report.get("run")
+    if isinstance(run, dict) and "sensor_version" in run:
+        named.add(run["sensor_version"])
+    devices = report.get("devices")
+    for device in (devices.values() if isinstance(devices, dict) else ()):
+        configuration = device.get("configuration") if isinstance(device, dict) else None
+        if isinstance(configuration, dict) and "sensor_version" in configuration:
+            named.add(configuration["sensor_version"])
+    if not named:
+        return None
+    if len(named) != 1:
+        raise ValueError("report.json names more than one sensor version")
+    version = named.pop()
+    if type(version) is not int or version not in CODECS:
+        raise ValueError(f"report.json names sensor version {version!r}; expected 3 or 4")
+    return version
 
 
 def _identity(row, session):
@@ -70,7 +106,10 @@ def show_packet_examples(folder: Path) -> bool:
     Current sensor_ack records contain device/boot/seq/status but omit version,
     session and request_id. Session comes from report.json; these event types are
     telemetry, whose request_id is null. Those provenance limits are printed.
-    Only protocol-version-3 captures (38-byte packets, 11 values) are accepted.
+    Protocol-version-3 captures (38-byte packets, 11 values) and version-4 captures
+    (40-byte packets, 12 values: the three-flex boards) are accepted. The version comes
+    from report.json when it names one, else from the first sensor record; every record
+    must have it, and each raw packet's own version byte selects its codec.
     This is a packet illustration, not a whole-capture or phone-delivery audit.
     """
     folder = Path(folder).expanduser().resolve()
@@ -81,6 +120,7 @@ def show_packet_examples(folder: Path) -> bool:
         run = report.get("run")
         if isinstance(run, dict) and "session_id" in run and run["session_id"] != session:
             raise ValueError("report session_id disagrees with run metadata")
+        version = report_sensor_version(report)
         sensors, acknowledgements = {}, {}
         with (folder / "packets.jsonl").open(encoding="utf-8-sig") as stream:
             for number, line in enumerate(stream, 1):
@@ -93,14 +133,18 @@ def show_packet_examples(folder: Path) -> bool:
                         continue
                     identity = _identity(row, session)
                     if kind == "sensor":
-                        _version(row, "sensor version")
-                        packet = SensorPacket(identity[1], identity[2], identity[3],
-                                              row.get("uptime_ms"), row.get("values"),
-                                              version=row.get("version"))
+                        version = _version(row, "sensor version", version)
+                        codec = CODECS[version]
+                        packet = codec.SensorPacket(identity[1], identity[2], identity[3],
+                                                    row.get("uptime_ms"), row.get("values"),
+                                                    version=version)
                         if row.get("validation") != "decoded" or row.get("direction") != "ESP->laptop":
                             raise ValueError("sensor record is not a decoded ESP-to-laptop sample")
                         if "raw_hex" in row:
-                            if not isinstance(row["raw_hex"], str) or decode_packet(bytes.fromhex(row["raw_hex"])) != packet:
+                            raw = bytes.fromhex(row["raw_hex"]) if isinstance(row["raw_hex"], str) else b""
+                            # Byte 2 of the 16-byte header is the packet's own version.
+                            if (len(raw) < 3 or raw[2] not in CODECS
+                                    or CODECS[raw[2]].decode_packet(raw) != packet):
                                 raise ValueError("raw packet disagrees with decoded sensor fields")
                         previous = sensors.get(identity)
                         if previous is not None and any(previous.get(key) != row.get(key)
@@ -111,7 +155,7 @@ def show_packet_examples(folder: Path) -> bool:
                         if row.get("validation") not in ("accepted", "duplicate") or row.get("direction") != "Ultra96->laptop":
                             raise ValueError("sensor ACK has an invalid status or direction")
                         if "version" in row:
-                            _version(row, "ACK version")
+                            _version(row, "ACK version", version)
                         acknowledgements.setdefault(identity, []).append(row)
                 except (ValueError, TypeError) as error:
                     raise ValueError(f"packets.jsonl line {number}: {error}") from error
@@ -131,6 +175,8 @@ def show_packet_examples(folder: Path) -> bool:
     print("Session context comes from this folder's report.json; current event records omit session_id.")
     print("These sensor events are telemetry: request_id=null is inferred from the protocol, not logged.")
     print("Current sensor_ack records omit protocol version; explicit versions are checked when present.")
+    print(f"Sensor packets: protocol version {version} ({CODECS[version].PACKET_SIZE} bytes, "
+          f"{CODECS[version].CHANNEL_COUNT} values: {' '.join(CODECS[version].CHANNELS)}).")
     for device in (1, 2):
         identity, sensor, ack = examples[device]
         print("Matched identity: " + json.dumps(dict(zip(

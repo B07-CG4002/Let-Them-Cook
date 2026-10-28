@@ -1,7 +1,8 @@
 """TLS-only B07 Communications service. Ingestion ACKs and Phone results use separate ports.
 
 Each newly accepted stream sample goes to the model (ultra96.model); its results go to the
-one subscribed phone. Sensor protocol defaults to v3; v4 requires explicit selection.
+one subscribed phone. Sensor protocol defaults to v3; v4 requires explicit selection
+(--sensor-version 4) and changes only SENSOR_BATCH and INGEST_ACK: results stay at v=3.
 """
 import argparse
 import asyncio
@@ -25,8 +26,8 @@ from common.wire import ProtocolError, STREAM_LIMIT, read_frame, write_frame
 from common.sensor import VERSION
 from ultra96.model import DummyModel, ModelPort, ModelStartError, load_model
 from ultra96.monitor import ServiceMonitor
-from ultra96.protocol import (DUMMY_GESTURES, result_identity, trace_fields, validate_message,
-                              validate_session)
+from ultra96.protocol import (DUMMY_GESTURES, RESULT_VERSION, result_identity, trace_fields,
+                              validate_message, validate_session)
 
 LOG = logging.getLogger(__name__)
 _EXPECTED_ERRORS = (ProtocolError, asyncio.IncompleteReadError, asyncio.TimeoutError,
@@ -352,7 +353,7 @@ class CommsServer:
                                          message["uptime_ms"], message["values"])
                 else:
                     # Commands test the control path; they never reach the model.
-                    result = dict(v=self.sensor_version, type="GESTURE_RESULT", **trace_fields(message))
+                    result = dict(v=RESULT_VERSION, type="GESTURE_RESULT", **trace_fields(message))
                     result.update(result_id=result_identity(message),
                                   gesture=self._rng.choice(DUMMY_GESTURES), confidence=1.0)
                     self.monitor.published(result)
@@ -390,7 +391,8 @@ class CommsServer:
         self._emitted[result_id] = None
         if len(self._emitted) > 4096:
             self._emitted.popitem(last=False)
-        result = dict(v=self.sensor_version, type="GESTURE_RESULT", result_id=result_id, gesture=gesture,
+        # Version 3 in either sensor mode: both phone apps accept only v=3 results.
+        result = dict(v=RESULT_VERSION, type="GESTURE_RESULT", result_id=result_id, gesture=gesture,
                       confidence=confidence, **identity)
         validate_message(result, "GESTURE_RESULT", self.session_id, sensor_version=self.sensor_version)
         self.metrics["model_results"] += 1

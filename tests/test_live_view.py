@@ -315,3 +315,26 @@ def test_a_glove_that_is_not_found_is_named_with_the_address_scanned():
            "logger": "laptop.bridge", "message": "BLE attempt failed: "}
     assert apply(run, NOW, "capture", "record", record=log)[0][2].endswith(
         "failed: no detail (usually a scan or connect timeout)")
+
+
+def test_a_starved_link_is_named_in_the_log_and_in_the_reasons():
+    run = state()
+    starved = {"type": "BLE_link_starved", "timestamp_utc": stamp(NOW), "device_id": 1,
+               "direction": "ESP<->laptop", "generation": 1, "action": "reconnect",
+               "streak_seconds": 2.0, "notifications": 15, "missing": 16, "full_packets": 6,
+               "window": 2.0, "cooldown": 10.0}
+    assert apply(run, NOW, "capture", "record", record=starved)[0][2] == (
+        "BLE link starved: 15 full notifications in 2.0 s, 16 samples missing; reconnecting")
+    assert apply(run, NOW, "capture", "record", record=dict(starved, action="held"))[0][2] \
+        .endswith("; reconnect held by the 10.0 s cooldown")
+    reconnect = {"type": "BLE_starved_reconnect", "timestamp_utc": stamp(NOW), "device_id": 1,
+                 "direction": "ESP<->laptop", "generation": 1}
+    assert apply(run, NOW, "capture", "record", record=reconnect)[0][2] == \
+        "dropping the starved link to reconnect"
+    source = {"complete": True, "generated": 100, "missing_received": 0, "missing_acked": 0}
+    device = {"protected_ble": True, "source": source, "runtime_failures": [],
+              "starved_reconnects": 1, "starved_held": 2}
+    report = {"mock_input": False, "report_saved": True, "evidence": {"dropped": 0},
+              "devices": {"1": device,
+                          "2": dict(device, starved_reconnects=0, starved_held=0)}}
+    assert capture_problems(report) == ["LEFT: 1 starved reconnects; 2 starved held"]

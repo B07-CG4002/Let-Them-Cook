@@ -17,9 +17,11 @@ import json
 import math
 import threading
 
-from common.sensor import CHANNELS, physical_values
+from common import sensor, sensor_v4
 
 GLOVES = {1: "LEFT", 2: "RIGHT"}
+# Each packet's own version selects its codec: 3 has 11 values, 4 (the three-flex boards) 12.
+CODECS = {3: sensor, 4: sensor_v4}
 WHO_WIDTH = 6
 BOARD_COUNTERS = ("accepted", "duplicates", "results", "commands", "refused", "sent", "unsent")
 SERVICE_COUNTERS = ("rejected", "client_limit", "idle_evicted", "subscribers", "replaced",
@@ -27,8 +29,8 @@ SERVICE_COUNTERS = ("rejected", "client_limit", "idle_evicted", "subscribers", "
 # A rate whose last sample is older than this is shown as "-" (its source stopped).
 RATE_STALE_SECONDS = 1.5
 _UNITS = (("ax", "ay", "az", "g"), ("gx", "gy", "gz", "deg/s"),
-          ("yaw", "pitch", "roll", "deg"), ("flex1", "flex2", None, "0..1"))
-_DIGITS = {"ax": 4, "ay": 4, "az": 4, "flex1": 4, "flex2": 4}
+          ("yaw", "pitch", "roll", "deg"), ("flex1", "flex2", "flex3", "0..1"))
+_DIGITS = {"ax": 4, "ay": 4, "az": 4, "flex1": 4, "flex2": 4, "flex3": 4}
 _QUIET_RECORDS = frozenset({"sensor", "sensor_ack", "status", "finished", "log"})
 _LAPTOP_DROPS = ("queue_dropped", "stale_dropped", "callback_generation_dropped",
                  "generation_dropped", "ambiguous_dropped")
@@ -67,29 +69,33 @@ def uptime_text(seconds):
     return "{:.1f} h".format(seconds / 3600)
 
 
-def values_text(values):
-    """The 11 values in physical units, grouped by sensor, on one line."""
-    return "  ".join(_value_groups(values))
+def values_text(values, version=3):
+    """The 11 (version 3) or 12 (version 4) values in physical units, grouped by sensor,
+    on one line."""
+    return "  ".join(_value_groups(values, version))
 
 
-def values_lines(values):
+def values_lines(values, version=3):
     """The same groups on two lines (acceleration and rate; angles and flex), for the view."""
-    groups = _value_groups(values)
+    groups = _value_groups(values, version)
     if len(groups) != 4:
         return groups
     return ["  ".join(groups[:2]), "  ".join(groups[2:])]
 
 
-def _value_groups(values):
+def _value_groups(values, version=3):
+    codec = CODECS.get(version) if type(version) is int else None
     try:
-        physical = dict(zip(CHANNELS, physical_values(values)))
+        if codec is None:
+            raise ValueError("unknown sensor version")
+        physical = dict(zip(codec.CHANNELS, codec.physical_values(values)))
     except (TypeError, ValueError):
         return ["values " + json.dumps(values)]
     groups = []
     for *names, unit in _UNITS:
         parts = []
         for name in names:
-            if name is None:
+            if name not in physical:
                 continue
             digits = _DIGITS.get(name, 2)
             form = "{} {:.%df}" % digits if name.startswith("flex") else "{} {:+.%df}" % digits
@@ -180,10 +186,11 @@ class RunState:
     """Everything the live view and the run log know; guarded by self.lock."""
 
     def __init__(self, *, folder, addresses, rate_hz, session_id, duration=None,
-                 keyboard=False, tunnel=None):
+                 keyboard=False, tunnel=None, sensor_version=3):
         self.lock = threading.Lock()
         self.folder = folder
         self.rate_hz = rate_hz
+        self.sensor_version = sensor_version
         self.session_id = session_id
         self.duration = duration
         self.keyboard = keyboard
@@ -299,7 +306,8 @@ class RunState:
                                    "new packets are counted, but this capture cannot pass".format(boot))
             glove.boots[boot] = max(seq, glove.boots.get(boot, seq))
         lines.append((when, glove.name, "packet #{}  t {:.3f} s  {}".format(
-            seq, (record.get("uptime_ms") or 0) / 1000, values_text(record.get("values")))))
+            seq, (record.get("uptime_ms") or 0) / 1000,
+            values_text(record.get("values"), record.get("version", 3)))))
         return lines
 
     def _status(self, now, record):
@@ -513,8 +521,10 @@ class RunState:
         keys = ""
         if self.phase in ("starting", "tunnel", "connecting", "running"):
             keys = "[q stop" + ("  1/2 command" if self.keyboard else "") + "]  "
-        return "{}Let Them Cook  {}  {}{}  {} Hz  session {}".format(
-            keys, phase, elapsed, limit, self.rate_hz, self.session_id)
+        # Version 3 is the default and stays unnamed; the three-flex boards are named.
+        packets = "  v{} packets".format(self.sensor_version) if self.sensor_version != 3 else ""
+        return "{}Let Them Cook  {}  {}{}  {} Hz{}  session {}".format(
+            keys, phase, elapsed, limit, self.rate_hz, packets, self.session_id)
 
     def _service_line(self, now):
         board = self.board
@@ -597,7 +607,8 @@ class RunState:
             when, record = glove.packet
             lines.append("  Latest packet #{}  glove time {:.3f} s  ({:.1f} s ago)".format(
                 record.get("seq"), (record.get("uptime_ms") or 0) / 1000, max(0.0, now - when)))
-            lines += ["    " + line for line in values_lines(record.get("values"))]
+            lines += ["    " + line for line in values_lines(record.get("values"),
+                                                             record.get("version", 3))]
         else:
             lines += ["  Latest packet  none yet", "", ""]  # same height as with a packet
         if glove.results:
@@ -665,6 +676,13 @@ def _record_text(record):
             record.get("validation"), record.get("received"), record.get("expected_received"))
     if kind == "source_final_verified":
         return "glove counters read again: unchanged"
+    if kind == "BLE_link_starved":
+        return "BLE link starved: {} full notifications in {} s, {} samples missing; {}".format(
+            record.get("notifications"), record.get("streak_seconds"), record.get("missing"),
+            "reconnecting" if record.get("action") == "reconnect"
+            else "reconnect held by the {} s cooldown".format(record.get("cooldown")))
+    if kind == "BLE_starved_reconnect":
+        return "dropping the starved link to reconnect"
     if kind.startswith("command_"):
         return "command {} {}".format(kind[len("command_"):], record.get("request_id"))
     return _generic(record)
@@ -674,8 +692,17 @@ def log_line(when, who, text):
     return "{}  {:<{}} {}".format(clock_text(when), who, WHO_WIDTH, text)
 
 
+def packets_text(sensor_version):
+    """The sensor packet format of a version, for the run log: "v4 (40 bytes, 12 values)"."""
+    codec = CODECS.get(sensor_version)
+    if codec is None:
+        return "v{} (unknown format)".format(sensor_version)
+    return "v{} ({} bytes, {} values)".format(sensor_version, codec.PACKET_SIZE,
+                                              codec.CHANNEL_COUNT)
+
+
 def header_lines(*, folder, started, command, revision, session_id, rate_hz, duration,
-                 keyboard, addresses, tunnel):
+                 keyboard, addresses, tunnel, sensor_version=3):
     local = datetime.fromtimestamp(started).astimezone()
     return [
         "Let Them Cook (B07): Communications run log",
@@ -683,9 +710,10 @@ def header_lines(*, folder, started, command, revision, session_id, rate_hz, dur
         "Started     {}".format(local.strftime("%Y-%m-%d %H:%M:%S %z")),
         "Command     {}".format(command),
         "Revision    {}".format(revision or "unknown"),
-        "Settings    session {}, {} Hz, {}, keyboard commands {}".format(
+        "Settings    session {}, {} Hz, {}, keyboard commands {}, sensor packets {}".format(
             session_id, rate_hz, "until stopped" if not duration else
-            "{:g} s".format(duration), "on (keys 1/2)" if keyboard else "off"),
+            "{:g} s".format(duration), "on (keys 1/2)" if keyboard else "off",
+            packets_text(sensor_version)),
         "Gloves      LEFT = ID 1 = {}   RIGHT = ID 2 = {}".format(addresses.get(1), addresses.get(2)),
         "Tunnel      {}".format(tunnel),
         "Also here   report.json (the verdict data), packets.jsonl (every packet, read by "
@@ -750,8 +778,8 @@ def capture_problems(report, exit_code=None):
                 item.get("observation_max_silence") or 0))
         anomalies = ["{} {}".format(item[key], key.replace("_", " ")) for key in (
             "malformed", "stale_dropped", "ack_errors", "ambiguous_dropped", "transport_errors",
-            "ble_errors", "disconnects", "queue_dropped", "gaps", "duplicates", "out_of_order",
-            "new_boots") if item.get(key)]
+            "ble_errors", "disconnects", "starved_reconnects", "starved_held", "queue_dropped",
+            "gaps", "duplicates", "out_of_order", "new_boots") if item.get(key)]
         found += anomalies
         if found:
             problems.append("{}: {}".format(name, "; ".join(found)))

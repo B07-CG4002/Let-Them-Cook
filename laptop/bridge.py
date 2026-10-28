@@ -16,7 +16,8 @@ import time
 from typing import Any, Optional
 
 from common.sensor import (decode_packet, split_notification, choose_fixture, SensorPacket,
-                           encode_packet, PACKET_SIZE, SENSOR_MTU_FLOOR)
+                           encode_packet, PACKET_SIZE, SENSOR_MTU_FLOOR,
+                           MAX_PACKETS_PER_NOTIFICATION)
 from common.control import CONTROL_UUID, RESPONSE_UUID
 from common.tls import client_context, TLS_SERVER_NAME
 from common.wire import read_frame, write_frame, ProtocolError
@@ -25,6 +26,7 @@ from laptop.controls import ControlChannel, CommandPipeline
 from laptop.goodput import GoodputMeter
 from laptop.ble_parameters import prefer_throughput
 from laptop.ble_shutdown import disable_notifications_remotely
+from laptop.link_watchdog import StarvedLinkWatchdog, full_notification_packets
 
 SERVICE_UUID = "6e1c0001-7a45-4dc4-b678-3f2d5a9c1001"
 SENSOR_UUID = "6e1c0005-7a45-4dc4-b678-3f2d5a9c1001"
@@ -51,6 +53,11 @@ class BridgeConfig:
     source_rate: Optional[int] = None
     seed: Optional[int] = None
     sensor_version: int = 3
+    # Starved-link watchdog (laptop.link_watchdog): seconds of full notifications
+    # with seq gaps before the link is rebuilt (None turns it off), and the least
+    # time between two such reconnects.
+    starvation_window: Optional[float] = 2.0
+    starvation_cooldown: float = 10.0
 
     def __post_init__(self):
         if type(self.sensor_version) is not int or self.sensor_version not in (3,4):
@@ -79,6 +86,14 @@ class BridgeConfig:
         for value in [self.freshness, self.io_timeout, self.scan_timeout, self.connect_timeout]:
             if not math.isfinite(value) or value <= 0:
                 raise ValueError("timeouts/freshness must be positive finite seconds")
+        for value, name, optional in ((self.starvation_window, "starvation window", True),
+                                      (self.starvation_cooldown, "starvation cooldown", False)):
+            if value is None and optional:
+                continue
+            if isinstance(value, bool) or not isinstance(value, (int, float)) \
+                    or not math.isfinite(value) or value <= 0:
+                raise ValueError(f"{name} must be positive finite seconds"
+                                 + (" or None" if optional else ""))
 
 
 @dataclass(frozen=True)
@@ -194,6 +209,8 @@ class Metrics:
     identity_mismatches: int = 0
     source_stats_errors: int = 0
     disconnects: int = 0
+    starved_reconnects: int = 0
+    starved_held: int = 0
 
 
 @dataclass
@@ -222,6 +239,8 @@ class Bridge:
             self._sensor_v4 = sensor_v4
         self.packet_size = self._sensor_v4.PACKET_SIZE if self._sensor_v4 else PACKET_SIZE
         self.sensor_mtu_floor = self._sensor_v4.SENSOR_MTU_FLOOR if self._sensor_v4 else SENSOR_MTU_FLOOR
+        self.max_packets_per_notification = (self._sensor_v4.MAX_PACKETS_PER_NOTIFICATION
+                                             if self._sensor_v4 else MAX_PACKETS_PER_NOTIFICATION)
         self.clock = clock
         self.inbox = RawInbox(config.queue_capacity)
         self.metrics = Metrics()
@@ -248,6 +267,14 @@ class Bridge:
         self.observation_received = 0
         self.observation_max_silence = 0.0
         self._observation_last = None
+        # One watchdog for the bridge's whole life (its cooldown spans
+        # connections); ble_loop arms it per connection under the notification
+        # lock with that connection's generation and wakeup.
+        self.starvation = (StarvedLinkWatchdog(config.starvation_window, config.starvation_cooldown)
+                           if config.starvation_window is not None else None)
+        self._starvation_generation = 0
+        self._starvation_wake = None
+        self.last_starvation = None
         # The board counts its send ticks (sent or skipped) only while sensor
         # notifications are on: from the first subscription to the snapshot
         # that proves they stopped. A gated board's coverage is judged over it.
@@ -314,7 +341,8 @@ class Bridge:
         The packets share the notification's arrival time. A notification that
         does not split stays one item, which the writer counts as malformed.
         callback_received and observation_received count packets; silence is
-        measured between notifications.
+        measured between notifications. The starved-link watchdog sees each
+        accepted notification of the current connection once.
         """
         received_at = self.clock()
         try:
@@ -322,6 +350,7 @@ class Bridge:
         except (ValueError, TypeError):
             pieces = (bytes(data),)
         accepted = 0
+        packets = []
         for index, piece in enumerate(pieces):
             if not self.inbox.put(generation, piece, received_at):
                 continue
@@ -330,6 +359,7 @@ class Bridge:
                 packet = self._codec("decode_packet", piece)
                 if (self.config.expected_device_id is None or
                         packet.device_id == self.config.expected_device_id):
+                    packets.append((packet.boot_id, packet.seq))
                     self.goodput.record(packet, received_at)
                     self.log("sensor", direction="ESP->laptop", version=packet.version,
                              boot_id=packet.boot_id, seq=packet.seq, uptime_ms=packet.uptime_ms,
@@ -341,6 +371,7 @@ class Bridge:
                          validation="malformed")
         if not accepted:
             return False
+        starvation = wake = None
         with self._notification_lock:
             self.callback_received += accepted
             self.notifications_received += 1
@@ -351,7 +382,36 @@ class Bridge:
                     received_at - self._observation_last)
                 self._observation_last = received_at
                 self.observation_received += accepted
+            if self.starvation is not None and generation == self._starvation_generation:
+                starvation = self.starvation.observe(received_at, len(pieces), packets)
+                if starvation is not None and starvation.action == "reconnect":
+                    self.last_starvation = starvation
+                    wake = self._starvation_wake
+                elif starvation is not None:
+                    self.metrics.starved_held += 1
+        if starvation is not None:
+            self._link_starved(generation, starvation, wake)
         return True
+
+    def _link_starved(self, generation, starvation, wake):
+        """Record a starved link and, for a reconnect, wake ble_loop from any thread."""
+        self.log("BLE_link_starved", direction="ESP<->laptop", generation=generation,
+                 action=starvation.action, streak_seconds=round(starvation.streak_seconds, 3),
+                 notifications=starvation.notifications, missing=starvation.missing,
+                 full_packets=starvation.full_packets, window=self.config.starvation_window,
+                 cooldown=self.config.starvation_cooldown)
+        LOG.warning("BLE link starved device=%s: %d full notifications in %.1f s, %d samples "
+                    "missing; %s", self.config.expected_device_id, starvation.notifications,
+                    starvation.streak_seconds, starvation.missing,
+                    "reconnecting" if starvation.action == "reconnect"
+                    else "reconnect held by the {:g} s cooldown".format(
+                        self.config.starvation_cooldown))
+        if wake is not None:
+            loop, event = wake
+            try:
+                loop.call_soon_threadsafe(event.set)
+            except RuntimeError:
+                pass  # the loop has closed: the connection is already gone
 
     def begin_observation(self, now=None):
         now = self.clock() if now is None else now
@@ -737,7 +797,9 @@ class Bridge:
             subscribed = False
             controls_subscribed = False
             normal_stop = False
+            starved_stop = False
             disconnected = asyncio.Event()
+            starved = asyncio.Event()
             generation += 1
             current = generation
             try:
@@ -812,6 +874,13 @@ class Bridge:
                     if self.config.source_rate is not None:
                         await self.control.set_rate(self.config.source_rate)
                         self.source_rate_confirmed = self.config.source_rate
+                if self.starvation is not None:
+                    full_packets = full_notification_packets(
+                        client.mtu_size, self.packet_size, self.max_packets_per_notification)
+                    with self._notification_lock:
+                        self.starvation.connection_started(full_packets)
+                        self._starvation_generation = current
+                        self._starvation_wake = loop, starved
                 self.inbox.activate(current)
                 def notification(_sender, data, gen=current):
                     self.enqueue(gen, data)
@@ -824,23 +893,38 @@ class Bridge:
                          mtu=client.mtu_size, authenticated=not self.config.diagnostic_unprotected)
                 delay = 0.5
                 active_event.set()
-                if stop_event is None:
-                    await disconnected.wait()
-                else:
-                    disconnected_wait = asyncio.create_task(disconnected.wait())
-                    stop_wait = asyncio.create_task(stop_event.wait())
+                waits = {"disconnected": asyncio.create_task(disconnected.wait()),
+                         "starved": asyncio.create_task(starved.wait())}
+                if stop_event is not None:
+                    waits["stop"] = asyncio.create_task(stop_event.wait())
+                try:
                     done, pending = await asyncio.wait(
-                        (disconnected_wait, stop_wait),
-                        return_when=asyncio.FIRST_COMPLETED)
-                    for task in pending:
-                        task.cancel()
-                    await asyncio.gather(*pending, return_exceptions=True)
-                    normal_stop = (stop_wait in done and disconnected_wait not in done
-                                   and stop_event.is_set())
-                    if not normal_stop:
-                        self.metrics.disconnects += 1
-                        if self.source_audit is not None:
-                            self.source_audit.mark_interruption()
+                        waits.values(), return_when=asyncio.FIRST_COMPLETED)
+                finally:
+                    for task in waits.values():
+                        if not task.done():
+                            task.cancel()
+                await asyncio.gather(*pending, return_exceptions=True)
+                link_lost = waits["disconnected"] in done
+                # A real link loss is a disconnect. An operator stop, even one
+                # that lands in the same step as the watchdog's wakeup, still
+                # quiesces the source normally; only otherwise does the
+                # watchdog drop a link that is still up.
+                normal_stop = (stop_event is not None and stop_event.is_set()
+                               and not link_lost)
+                starved_stop = not normal_stop and not link_lost and waits["starved"] in done
+                if starved_stop:
+                    self.metrics.starved_reconnects += 1
+                    if self.source_audit is not None:
+                        self.source_audit.mark_interruption()
+                    starvation = self.last_starvation
+                    self.log("BLE_starved_reconnect", direction="ESP<->laptop", generation=current,
+                             streak_seconds=round(starvation.streak_seconds, 3),
+                             notifications=starvation.notifications, missing=starvation.missing)
+                elif stop_event is not None and not normal_stop:
+                    self.metrics.disconnects += 1
+                    if self.source_audit is not None:
+                        self.source_audit.mark_interruption()
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
@@ -956,7 +1040,14 @@ class Bridge:
                             self.log("source_final_failed", error_type=type(exc).__name__)
                             LOG.warning("BLE cleanup failed operation=read_source_stats error_type=%s",
                                         type(exc).__name__)
-                    self.inbox.deactivate(preserve=normal_stop and stopped_notifications)
+                    # A starved link was still up and its samples arrived whole and
+                    # in order, so its accepted tail drains like a normal stop's:
+                    # the writer forwards it (freshness still applies) during the
+                    # reconnect delay, and the next connection's activate()
+                    # discards, and counts, whatever is left. Dropping it would add
+                    # a laptop loss to the glove's. A lost link drops its tail.
+                    self.inbox.deactivate(preserve=(normal_stop or starved_stop)
+                                          and stopped_notifications)
                     active_event.clear()
                     if connection_preference is not None:
                         connection_preference.refresh()
@@ -1068,6 +1159,8 @@ class Bridge:
                                    "ack_window": self.config.ack_window,
                                    "queue_capacity": self.config.queue_capacity,
                                    "freshness_seconds": self.config.freshness,
+                                   "starvation_window_seconds": self.config.starvation_window,
+                                   "starvation_cooldown_seconds": self.config.starvation_cooldown,
                                    "fixture_seed": self.config.seed},
                     source=source, source_issue=source_issue)
 

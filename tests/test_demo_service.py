@@ -60,7 +60,39 @@ def test_start_restarts_the_deployed_model_too(service, monkeypatch, tmp_path):
     # A record whose model cannot be a module name is not trusted: fall back to an older one.
     write_record(records, "20261016T020000Z", {"status": "deployed", "current": running(
         service.BOARD_ROOT + "/source-co-v3-20261016T020000Z", "--model", "x; rm -rf /")})
-    assert service.newest_deployment() == (folder, "wen_model.board", model_path)
+    assert service.newest_deployment() == (folder, "wen_model.board", model_path, 3)
+
+
+def test_start_restarts_the_deployed_sensor_version(service, monkeypatch, tmp_path):
+    records = tmp_path / "deployments"
+    monkeypatch.setattr(service, "DEPLOYMENTS", records)
+    v3 = service.BOARD_ROOT + "/source-co-v3-20261027T010000Z"
+    write_record(records, "20261027T010000Z", {"status": "deployed", "current": running(
+        v3, "--session-id", "ltc-comms", "--model", "ultra96.model_bridge")})
+    arguments = launch_arguments(service.start_script("ltc-comms"))
+    assert "--sensor-version" not in arguments and arguments[-2:] == ["--model", "ultra96.model_bridge"]
+    v4 = service.BOARD_ROOT + "/source-co-v4-20261027T020000Z"
+    write_record(records, "20261027T020000Z", {"status": "deployed", "current": running(
+        v4, "--session-id", "ltc-comms", "--model", "ultra96.model_bridge", "--sensor-version", "4")})
+    arguments = launch_arguments(service.start_script("ltc-comms"))
+    assert arguments[-4:] == ["--model", "ultra96.model_bridge", "--sensor-version", "4"]
+    assert service.newest_deployment() == (v4, "ultra96.model_bridge", None, 4)
+    # A record whose sensor version is neither 3 nor 4 is not trusted: fall back to an older one.
+    for stamp, bad in (("20261027T030000Z", "5"), ("20261027T040000Z", "4; reboot")):
+        write_record(records, stamp, {"status": "deployed", "current": running(
+            service.BOARD_ROOT + "/source-co-v4-" + stamp, "--sensor-version", bad)})
+        assert service.newest_deployment() == (v4, "ultra96.model_bridge", None, 4)
+
+
+@pytest.mark.parametrize("extra, version", [((), 3), (("--sensor-version", "4"), 4)])
+def test_start_prints_the_sensor_version_it_restarts(service, monkeypatch, tmp_path, capsys, extra, version):
+    records = tmp_path / "deployments"
+    monkeypatch.setattr(service, "DEPLOYMENTS", records)
+    write_record(records, "20261027T050000Z", {"status": "deployed", "current": running(
+        service.BOARD_ROOT + "/source-co-v4-20261027T050000Z", *extra)})
+    monkeypatch.setattr("builtins.input", lambda _: "q")
+    assert service.main(start=True) == 130
+    assert "Sensor protocol: v{} ".format(version) in capsys.readouterr().out
 
 
 @pytest.fixture
@@ -225,3 +257,56 @@ readlink() { [ "$1" = /proc/456/cwd ] || return 97; printf '/deployed/source\\n'
     output, = outputs
     assert "LISTENERS" in output and "456 ultra96.server" in output
     assert "Server PID 456, working directory: /deployed/source" in output
+    assert "Model runner processes of any user, as PID:TICKS" in output
+
+
+def fake_process(proc, pid, argv, ticks, name="python"):
+    folder = proc / str(pid)
+    folder.mkdir(parents=True)
+    (folder / "cmdline").write_bytes(b"".join(part.encode() + bytes([0]) for part in argv))
+    # Fields 3..21, then the start ticks (field 22), then more fields.
+    fields = ["S"] + [str(number) for number in range(4, 22)] + [ticks, "4096", "17"]
+    (folder / "stat").write_text("{} ({}) {}\n".format(pid, name, " ".join(fields)))
+
+
+def test_status_lists_every_model_runner_process_as_pid_and_start_ticks(service, local_shell, tmp_path):
+    proc = tmp_path / "proc dir"
+    fake_process(proc, 177087, ["/usr/local/share/pynq-venv/bin/python", "-m", "src.socket_worker",
+                                "--socket", "/var/tmp/x.sock"], "611890431", name="py (thon) x")
+    fake_process(proc, 2001, ["sudo", "-E", "python3", "-m", "src.socket_worker_hand", "--socket",
+                              "/var/tmp/x.sock"], "700")
+    fake_process(proc, 3001, ["/usr/bin/python3", "-u", "-m", "ultra96.server"], "800")
+    fake_process(proc, 4001, [], "900", name="kworker/0:1")
+    (proc / "5001").mkdir()  # a process that ended while the list was read
+    (proc / "self").mkdir()
+    script = service.runner_processes_script(proc.as_posix())
+    result = subprocess.run([local_shell, "-c", "set -eu\n" + script], capture_output=True, text=True,
+                            timeout=10)
+    assert result.returncode == 0, result.stderr
+    lines = result.stdout.splitlines()
+    assert lines[1].startswith("Model runner processes of any user, as PID:TICKS")
+    assert sorted(lines[2:]) == [
+        "  177087:611890431 /usr/local/share/pynq-venv/bin/python -m src.socket_worker --socket /var/tmp/x.sock",
+        "  2001:700 sudo -E python3 -m src.socket_worker_hand --socket /var/tmp/x.sock"]
+
+
+def test_status_says_none_when_no_model_runner_runs_and_never_lists_itself(service, local_shell, tmp_path):
+    proc = tmp_path / "proc"
+    script = service.runner_processes_script(proc.as_posix())
+    # The shell that runs the status script holds the whole script in its own command line.
+    fake_process(proc, 6001, ["sh", "-c", script], "1000", name="sh")
+    result = subprocess.run([local_shell, "-c", "set -eu\n" + script], capture_output=True, text=True,
+                            timeout=10)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines()[2:] == ["  none"]
+    assert "socket_worker" not in script
+    assert service.runner_processes_script().count("/proc/[0-9]*") == 1
+
+
+def test_service_ssh_uses_the_given_jump_login(service, monkeypatch):
+    calls = []
+    monkeypatch.setattr(service.subprocess, "run",
+                        lambda command, **kwargs: calls.append(command) or subprocess.CompletedProcess(command, 0))
+    assert service.main(jump="e0123456@stujump.comp.nus.edu.sg") == 0
+    proxy = next(o for o in calls[0] if o.startswith("ProxyCommand="))
+    assert "e0123456@stujump.comp.nus.edu.sg" in proxy and "yanjie" not in proxy

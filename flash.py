@@ -1,4 +1,13 @@
-"""Build both protected firmware profiles, then flash LEFT and RIGHT using one programming USB cable."""
+"""Build both protected firmware profiles, then flash LEFT and RIGHT using one programming USB cable.
+
+Without options: the built-in dummy module (sensor packet version 3, 38 bytes, 11 values).
+--glove: the real gloves with the glove owner's sensor module (version 3), sending every
+sample (IDLE included) at 50 Hz from boot.
+--flex3: the three-flex format (version 4, 40 bytes, 12 values, LCS4) at 50 Hz from boot:
+the dummy module on bare boards, or with --glove the real three-flex gloves. Capture it
+with python demo.py ... --sensor-version 4 against a service deployed with
+python -m tools.deploy_service --sensor-version 4.
+"""
 import argparse
 import json
 from pathlib import Path
@@ -87,16 +96,23 @@ def _read_board_address(port):
     return _bluetooth_address(result.stdout)
 
 
-def _flash(glove=False):
+def environments(glove=False, flex3=False):
+    """The LEFT and RIGHT PlatformIO environments, e.g. firebeetle32-left-glove-flex3."""
+    suffix = ("-glove" if glove else "") + ("-flex3" if flex3 else "")
+    return tuple("firebeetle32-" + label + suffix for label in ROLES)
+
+
+def _flash(glove=False, flex3=False):
+    targets = dict(zip(ROLES, environments(glove, flex3)))
     _run([sys.executable, "-m", "tools.generate_dummy_fixtures"])
-    # The real gloves build the glove owner's module from copies; refuse stale ones.
-    suffix = "-glove" if glove else ""
+    # The real gloves (two- or three-flex) build the glove owner's module from copies;
+    # refuse stale ones.
     if glove:
         _run([sys.executable, "-m", "tools.sync_glove_module", "--check"])
     base = _pio() + ["run", "-d", str(ROOT / "firmware" / "esp32")]
     # Finish both builds before asking the operator to connect either board.
     for label in ROLES:
-        _run(base + ["-e", "firebeetle32-" + label + suffix])
+        _run(base + ["-e", targets[label]])
     detected = []
     for device_id, label in enumerate(ROLES, start=1):
         swap = "Disconnect LEFT, then connect" if device_id == 2 else "Connect"
@@ -118,12 +134,15 @@ def _flash(glove=False):
             # Block stale capture defaults before an upload can change physical board roles.
             save_boards(bluetooth)
         print(f"Uploading {label.upper()} / device {device_id} on {port}; Bluetooth {bluetooth}.")
-        _run(base + ["-e", "firebeetle32-" + label + suffix, "-t", "upload", "--upload-port", port])
+        _run(base + ["-e", targets[label], "-t", "upload", "--upload-port", port])
         detected.append(bluetooth)
         print(f'Upload succeeded: attach {label.upper()} / ID {device_id} label to this board ({bluetooth}).')
     save_boards(*detected)
     print(f'Board mapping saved: {CONFIG_PATH}\nLEFT={detected[0]}\nRIGHT={detected[1]}')
     print("Both uploads succeeded. Disconnect laptop USB and power both boards independently for the BLE demo.")
+    if flex3:
+        print("These boards send sensor packet version 4: capture them with --sensor-version 4 "
+              "(python demo.py start --sensor-version 4) against a version 4 Ultra96 service.")
 
 
 def _pair(selection):
@@ -146,7 +165,13 @@ def main(argv=None):
                        help="Check or establish authenticated bonds; default: both.")
     modes.add_argument("--monitor", metavar="COMx", help="Private 115200-baud serial monitor in this terminal.")
     parser.add_argument("--glove", action="store_true",
-                        help="flash the real gloves: the glove owner's sensor module, sending only while MOVING")
+                        help="flash the real gloves: the glove owner's sensor module, sending every "
+                             "sample (IDLE included) at 50 Hz from boot")
+    parser.add_argument("--flex3", action="store_true",
+                        help="the three-flex format (sensor version 4: 40-byte packets, 12 values, "
+                             "50 Hz from boot): firebeetle32-left/right-flex3 (dummy module, bare "
+                             "boards) or, with --glove, firebeetle32-left/right-glove-flex3 (the "
+                             "real three-flex gloves)")
     args = parser.parse_args(argv)  # --help exits before any hardware operation.
     try:
         if args.ports:
@@ -167,7 +192,7 @@ def main(argv=None):
             print("Private serial monitor: keep passkeys off camera. No log is saved; Ctrl+C exits.")
             _run(_pio() + ["device", "monitor", "--port", port, "--baud", "115200", "--no-reconnect"])
         else:
-            _flash(glove=args.glove)
+            _flash(glove=args.glove, flex3=args.flex3)
         return 0
     except KeyboardInterrupt:
         print("\nCancelled; remaining operations were not run.")

@@ -54,7 +54,7 @@ def test_live_dispatches_capture_and_service_dispatches_maintenance(monkeypatch)
     assert calls[0].keyboard is True
     from tools import demo_service
     monkeypatch.setattr(demo_service, "main",
-                        lambda start=False, session_id=None: calls.append(start) or 8)
+                        lambda start=False, session_id=None, jump=None: calls.append(start) or 8)
     assert demo.main(["service"]) == 8
     assert calls[-1] is False
     assert demo.main(["service", "--start"]) == 8
@@ -67,3 +67,22 @@ def test_help_does_not_access_devices_or_services_outside_repo(tmp_path, mode):
                             cwd=tmp_path, capture_output=True, text=True, timeout=10)
     assert result.returncode == 0, result.stderr
     assert "usage:" in result.stdout
+
+
+@pytest.mark.parametrize("command", [["tunnel"], ["start"], ["service"]])
+def test_the_jump_login_comes_from_ltc_jump_user_or_stays_the_owners(monkeypatch, command):
+    monkeypatch.delenv("LTC_JUMP_USER", raising=False)
+    assert demo._parser().parse_args(command).jump == "yanjie@stujump.comp.nus.edu.sg"
+    monkeypatch.setenv("LTC_JUMP_USER", "e0123456")
+    assert demo._parser().parse_args(command).jump == "e0123456@stujump.comp.nus.edu.sg"
+    given = demo._parser().parse_args(command + ["--jump", "e7654321@stujump.comp.nus.edu.sg"])
+    assert given.jump == "e7654321@stujump.comp.nus.edu.sg"
+
+
+def test_service_passes_the_jump_login_on(monkeypatch):
+    from tools import demo_service
+    seen = []
+    monkeypatch.setattr(demo_service, "main", lambda start=False, session_id=None, jump=None:
+                        seen.append(jump) or 0)
+    assert demo.main(["service", "--jump", "e0123456@stujump.comp.nus.edu.sg"]) == 0
+    assert seen == ["e0123456@stujump.comp.nus.edu.sg"]

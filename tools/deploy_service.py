@@ -22,36 +22,60 @@ installs a renewed server certificate, and then, on the board:
      root through sudo (ultra96/model_runner_launch.py), replacing the runner
      this tool started last. The owner types the sudo password too; it reaches
      sudo on stdin. A runner that does not start leaves the new service running
-     and the tool exits nonzero.
+     and the tool exits nonzero. A runner started by hand is replaced only when
+     named with --replace-runner PID:START_TICKS ('python demo.py service' lists
+     them): the launcher stops it before the new runner starts, and only while
+     that PID still has those start ticks (one already gone is skipped and the
+     deploy goes on); a PID that runs anything but a Python model runner is
+     refused before anything is stopped, and the new runner is not started.
 Apart from step 6 it never uses sudo, and it never touches other users' processes.
+
+--sensor-version 4 (opt-in; default 3) starts the new service with --sensor-version 4:
+twelve-channel SENSOR_BATCH and INGEST_ACK at v=4, results still at v=3. Its board
+folder is source-co-v4-<stamp>; a v3 deploy keeps source-co-v3-<stamp> and the same argv.
 
     python -m tools.deploy_service --server-cert-dir <folder with server-cert.pem and server-key.pem>
     python -m tools.deploy_service --dry-run
     python -m tools.deploy_service --model ultra96.model_bridge --runner /home/xilinx/<folder>/<runner>.py
     python -m tools.deploy_service --model ultra96.model_bridge --runner-module src.socket_worker \
         --runner-cwd /tmp/cnn_conv1d/ai_integration --runner-arg=--weights --runner-arg <file> ...
+    python -m tools.deploy_service --sensor-version 4 --model ultra96.model_bridge \
+        --runner-module src.socket_worker_hand --runner-cwd <board checkout> ... \
+        --replace-runner 177087:611890431
 """
 import argparse
 from datetime import datetime, timezone
 import getpass
 import hashlib
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import shlex
 import socket
 import sys
 
 from tools.demo_service import BOARD_ROOT
+from tools.ssh_tunnel import JUMP_HOST, default_jump_user
 from ultra96.protocol import validate_session
 
 ROOT = Path(__file__).resolve().parents[1]
-JUMP_HOST = "stujump.comp.nus.edu.sg"
 BOARD_HOST = "makerslab-fpga-35.ddns.comp.nus.edu.sg"
 RECORDS = ROOT / ".comms-local" / "deployments"
 BRIDGE_MODEL = "ultra96.model_bridge"
 PYNQ_PYTHON = "/usr/local/share/pynq-venv/bin/python"
 MODULE_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*")
+# A runner started by hand, as /proc shows it: PID and start ticks (stat field 22).
+REPLACE_RUNNER = re.compile(r"([1-9][0-9]*):([0-9]+)")
+# What the launcher did to each of them ("stop" in its "replaced" list), as the tool prints it.
+REPLACED_STOPS = {
+    "sigterm": "stopped with SIGTERM",
+    "sigkill": "stopped with SIGKILL",
+    "already_gone": "already gone, nothing signalled",
+    "failed": "NOT stopped (see the error below); it may still be running and hold the bridge connection",
+}
+# The paired runners read eleven channels (sensor v3); the hand worker reads twelve (v4).
+ELEVEN_CHANNEL_RUNNERS = ("src.socket_worker", "src.socket_worker_full")
+HAND_RUNNER = "src.socket_worker_hand"
 
 REMOTE_PROGRAM = r'''
 import compileall, json, os, shutil, signal, ssl, subprocess, sys, time
@@ -186,6 +210,9 @@ if options.get("model"):
     new_args += ["--model", options["model"]]
 if options.get("model_path"):
     new_args += ["--model-path", options["model_path"]]
+# Only an opt-in v4 deploy adds an argument; a v3 service starts exactly as before.
+if options.get("sensor_version", 3) == 4:
+    new_args += ["--sensor-version", "4"]
 
 
 def alive(process):
@@ -308,11 +335,13 @@ def start_runner(runner):
             json.dumps(launch_options)]
     if runner.get("sudo", True):
         argv = ["sudo", "-S", "-p", "", "--"] + argv
+    # Each runner started by hand may take 5 s after SIGTERM and 5 s after SIGKILL.
+    answer = 60 + 10 * len(runner.get("replace", []))
     try:
-        done = subprocess.run(argv, input=sudo_password, capture_output=True, text=True, timeout=60,
+        done = subprocess.run(argv, input=sudo_password, capture_output=True, text=True, timeout=answer,
                               cwd="/")
     except subprocess.TimeoutExpired:
-        return dict(status="failed", error="the runner launcher did not answer within 60 s",
+        return dict(status="failed", error="the runner launcher did not answer within {} s".format(answer),
                     previous_running=recorded_runner())
     lines = [line for line in done.stdout.splitlines() if line.startswith("{")]
     if lines:
@@ -368,14 +397,19 @@ def options_from(args):
         raise ValueError("--model-path needs --model")
     if not 5 <= args.start_timeout <= 300:
         raise ValueError("--start-timeout must be 5..300 seconds")
+    sensor_version = getattr(args, "sensor_version", 3)
+    if type(sensor_version) is not int or sensor_version not in (3, 4):
+        raise ValueError("--sensor-version must be 3 or 4")
     options = dict(session_id=args.session_id, event_log=not args.no_event_log, model=args.model,
-                   model_path=args.model_path, start_timeout=args.start_timeout)
+                   model_path=args.model_path, start_timeout=args.start_timeout,
+                   sensor_version=sensor_version)
     runner = getattr(args, "runner", None)
     module = getattr(args, "runner_module", None)
     cwd = getattr(args, "runner_cwd", None)
+    replace = getattr(args, "replace_runner", None) or []
     if runner is None and module is None:
-        if cwd is not None or getattr(args, "runner_arg", []):
-            raise ValueError("--runner-cwd and --runner-arg need --runner or --runner-module")
+        if cwd is not None or getattr(args, "runner_arg", []) or replace:
+            raise ValueError("--runner-cwd, --runner-arg and --replace-runner need --runner or --runner-module")
         return options
     if runner is not None and module is not None:
         raise ValueError("give --runner (a script) or --runner-module (python -m), not both")
@@ -386,6 +420,7 @@ def options_from(args):
             raise ValueError("--runner-module must be a dotted Python module name, such as src.socket_worker")
         if cwd is None:
             raise ValueError("--runner-module needs --runner-cwd, the board folder it runs from")
+    _check_runner_version(module, runner, sensor_version)
     paths = [("--runner", runner), ("--runner-cwd", cwd), ("--runner-python", args.runner_python)]
     for name, value in paths:
         if value is not None and not (value.startswith("/") and value.isprintable()):
@@ -396,7 +431,40 @@ def options_from(args):
     if cwd is not None:
         options["runner"]["cwd"] = cwd
     options["runner"].update(python=args.runner_python, args=list(args.runner_arg))
+    entries = replace_entries(replace)
+    if entries:
+        options["runner"]["replace"] = entries
     return options
+
+
+def _check_runner_version(module, script, sensor_version):
+    """Refuse a runner that reads the other sensor version's channels."""
+    # A module by its name; a script by its file name (src/socket_worker.py run directly).
+    name = module if module is not None else PurePosixPath(script).name
+    if sensor_version == 4 and name in ELEVEN_CHANNEL_RUNNERS + ("socket_worker.py", "socket_worker_full.py"):
+        raise ValueError("--sensor-version 4 sends twelve channels, but {} is an eleven-channel paired "
+                         "runner; give the twelve-channel runner ({}) or deploy with --sensor-version 3"
+                         .format(name, HAND_RUNNER))
+    if sensor_version == 3 and name in (HAND_RUNNER, "socket_worker_hand.py"):
+        raise ValueError("{} reads the twelve sensor-v4 channels: deploy it with --sensor-version 4"
+                         .format(name))
+
+
+def replace_entries(values):
+    """The --replace-runner PID:START_TICKS values as the launcher's "replace" entries."""
+    entries = []
+    for value in values:
+        match = REPLACE_RUNNER.fullmatch(value) if isinstance(value, str) else None
+        if match is None:
+            raise ValueError("--replace-runner must be PID:START_TICKS, such as 177087:611890431 "
+                             "('python demo.py service' lists the runners with both)")
+        pid, ticks = int(match.group(1)), str(int(match.group(2)))
+        if pid == 1:
+            raise ValueError("--replace-runner 1:... names init, never a model runner")
+        if any(entry["pid"] == pid for entry in entries):
+            raise ValueError("--replace-runner names PID {} twice".format(pid))
+        entries.append(dict(pid=pid, start_ticks=ticks))
+    return entries
 
 
 def runner_line(runner):
@@ -451,14 +519,25 @@ def deploy(args):
     files = source_files()
     certificate = certificate_files(args.server_cert_dir)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    source = BOARD_ROOT + "/source-co-v3-" + stamp
+    version = options["sensor_version"]
+    source = BOARD_ROOT + "/source-co-v{}-".format(version) + stamp
     print(f"Board folder: {source}")
+    print("Sensor protocol: " + ("v4 (opt-in, --sensor-version 4: twelve channels; SENSOR_BATCH and "
+                                 "INGEST_ACK at v=4, results at v=3)" if version == 4
+                                 else "v3 (eleven channels; the default)"))
     print(f"Files: {len(files)} from common/ and ultra96/; certificate: "
           f"{'install ' + str(certificate[0].parent) if certificate else 'keep the one on the board'}")
     print("Options: " + json.dumps(options, sort_keys=True))
-    if options.get("runner"):
+    runner_options = options.get("runner")
+    if runner_options:
         print("Runner: after the service listens, as root (sudo, a login shell): "
-              + runner_line(options["runner"]) + "; it replaces the runner this tool started last")
+              + runner_line(runner_options) + "; it replaces the runner this tool started last")
+        for entry in runner_options.get("replace", []):
+            print("Replaces the runner started by hand, PID {pid} (start ticks {start_ticks}): stopped "
+                  "after the runner this tool started last and before the new runner starts, only while "
+                  "that PID still has those start ticks (otherwise it counts as already gone and the "
+                  "deploy goes on); if that PID runs something other than a Python model runner, the "
+                  "launcher refuses before it stops anything and the new runner is not started".format(**entry))
     if args.dry_run:
         print("Dry run: nothing was connected or changed.")
         return 0
@@ -480,8 +559,9 @@ def deploy(args):
             sftp.chmod(source + "/tls-incoming/server-key.pem", 0o600)
         # The longest silent stretch on the board: stop (10 s, then up to 5 s after SIGKILL),
         # the new service's start, its stop (up to 10 s) and the rollback's start; with a
-        # runner, up to 60 s more for sudo and the launcher.
-        wait = 2 * options["start_timeout"] + 120 + (60 if options.get("runner") else 0)
+        # runner, up to 60 s more for sudo and the launcher, and 10 s per runner it replaces.
+        wait = 2 * options["start_timeout"] + 120 + (
+            60 + 10 * len(runner_options.get("replace", [])) if runner_options else 0)
         stdin, out, err = board.exec_command(remote_command(BOARD_ROOT, source, stamp, options),
                                              timeout=wait)
         if sudo_password is not None:
@@ -507,9 +587,19 @@ def deploy(args):
             path.write_text(json.dumps(json.loads(lines[-1]), indent=2), encoding="utf-8")
             print("Local record: " + str(path))
         runner = json.loads(lines[-1]).get("runner") if lines else None
+        if runner is not None:
+            for item in runner.get("replaced", []):
+                print("Runner started by hand, PID {} (start ticks {}): {}{}".format(
+                    item.get("pid"), item.get("start_ticks"),
+                    REPLACED_STOPS.get(item.get("stop"), item.get("stop")),
+                    "; it ran " + " ".join(item["argv"]) if item.get("argv") else ""))
         if code == 3 and runner is not None:
             print("FAILED: the service is deployed and running, but the new model runner is not: "
                   + json.dumps(runner), file=sys.stderr)
+            if runner.get("status") == "conflict":
+                print("Another runner holds the bridge connection. 'python demo.py service' lists the "
+                      "model runner processes as PID:TICKS; deploy again with --replace-runner PID:TICKS "
+                      "for the one started by hand.", file=sys.stderr)
             if runner.get("previous_running"):
                 print("The runner of the previous --runner deploy (PID {}) is still running and serves "
                       "the new service with its own code. Fix the cause and deploy again with --runner "
@@ -552,10 +642,18 @@ def main(argv=None):
                         help="the Python that runs the runner (default: PYNQ's, " + PYNQ_PYTHON + ")")
     parser.add_argument("--runner-arg", action="append", default=[], metavar="ARG",
                         help="an argument for the runner (repeat; --runner-arg=--flag for a dash)")
+    parser.add_argument("--replace-runner", action="append", default=[], metavar="PID:START_TICKS",
+                        help="with --runner or --runner-module: a model runner started by hand to stop "
+                             "before the new runner starts (repeat); 'python demo.py service' lists "
+                             "them. Only that PID with those start ticks, and only a Python model runner")
+    parser.add_argument("--sensor-version", type=int, choices=(3, 4), default=3,
+                        help="sensor protocol of the new service: 3 (default) or the opt-in 4 "
+                             "(twelve channels; results stay at v=3)")
     parser.add_argument("--no-event-log", action="store_true", help="start without --event-log-dir")
     parser.add_argument("--start-timeout", type=float, default=30.0,
                         help="seconds to wait for both listeners (model loading counts)")
-    parser.add_argument("--jump-user", default="yanjie")
+    parser.add_argument("--jump-user", default=default_jump_user(),
+                        help="your NUS login for the jump host; default: LTC_JUMP_USER when set, else yanjie")
     parser.add_argument("--board-user", default="xilinx")
     parser.add_argument("--dry-run", action="store_true", help="print the plan; connect nothing")
     args = parser.parse_args(argv)

@@ -175,7 +175,10 @@ def test_help_runs_outside_repository_without_hardware(tmp_path):
     result = subprocess.run([sys.executable, str(ROOT / "flash.py"), "--help"], cwd=tmp_path,
                             input="", text=True, capture_output=True, timeout=10)
     assert result.returncode == 0, result.stderr
-    assert all(flag in result.stdout for flag in ("--ports", "--pair", "--monitor"))
+    assert all(flag in result.stdout for flag in ("--ports", "--pair", "--monitor", "--glove",
+                                                  "--flex3"))
+    # The glove environments build with COMMS_GLOVE_SEND_ALL=1: every sample, IDLE included.
+    assert "MOVING" not in result.stdout and "IDLE included" in result.stdout
 
 
 def test_glove_option_checks_the_module_copies_then_flashes_the_glove_environments(monkeypatch):
@@ -186,3 +189,44 @@ def test_glove_option_checks_the_module_copies_then_flashes_the_glove_environmen
     assert commands[3][-2:] == ["-e", "firebeetle32-right-glove"]
     assert uploads(commands)[0][-5:] == ["firebeetle32-left-glove", "-t", "upload", "--upload-port", "COM4"]
     assert uploads(commands)[1][-5:] == ["firebeetle32-right-glove", "-t", "upload", "--upload-port", "COM7"]
+
+
+def test_flex3_option_flashes_the_three_flex_dummy_environments_without_the_module_check(
+        monkeypatch, capsys):
+    module, commands, prompts = environment(monkeypatch)
+    assert module.main(["--flex3"]) == 0
+    assert commands[0][1:] == ["-m", "tools.generate_dummy_fixtures"]
+    assert not any("tools.sync_glove_module" in command for command in commands)
+    assert commands[1][-2:] == ["-e", "firebeetle32-left-flex3"]
+    assert commands[2][-2:] == ["-e", "firebeetle32-right-flex3"]
+    assert [count for _, count in prompts] == [3, 5]  # both builds finish before any prompt
+    assert uploads(commands)[0][-5:] == ["firebeetle32-left-flex3", "-t", "upload", "--upload-port", "COM4"]
+    assert uploads(commands)[1][-5:] == ["firebeetle32-right-flex3", "-t", "upload", "--upload-port", "COM7"]
+    assert "--sensor-version 4" in capsys.readouterr().out
+
+
+def test_glove_and_flex3_check_the_module_copies_then_flash_the_three_flex_gloves(monkeypatch):
+    module, commands, _ = environment(monkeypatch)
+    assert module.main(["--glove", "--flex3"]) == 0
+    assert commands[1][1:] == ["-m", "tools.sync_glove_module", "--check"]
+    assert commands[2][-2:] == ["-e", "firebeetle32-left-glove-flex3"]
+    assert commands[3][-2:] == ["-e", "firebeetle32-right-glove-flex3"]
+    assert uploads(commands)[0][-5:] == ["firebeetle32-left-glove-flex3", "-t", "upload", "--upload-port", "COM4"]
+    assert uploads(commands)[1][-5:] == ["firebeetle32-right-glove-flex3", "-t", "upload", "--upload-port", "COM7"]
+
+
+def test_a_failed_module_check_stops_a_three_flex_glove_flash_before_any_build(monkeypatch):
+    module, commands, prompts = environment(
+        monkeypatch, fail=lambda command: "tools.sync_glove_module" in command)
+    assert module.main(["--glove", "--flex3"]) == 7
+    assert len(commands) == 2 and prompts == [] and uploads(commands) == []
+
+
+def test_every_environment_flash_py_selects_exists_in_platformio_ini():
+    import re
+    module = importlib.import_module("flash")
+    text = (ROOT / "firmware" / "esp32" / "platformio.ini").read_text(encoding="utf-8")
+    defined = set(re.findall(r"^\[env:([^\]]+)\]", text, re.M))
+    for glove in (False, True):
+        for flex3 in (False, True):
+            assert set(module.environments(glove, flex3)) <= defined, (glove, flex3)
