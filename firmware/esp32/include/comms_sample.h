@@ -20,7 +20,10 @@ constexpr bool kOutOfRangeDrop = COMMS_OUT_OF_RANGE_DROP != 0;
 // yaw pitch roll (degrees), flex1 flex2 (0.0..1.0). Provisional until checked
 // against real glove samples.
 constexpr float kChannelScale[kChannelCount] = {
-    10000.0f, 10000.0f, 10000.0f, 100.0f, 100.0f, 100.0f,
+    10000.0f, 10000.0f, 10000.0f,
+    COMMS_WIDE_GYRO ? 10.0f : 100.0f,
+    COMMS_WIDE_GYRO ? 10.0f : 100.0f,
+    COMMS_WIDE_GYRO ? 10.0f : 100.0f,
     100.0f, 100.0f, 100.0f, 10000.0f, 10000.0f
 #if COMMS_FLEX3_GLOVE
     , 10000.0f

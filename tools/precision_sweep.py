@@ -50,9 +50,12 @@ def load_source(weights=None,run=None):
         return dict(parameters=p,features=22,classes=OLD_CLASSES,config=cfg,normalizer=None,
                     provenance={str(weights.resolve()):digest(weights)},mode='legacy_paired_regression')
     run=Path(run);cfg=read_json(run/'config.json');training=read_json(run/'training.json')
-    if (cfg.get('version')!='independent_hand_flex3_v1' or cfg.get('feature_columns')!=HAND_CHANNELS or
+    accepted_source=((cfg.get('version')=='independent_hand_flex3_v1' and cfg.get('sensor_packet_version')==4) or
+        (cfg.get('version')=='independent_hand_flex3_gyro_v5_v1' and cfg.get('sensor_packet_version')==5 and
+         cfg.get('gyro_transport_scale')==10 and cfg.get('gyro_sensor_full_scale_dps')==1000))
+    if (not accepted_source or cfg.get('feature_columns')!=HAND_CHANNELS or
         cfg.get('class_names')!=HAND_CLASSES or cfg.get('normalization')!='training-only per-feature mean/std after resampling' or
-        cfg.get('time_positions')!=50 or cfg.get('window_seconds')!=2.0 or cfg.get('sensor_packet_version')!=4 or
+        cfg.get('time_positions')!=50 or cfg.get('window_seconds')!=2.0 or
         cfg.get('sensor_packet_bytes')!=40 or cfg.get('flex_gpio')!={'flex1':34,'flex2':35,'flex3':39}):
         raise ValueError('Run mode requires the final three-flex 12-feature/seven-class preprocessing contract')
     if read_json(run/'class_names.json')!=HAND_CLASSES:raise ValueError('Class mapping mismatch')

@@ -29,7 +29,24 @@ constexpr uint8_t WHO_AM_I = 0x75;
 constexpr uint8_t EXPECTED_WHO_AM_I = 0x70;
 
 constexpr float ACCEL_SCALE = 16384.0f;  // MPU-6500 ±2 g
-constexpr float GYRO_SCALE = 131.0f;     // MPU-6500 ±250 deg/s
+// Opt-in wider sensor settings. Existing build environments retain ±250 deg/s.
+// Keep sensor full-scale selection and raw-to-deg/s conversion together.
+// v4 carries gyro *100; explicit v5 carries *10 in int16.
+#ifndef GLOVE_GYRO_RANGE_DPS
+#define GLOVE_GYRO_RANGE_DPS 250
+#endif
+#ifndef COMMS_WIDE_GYRO
+#define COMMS_WIDE_GYRO 0
+#endif
+static_assert(GLOVE_GYRO_RANGE_DPS == 250 || GLOVE_GYRO_RANGE_DPS == 500 ||
+              (COMMS_WIDE_GYRO && GLOVE_GYRO_RANGE_DPS == 1000),
+              "Only reviewed 250/500 deg/s or explicit v5 1000 deg/s settings are supported");
+static_assert(!COMMS_WIDE_GYRO || GLOVE_GYRO_RANGE_DPS == 1000,
+              "v5 real-glove diagnostic requires the reviewed 1000 deg/s sensor setting");
+constexpr uint8_t GYRO_CONFIG_VALUE = GLOVE_GYRO_RANGE_DPS == 1000 ? 0x10 :
+    (GLOVE_GYRO_RANGE_DPS == 500 ? 0x08 : 0x00);
+constexpr float GYRO_SCALE = GLOVE_GYRO_RANGE_DPS == 1000 ? 32.8f :
+    (GLOVE_GYRO_RANGE_DPS == 500 ? 65.5f : 131.0f);
 
 constexpr float MAHONY_KP = 3.0f;
 constexpr float MAHONY_KI = 0.0f;
@@ -457,10 +474,18 @@ bool gloveBegin() {
 
   if (!writeRegister(PWR_MGMT_1, 0x01) ||
       !writeRegister(CONFIG, 0x03) ||
-      !writeRegister(GYRO_CONFIG, 0x00) ||
+      !writeRegister(GYRO_CONFIG, GYRO_CONFIG_VALUE) ||
       !writeRegister(ACCEL_CONFIG, 0x00)) {
     return false;
   }
+
+  uint8_t gyroConfigReadback = 0;
+  if (!readRegister(GYRO_CONFIG, gyroConfigReadback) ||
+      (gyroConfigReadback & 0x18) != GYRO_CONFIG_VALUE) {
+    return false;
+  }
+  Serial.printf("gyro_config range_dps=%d sensitivity_lsb_per_dps=%.1f register=0x%02x\n",
+                GLOVE_GYRO_RANGE_DPS, static_cast<double>(GYRO_SCALE), gyroConfigReadback);
 
   analogReadResolution(12);
   pinMode(FLEX1_PIN, INPUT);

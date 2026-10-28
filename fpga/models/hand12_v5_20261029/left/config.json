@@ -1,0 +1,40 @@
+{
+  "version": "independent_hand_flex3_gyro_v5_v1",
+  "class_names": [
+    "PICKUP",
+    "DROP",
+    "CHOP",
+    "WASH",
+    "THROW",
+    "POURING",
+    "IDLE"
+  ],
+  "sensor_packet_version": 5,
+  "sensor_packet_bytes": 40,
+  "flex_gpio": {
+    "flex1": 34,
+    "flex2": 35,
+    "flex3": 39
+  },
+  "flex_normalization": "12-bit ADC reading / 4095; not calibrated bend fraction",
+  "feature_columns": [
+    "ax",
+    "ay",
+    "az",
+    "gx",
+    "gy",
+    "gz",
+    "yaw",
+    "pitch",
+    "roll",
+    "flex1",
+    "flex2",
+    "flex3"
+  ],
+  "window_seconds": 2.0,
+  "time_positions": 50,
+  "normalization": "training-only per-feature mean/std after resampling",
+  "angle_interpolation": "unwrap degrees, interpolate, wrap to [-180,180)",
+  "gyro_transport_scale": 10,
+  "gyro_sensor_full_scale_dps": 1000
+}

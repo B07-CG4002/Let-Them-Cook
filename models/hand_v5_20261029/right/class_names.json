@@ -1,0 +1,9 @@
+[
+  "PICKUP",
+  "DROP",
+  "CHOP",
+  "WASH",
+  "THROW",
+  "POURING",
+  "IDLE"
+]
