@@ -21,19 +21,29 @@ public final class CommsClient {
     private let options: TransportOptions
     private let onStatus: (String) -> Void
     private let onResult: (GestureResult) -> Void
+    private let onHandEvent: (HandEvent) -> Void
+    private let onInvalidHandEvent: () -> Void
     // The following state belongs exclusively to loop.
     private var attempt: ConnectionAttempt?
     private var retry: Scheduled<Void>?
     private var retryDelay: TimeAmount
+    // Version 2 subscriptions until a service ends one without SUBSCRIBED; then version 1 for good.
+    private var handEvents: Bool
 
-    public convenience init(route: SSHRoute, session: String, onStatus: @escaping (String) -> Void, onResult: @escaping (GestureResult) -> Void) {
-        self.init(route: route, session: session, options: TransportOptions(), onStatus: onStatus, onResult: onResult)
+    /// Subscribes with hand events (version 2) by default. onHandEvent receives each valid
+    /// HAND_EVENT; onInvalidHandEvent is told of each one that failed validation and was dropped.
+    public convenience init(route: SSHRoute, session: String, onStatus: @escaping (String) -> Void, onResult: @escaping (GestureResult) -> Void,
+                            onHandEvent: @escaping (HandEvent) -> Void = { _ in }, onInvalidHandEvent: @escaping () -> Void = {}) {
+        self.init(route: route, session: session, options: TransportOptions(), onStatus: onStatus, onResult: onResult,
+                  onHandEvent: onHandEvent, onInvalidHandEvent: onInvalidHandEvent)
     }
-    init(route: SSHRoute, session: String, options: TransportOptions, onStatus: @escaping (String) -> Void, onResult: @escaping (GestureResult) -> Void) {
+    init(route: SSHRoute, session: String, options: TransportOptions, onStatus: @escaping (String) -> Void, onResult: @escaping (GestureResult) -> Void,
+         onHandEvent: @escaping (HandEvent) -> Void = { _ in }, onInvalidHandEvent: @escaping () -> Void = {}) {
         self.route = RouteEndpoints(route); self.session = session; self.options = options
         credentials = CredentialVault(board: route.boardPassword, jump: route.jump?.password)
         self.onStatus = onStatus; self.onResult = onResult
-        loop = Self.group.next(); retryDelay = options.retryMinimum
+        self.onHandEvent = onHandEvent; self.onInvalidHandEvent = onInvalidHandEvent
+        loop = Self.group.next(); retryDelay = options.retryMinimum; handEvents = options.handEvents
     }
 
     /// Idempotent. A stopped client discards credentials and must be replaced to reconnect.
@@ -70,6 +80,14 @@ public final class CommsClient {
         lock.lock(); defer { lock.unlock() }
         if active && epoch == token { onResult(result) }
     }
+    private func emitHandEvent(_ event: HandEvent, epoch token: UInt64) {
+        lock.lock(); defer { lock.unlock() }
+        if active && epoch == token { onHandEvent(event) }
+    }
+    private func emitInvalidHandEvent(epoch token: UInt64) {
+        lock.lock(); defer { lock.unlock() }
+        if active && epoch == token { onInvalidHandEvent() }
+    }
 
     private func connect(epoch token: UInt64) {
         lock.lock()
@@ -77,10 +95,11 @@ public final class CommsClient {
         lock.unlock()
         let next = ConnectionAttempt()
         attempt = next
+        let handEvents = self.handEvents
         emitStatus("Connecting", epoch: token)
         guard current(token) else { next.cancel(); return }
         do {
-            _ = try CommsProtocol.subscribe(session: session)
+            _ = try CommsProtocol.subscribe(session: session, handEvents: handEvents)
             guard !route.boardHost.isEmpty, !route.boardUser.isEmpty, credentials.password(jumpHop: false)?.isEmpty == false,
                   route.caPEM.utf8.count <= 65_536, !route.caPEM.contains("PRIVATE KEY") else { throw TransportFailure.invalidConfiguration }
             let roots = try NIOSSLCertificate.fromPEMBytes(Array(route.caPEM.utf8))
@@ -140,7 +159,7 @@ public final class CommsClient {
                         child.eventLoop.makeCompletedFuture {
                             try child.pipeline.syncOperations.addHandler(SSHByteStream())
                             try child.pipeline.syncOperations.addHandler(try NIOSSLClientHandler(context: tls, serverHostname: "ultra96.week7.internal"))
-                            try child.pipeline.syncOperations.addHandler(Subscriber(session: self.session, options: self.options, onSubscribed: { [weak self, weak next] in
+                            try child.pipeline.syncOperations.addHandler(Subscriber(session: self.session, handEvents: handEvents, options: self.options, onSubscribed: { [weak self, weak next] in
                                 guard let self, let next, next.active, self.current(token) else { return }
                                 next.deadline?.cancel(); next.deadline = nil
                                 self.emitStatus("Subscribed", epoch: token)
@@ -148,6 +167,15 @@ public final class CommsClient {
                                 guard let self, let next, next.active, self.current(token) else { return }
                                 self.retryDelay = self.options.retryMinimum
                                 self.emitResult(result, epoch: token)
+                            }, onHandEvent: { [weak self, weak next] event in
+                                guard let self, let next, next.active, self.current(token) else { return }
+                                self.retryDelay = self.options.retryMinimum
+                                self.emitHandEvent(event, epoch: token)
+                            }, onInvalidHandEvent: { [weak self, weak next] in
+                                guard let self, let next, next.active, self.current(token) else { return }
+                                self.emitInvalidHandEvent(epoch: token)
+                            }, onUnacknowledged: { [weak next] in
+                                next?.unacknowledged = true
                             }, onFailure: { [weak self, weak next] error in
                                 guard let next else { return }; self?.failed(next, epoch: token, error: error)
                             }))
@@ -205,7 +233,13 @@ public final class CommsClient {
             lock.unlock()
             return
         }
-        emitStatus("Disconnected: \(reason); retrying", epoch: token)
+        var retrying = "retrying"
+        if connection.unacknowledged && handEvents {
+            // A service from before hand events closes on a version 2 SUBSCRIBE.
+            handEvents = false
+            retrying = "no hand events from this service; retrying with subscription version 1"
+        }
+        emitStatus("Disconnected: \(reason); \(retrying)", epoch: token)
         guard current(token) else { return }
         let delay = retryDelay
         retryDelay = .nanoseconds(min(options.retryMaximum.nanoseconds, delay.nanoseconds * 2))
@@ -215,6 +249,8 @@ public final class CommsClient {
 
 final class ConnectionAttempt {
     var active = true
+    // A version 2 SUBSCRIBE went out on the verified connection and SUBSCRIBED never came.
+    var unacknowledged = false
     private var roots: [Channel] = []
     var deadline: Scheduled<Void>?
     func register(_ channel: Channel) { roots.append(channel) }

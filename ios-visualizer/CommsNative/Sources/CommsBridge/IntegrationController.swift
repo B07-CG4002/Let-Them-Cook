@@ -7,6 +7,7 @@ import CommsTransport
 final class IntegrationController {
     static let shared = IntegrationController()
     private var state: DisplayState?
+    private var hands: HandEventState?
     private var client: CommsClient?
     private var button: UIButton?
     private weak var form: SetupViewController?
@@ -18,11 +19,13 @@ final class IntegrationController {
                                    legacyDirectory: support.appendingPathComponent("Week7", isDirectory: true))
     }
 
-    func install(state: DisplayState) {
+    func install(state: DisplayState, hands: HandEventState) {
         dispatchPrecondition(condition: .onQueue(.main))
         guard self.state == nil else { return }
         self.state = state
+        self.hands = hands
         _ = state.stop(status: "Tap Communications Connect to configure this iPhone")
+        _ = hands.stop()
         let center = NotificationCenter.default
         observers.append(center.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
             self?.disconnect(status: "Paused — return and connect again")
@@ -62,20 +65,27 @@ final class IntegrationController {
         guard let root = rootController(), form == nil else { return }
         let setup = SetupViewController(configuration: store.load(), caPEM: store.loadCA(), connected: client != nil)
         setup.onConnect = { [weak self] config, ca, boardPassword, jumpPassword in
-            guard let self = self, let state = self.state else { return }
+            guard let self = self, let state = self.state, let hands = self.hands else { return }
             try self.store.save(config, caPEM: ca)
             self.disconnect(status: "Connecting")
             let generation = state.begin(status: "Connecting")
+            let handGeneration = hands.begin()
             let jump = config.useJump ? SSHRoute.Jump(host: EnrolledTrust.jumpHost, user: config.jumpUser,
                                                        password: jumpPassword, hostKey: EnrolledTrust.jumpKey) : nil
             let route = SSHRoute(boardHost: EnrolledTrust.boardHost, boardUser: config.boardUser,
                                  boardPassword: boardPassword, boardHostKey: EnrolledTrust.boardKey,
                                  jump: jump, caPEM: ca)
             let client = CommsClient(route: route, session: "ltc-comms", onStatus: { status in
+                // Every connection step ends the hand states of the previous subscription.
+                _ = hands.resubscribe(generation: handGeneration)
                 if status == "Subscribed" { _ = state.setStatus(status, generation: generation) }
                 else { _ = state.clear(generation: generation, status: status) }
             }, onResult: { result in
                 _ = state.accept(result, generation: generation)
+            }, onHandEvent: { event in
+                _ = hands.accept(event, generation: handGeneration)
+            }, onInvalidHandEvent: {
+                _ = hands.rejectInvalid(generation: handGeneration)
             })
             self.client = client
             self.button?.configuration?.title = "Communications Settings"
@@ -92,6 +102,7 @@ final class IntegrationController {
         // Clear ownership before stopping: even synchronous late callbacks fail
         // the display generation check. Releasing the client forgets its route.
         _ = state?.stop(status: status)
+        _ = hands?.stop()
         let old = client; client = nil
         old?.stop()
         form?.clearPasswords()
@@ -105,6 +116,7 @@ final class IntegrationController {
         form?.dismiss(animated: false); form = nil
         button?.removeFromSuperview(); button = nil
         state = nil
+        hands = nil
     }
 }
 #endif

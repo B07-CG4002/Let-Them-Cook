@@ -152,9 +152,19 @@ final class FixtureConnections {
 }
 
 final class LocalPeers {
-    enum Behavior { case good, idle, partialPrefix, partialBody, resultBeforeAck, malformedResult, closeFirst }
+    // Every behavior but handEvents is a service from before hand events: it closes on a
+    // version 2 SUBSCRIBE. handEvents is the current service: it answers both versions,
+    // and a version 2 subscriber gets handStream.
+    enum Behavior { case good, idle, partialPrefix, partialBody, resultBeforeAck, malformedResult, closeFirst, handEvents }
     static let result = #"{"v":3,"type":"GESTURE_RESULT","session_id":"ltc-comms","device_id":1,"boot_id":7,"seq":42,"request_id":null,"result_id":"1:7:42","gesture":"WASH","confidence":0.93}"#
     static let ack = #"{"v":1,"type":"SUBSCRIBED","session_id":"ltc-comms"}"#
+    static let handAck = #"{"v":2,"type":"SUBSCRIBED","session_id":"ltc-comms","event_format":1}"#
+    static let epoch = "0123456789abcdef0123456789abcdef"
+    static let handStart = #"{"v":4,"type":"HAND_EVENT","event_format":1,"session_id":"ltc-comms","worker_epoch":"0123456789abcdef0123456789abcdef","device_id":1,"event_seq":1,"event_id":"0123456789abcdef0123456789abcdef:1:1","kind":"state_start","gesture":"CHOP","confidence":0.93,"source":{"boot_id":7,"seq":42,"uptime_ms":2400},"state_id":"0123456789abcdef0123456789abcdef:1:1","lease_ms":1000,"reason":"confirmed"}"#
+    static let handPulse = #"{"v":4,"type":"HAND_EVENT","event_format":1,"session_id":"ltc-comms","worker_epoch":"0123456789abcdef0123456789abcdef","device_id":2,"event_seq":1,"event_id":"0123456789abcdef0123456789abcdef:2:1","kind":"pulse","gesture":"THROW","confidence":0.88,"source":{"boot_id":9,"seq":43,"uptime_ms":2410},"state_id":null,"lease_ms":0,"reason":"confirmed"}"#
+    // A HAND_EVENT with a wrong field: dropped and counted, the connection stays up.
+    static let handInvalid = #"{"v":4,"type":"HAND_EVENT","event_format":1,"session_id":"ltc-comms","worker_epoch":"0123456789abcdef0123456789abcdef","device_id":2,"event_seq":2,"event_id":"0123456789abcdef0123456789abcdef:2:2","kind":"pulse","gesture":"CHOP","confidence":0.88,"source":{"boot_id":9,"seq":44,"uptime_ms":2420},"state_id":null,"lease_ms":0,"reason":"confirmed"}"#
+    static let handStream = [result, handStart, handInvalid, handPulse, result]
     let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
     let boardKey = NIOSSHPrivateKey(ed25519Key: Curve25519.Signing.PrivateKey())
     let jumpKey = NIOSSHPrivateKey(ed25519Key: Curve25519.Signing.PrivateKey())
@@ -235,6 +245,9 @@ final class LocalPeers {
         options.frameTimeout = .milliseconds(180)
         options.retryMinimum = .milliseconds(50)
         options.retryMaximum = .milliseconds(100)
+        // These fixtures test the transport on the version 1 subscription; the hand-event
+        // tests turn version 2 back on.
+        options.handEvents = false
         return options
     }
     func closeConnections() { connections.close() }
@@ -262,13 +275,20 @@ final class FixtureProtocol: ChannelInboundHandler {
         bytes.removeFirst(length + 4)
         let value = (try? JSONSerialization.jsonObject(with: Data(body))) as? [String: Any]
         let valid = value?.count == 3 && value?["type"] as? String == "SUBSCRIBE" && value?["session_id"] as? String == "ltc-comms" && value?["v"] as? Int == 1
-        let count = subscribe(valid)
-        guard valid else { context.close(promise: nil); return }
+        let version2 = behavior == .handEvents && value?.count == 4 && value?["type"] as? String == "SUBSCRIBE"
+            && value?["session_id"] as? String == "ltc-comms" && value?["v"] as? Int == 2 && value?["event_format"] as? Int == 1
+        let count = subscribe(valid || version2)
+        guard valid || version2 else { context.close(promise: nil); return }
+        if version2 {
+            send(LocalPeers.handAck, context)
+            LocalPeers.handStream.forEach { send($0, context) }
+            return
+        }
         if behavior == .closeFirst && count == 1 { context.close(promise: nil); return }
         if behavior == .resultBeforeAck { send(LocalPeers.result, context); return }
         send(LocalPeers.ack, context)
         switch behavior {
-        case .good, .closeFirst: send(LocalPeers.result, context)
+        case .good, .closeFirst, .handEvents: send(LocalPeers.result, context)
         case .idle: break
         case .partialPrefix:
             var buffer = context.channel.allocator.buffer(capacity: 1); buffer.writeInteger(UInt8(0)); context.writeAndFlush(NIOAny(buffer), promise: nil)

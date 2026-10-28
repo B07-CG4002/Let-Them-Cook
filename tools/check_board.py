@@ -31,7 +31,7 @@ from common.tls import client_context, server_context, TLS_SERVER_NAME
 from common.wire import read_frame, write_frame
 from laptop.bridge import Bridge, BridgeConfig, StreamTracker
 from tools.demo_boards import address as board_address, load_boards
-from ultra96.protocol import validate_message
+from ultra96.protocol import validate_message, validate_subscribed
 from ultra96.server import CommsServer
 
 _FAILURE_FIELDS = ("malformed", "ack_errors", "transport_errors", "ble_errors", "cleanup_errors",
@@ -133,9 +133,9 @@ async def check(address, device_id, pki, *, rate, duration, commands, sensor_ver
     reader, writer = await asyncio.open_connection(
         "127.0.0.1", server.gateway_port, ssl=client_context(folder / "ca-cert.pem"),
         server_hostname=TLS_SERVER_NAME)
-    await write_frame(writer, dict(v=1, type="SUBSCRIBE", session_id="ltc-comms"))
-    validate_message(await read_frame(reader), "SUBSCRIBED", "ltc-comms",
-                     sensor_version=sensor_version)
+    subscribe = dict(v=1, type="SUBSCRIBE", session_id="ltc-comms")
+    await write_frame(writer, subscribe)
+    validate_subscribed(await read_frame(reader), subscribe)
     counts = {"stream": 0, "command": 0}
     seen, errors = set(), []
 

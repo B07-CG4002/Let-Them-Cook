@@ -21,13 +21,20 @@ _EVENTS = frozenset({
     "result_send_cancelled", "result_abandoned", "subscriber_claimed",
     "subscriber_replaced", "subscribed_write_complete", "subscriber_ended",
     "model_result", "model_result_refused",
+    # Sensor version 4 hand events: their own names, so the result-path evidence above
+    # is the same with or without them.
+    "hand_hello_accepted", "hand_hello_refused", "hand_event_published", "hand_event_refused",
+    "hand_event_enqueued", "hand_event_write_complete", "hand_event_dropped", "hand_state_ended",
 })
+# hand_seq is a HAND_EVENT's event_seq (event_seq names this log's own record order);
+# boot_id and seq of a hand event are its source sample's; connection is the runner
+# connection number of the model bridge.
 _INTEGER_FIELDS = frozenset({
     "device_id", "boot_id", "seq", "subscriber_id", "previous_subscriber_id",
-    "queue_size", "queued_count",
+    "queue_size", "queued_count", "hand_seq", "connection",
 })
-_TEXT_FIELDS = frozenset({"session_id", "reason", "error_type"})
-_BOOLEAN_FIELDS = frozenset({"phone_receipt_confirmed", "ambiguous"})
+_TEXT_FIELDS = frozenset({"session_id", "reason", "error_type", "kind"})
+_BOOLEAN_FIELDS = frozenset({"phone_receipt_confirmed", "ambiguous", "hand_events"})
 _ALLOWED_FIELDS = _INTEGER_FIELDS | _TEXT_FIELDS | _BOOLEAN_FIELDS | {"age_seconds", "request_id"}
 _TOKEN = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]{0,63}$")
 _STATUS_SCHEMA = "ultra96-bounded-event-log-status-v1"
@@ -116,7 +123,7 @@ class BoundedEventLog:
                         or any(ord(char) < 32 or 0xD800 <= ord(char) <= 0xDFFF
                                for char in value)):
                     raise ValueError("diagnostic session ID is invalid")
-            elif name in ("reason", "error_type"):
+            elif name in ("reason", "error_type", "kind"):
                 if type(value) is not str or _TOKEN.fullmatch(value) is None:
                     raise ValueError("diagnostic token field is invalid")
             elif name == "age_seconds":
@@ -127,9 +134,9 @@ class BoundedEventLog:
             elif name == "phone_receipt_confirmed":
                 if value is not False:
                     raise ValueError("transport write is not a Phone receipt")
-            elif name == "ambiguous":
+            elif name in ("ambiguous", "hand_events"):
                 if type(value) is not bool:
-                    raise ValueError("diagnostic ambiguity flag is invalid")
+                    raise ValueError("diagnostic flag is invalid")
         return copied
 
     def __call__(self, event: str, **fields) -> None:
