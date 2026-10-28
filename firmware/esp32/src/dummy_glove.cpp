@@ -26,7 +26,7 @@ bool gloveBegin() { return true; }
 
 void gloveUpdate() {}
 
-bool gloveRead(float out[11]) {
+bool gloveRead(float out[]) {  // comms::kChannelCount values: 11, or 12 with COMMS_FLEX3_GLOVE=1
   if (out == nullptr) return false;
   comms::dummyFixtureSample(fixtureRandomWord(), out);
   return true;

@@ -54,6 +54,8 @@ class DualBridge:
                 raise ValueError("dual reception requires source auditing")
         if left.config.session_id != right.config.session_id:
             raise ValueError("both bridges must use the same session ID")
+        if left.config.sensor_version != right.config.sensor_version:
+            raise ValueError("both bridges must use the same sensor version")
         if (left.config.address and right.config.address
                 and left.config.address.lower() == right.config.address.lower()):
             raise ValueError("physical devices require distinct BLE addresses")
@@ -153,6 +155,7 @@ class DualBridge:
                           + metrics.transport_errors + metrics.ble_errors
                           + metrics.cleanup_errors + metrics.identity_mismatches
                           + metrics.source_stats_errors + metrics.disconnects
+                          + metrics.starved_reconnects + metrics.starved_held
                           + bridge.tracker.gaps + bridge.tracker.duplicates
                           + bridge.tracker.out_of_order + bridge.tracker.new_boots)
                 gated = None
@@ -389,11 +392,15 @@ class DualBridge:
         expected_samples = observed_duration * self.expected_rate
         devices = {}
         clean = startup_ok and not progress_failed
+        # A starved link is a link fault like a disconnect, whether the
+        # watchdog rebuilt it or its cooldown held the reconnect; either way
+        # samples were already lost (the starvation needs seq gaps).
         anomaly_fields = (
             "malformed", "stale_dropped", "generation_dropped", "duplicate_acks",
             "ack_errors", "ambiguous_dropped", "transport_errors", "ble_errors",
             "cleanup_errors", "identity_mismatches", "source_stats_errors",
-            "disconnects", "queue_dropped", "callback_generation_dropped",
+            "disconnects", "starved_reconnects", "starved_held",
+            "queue_dropped", "callback_generation_dropped",
             "gaps", "duplicates", "out_of_order", "new_boots",
         )
         for device, bridge in self.bridges.items():
@@ -454,7 +461,7 @@ class DualBridge:
             errors = {name: getattr(metrics, name) for name in (
                 "malformed", "ack_errors", "transport_errors", "ble_errors",
                 "cleanup_errors", "identity_mismatches", "source_stats_errors",
-                "disconnects")}
+                "disconnects", "starved_reconnects", "starved_held")}
             errors.update(gaps=bridge.tracker.gaps, duplicates=bridge.tracker.duplicates,
                           out_of_order=bridge.tracker.out_of_order,
                           new_boots=bridge.tracker.new_boots)
@@ -537,6 +544,31 @@ def _ack_window(value):
     return parsed
 
 
+def _starvation_window(value):
+    """Seconds, or None for 0: the starved-link watchdog is then off."""
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError) as exc:
+        raise argparse.ArgumentTypeError(
+            "starvation window must be zero or positive finite seconds") from exc
+    if not math.isfinite(parsed) or parsed < 0:
+        raise argparse.ArgumentTypeError(
+            "starvation window must be zero or positive finite seconds")
+    return parsed or None
+
+
+def _starvation_cooldown(value):
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError) as exc:
+        raise argparse.ArgumentTypeError(
+            "starvation cooldown must be positive finite seconds") from exc
+    if not math.isfinite(parsed) or parsed <= 0:
+        raise argparse.ArgumentTypeError(
+            "starvation cooldown must be positive finite seconds")
+    return parsed
+
+
 def _parser():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--left-address")
@@ -549,6 +581,15 @@ def _parser():
     parser.add_argument("--ack-window", type=_ack_window, default=32,
                         help="maximum sent-but-unacknowledged frames per device")
     parser.add_argument("--freshness", type=float, default=2.0)
+    parser.add_argument("--starvation-window", type=_starvation_window, default=2.0,
+                        metavar="SECONDS",
+                        help="reconnect a glove whose notifications have all been full, with "
+                             "seq gaps, for this long (a starved BLE link); 0 turns it off; "
+                             "default: 2")
+    parser.add_argument("--starvation-cooldown", type=_starvation_cooldown, default=10.0,
+                        metavar="SECONDS",
+                        help="least time between two starved-link reconnects of one glove; "
+                             "default: 10")
     parser.add_argument("--expected-rate", type=float, default=10.0)
     parser.add_argument("--startup-timeout", type=float, default=30.0)
     parser.add_argument("--drain-timeout", type=float, default=10.0)
@@ -566,6 +607,10 @@ def _parser():
     parser.add_argument("--mock", action="store_true",
                         help="explicit two-device synthetic input, not BLE evidence")
     parser.add_argument("--diagnostic-unprotected", action="store_true")
+    parser.add_argument("--sensor-version", type=int, choices=(3, 4), default=3,
+                        help="sensor packet version of BOTH boards: 3 (38-byte packets, 11 "
+                             "values, LCS3) or 4 (the three-flex boards: 40-byte packets, 12 "
+                             "values, LCS4); the Ultra96 service must use the same; default: 3")
     parser.add_argument("--supervised", action="store_true",
                         help="for demo.py start: JSON lines on stdout (evidence, status, log, "
                              "finished), stop/command lines on stdin, no stderr output")
@@ -620,6 +665,9 @@ def main():
         "seed": args.seed,
         "queue_capacity": args.queue_capacity, "freshness_seconds": args.freshness,
         "ack_window": args.ack_window,
+        "starvation_window_seconds": args.starvation_window,
+        "starvation_cooldown_seconds": args.starvation_cooldown,
+        "sensor_version": args.sensor_version,
         "session_id": args.session_id,
         "revision": reporting.local_revision(Path(__file__).parents[1]),
         **reporting.source_provenance(Path(__file__).parents[1]),
@@ -655,7 +703,10 @@ def main():
             ack_window=args.ack_window,
             address=address, diagnostic_unprotected=args.diagnostic_unprotected,
             expected_device_id=device_id, source_audit=True, controls_enabled=controls_enabled,
-            source_rate=args.rate, seed=None if args.seed is None else args.seed + device_id),
+            source_rate=args.rate, seed=None if args.seed is None else args.seed + device_id,
+            sensor_version=args.sensor_version,
+            starvation_window=args.starvation_window,
+            starvation_cooldown=args.starvation_cooldown),
             evidence=evidence)
 
     async def run():

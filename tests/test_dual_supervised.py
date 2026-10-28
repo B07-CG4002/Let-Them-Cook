@@ -38,7 +38,8 @@ DSTAT_KEYS = {"connected", "transport", "mtu", "rate_hz", "gated", "boot_id",
 DROPPED_KEYS = {"queue", "stale", "generation", "ambiguous"}
 ERROR_KEYS = {"malformed", "ack_errors", "transport_errors", "ble_errors",
               "cleanup_errors", "identity_mismatches", "source_stats_errors",
-              "disconnects", "gaps", "duplicates", "out_of_order", "new_boots"}
+              "disconnects", "starved_reconnects", "starved_held", "gaps", "duplicates",
+              "out_of_order", "new_boots"}
 
 # Windows timers stretch the CLI mock's 50 ms period (20 Hz) to about 62 ms,
 # under the 90% coverage bound. These runs feed the mock at 50 Hz instead so

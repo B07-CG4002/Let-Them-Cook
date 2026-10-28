@@ -257,7 +257,7 @@ def test_remote_program_on_linux(tmp_path):
                             timeout=600, env=environment)
     output = result.stdout.decode("utf-8", "replace").replace("\0", "")
     assert result.returncode == 0, output[-4000:]
-    assert "RESULT pass=44 fail=0" in output
+    assert "RESULT pass=55 fail=0" in output
 
 
 def test_ssh_errors_end_in_a_failed_line(monkeypatch, tmp_path, capsys):
@@ -280,3 +280,153 @@ def test_a_jump_host_without_password_login_points_at_the_vpn(monkeypatch, capsy
     err = capsys.readouterr().err
     assert "FAILED: BadAuthenticationType" in err
     assert "connect the NUS VPN" in err
+
+
+# --- --sensor-version 3|4 and --replace-runner PID:START_TICKS -------------------------------
+
+def test_the_sensor_version_is_3_unless_4_is_chosen():
+    assert deploy_service.options_from(_args())["sensor_version"] == 3
+    assert deploy_service.options_from(_args(sensor_version=3))["sensor_version"] == 3
+    assert deploy_service.options_from(_args(sensor_version=4))["sensor_version"] == 4
+    for bad in (2, 5, "4", True, None):
+        with pytest.raises(ValueError, match="--sensor-version"):
+            deploy_service.options_from(_args(sensor_version=bad))
+
+
+def test_the_remote_program_adds_the_sensor_version_only_for_4():
+    # The v3 argv stays exactly as before; the Linux test checks both on real processes.
+    program = deploy_service.REMOTE_PROGRAM
+    assert 'if options.get("sensor_version", 3) == 4:\n    new_args += ["--sensor-version", "4"]' in program
+    assert program.count("--sensor-version") == 1
+
+
+@pytest.mark.parametrize("version, folder, line", [
+    ([], "/source-co-v3-", "Sensor protocol: v3"),
+    (["--sensor-version", "3"], "/source-co-v3-", "Sensor protocol: v3"),
+    (["--sensor-version", "4"], "/source-co-v4-", "Sensor protocol: v4"),
+])
+def test_the_plan_names_the_sensor_version_and_its_board_folder(monkeypatch, capsys, version, folder, line):
+    monkeypatch.setattr(deploy_service, "_connect", lambda *a: pytest.fail("connected"))
+    assert deploy_service.main(["--dry-run"] + version) == 0
+    out = capsys.readouterr().out
+    assert folder + "20" in out and line in out
+    assert '"sensor_version": {}'.format(4 if "4" in version else 3) in out
+
+
+def test_a_sensor_version_other_than_3_or_4_is_refused_by_the_parser(capsys):
+    with pytest.raises(SystemExit) as stopped:
+        deploy_service.main(["--dry-run", "--sensor-version", "5"])
+    assert stopped.value.code == 2 and "invalid choice" in capsys.readouterr().err
+
+
+def _module_runner(**changes):
+    values = dict(model="ultra96.model_bridge", runner_module="src.socket_worker_hand",
+                  runner_cwd="/home/xilinx/Let-Them-Cook", runner_python=deploy_service.PYNQ_PYTHON,
+                  runner_arg=[], sensor_version=4)
+    values.update(changes)
+    return _args(**values)
+
+
+@pytest.mark.parametrize("changes", [
+    dict(runner_module="src.socket_worker"), dict(runner_module="src.socket_worker_full"),
+    dict(runner_module=None, runner="/home/xilinx/w/src/socket_worker.py"),
+    dict(runner_module=None, runner="/home/xilinx/w/src/socket_worker_full.py"),
+])
+def test_version_4_refuses_the_eleven_channel_paired_runners(changes):
+    with pytest.raises(ValueError, match="eleven-channel paired runner.*src.socket_worker_hand"):
+        deploy_service.options_from(_module_runner(**changes))
+    # The same runners deploy as before with version 3.
+    assert "runner" in deploy_service.options_from(_module_runner(sensor_version=3, **changes))
+
+
+@pytest.mark.parametrize("changes", [dict(), dict(runner_module=None, runner="/home/xilinx/w/src/socket_worker_hand.py")])
+def test_the_hand_worker_needs_version_4(changes):
+    assert "runner" in deploy_service.options_from(_module_runner(**changes))
+    with pytest.raises(ValueError, match="deploy it with --sensor-version 4"):
+        deploy_service.options_from(_module_runner(sensor_version=3, **changes))
+
+
+def test_replace_runner_entries_reach_the_launcher_options():
+    options = deploy_service.options_from(_module_runner(replace_runner=["177087:611890431", "42:0007"]))
+    assert options["runner"]["replace"] == [dict(pid=177087, start_ticks="611890431"),
+                                            dict(pid=42, start_ticks="7")]
+    assert "replace" not in deploy_service.options_from(_module_runner())["runner"]
+    assert "replace" not in deploy_service.options_from(_module_runner(replace_runner=[]))["runner"]
+
+
+@pytest.mark.parametrize("value", [
+    "177087", "177087:", ":611890431", "0:611890431", "01:5", "-5:1", "x:1", "177087:61a", "177087:-1",
+    "177087:611890431:1", " 177087:611890431", "177087:611890431 ", "177087 611890431",
+    chr(0xFF11) + ":1", "1:" + chr(0x661),
+])
+def test_replace_runner_must_be_pid_colon_start_ticks(value):
+    with pytest.raises(ValueError, match="PID:START_TICKS"):
+        deploy_service.options_from(_module_runner(replace_runner=[value]))
+
+
+def test_replace_runner_refuses_init_and_a_pid_named_twice():
+    with pytest.raises(ValueError, match="init"):
+        deploy_service.options_from(_module_runner(replace_runner=["1:5"]))
+    with pytest.raises(ValueError, match="PID 42 twice"):
+        deploy_service.options_from(_module_runner(replace_runner=["42:5", "42:6"]))
+
+
+def test_replace_runner_needs_a_runner(monkeypatch, capsys):
+    with pytest.raises(ValueError, match="need --runner or --runner-module"):
+        deploy_service.options_from(_args(model="ultra96.model_bridge", replace_runner=["177087:611890431"]))
+    monkeypatch.setattr(deploy_service, "_connect", lambda *a: pytest.fail("connected"))
+    assert deploy_service.main(["--dry-run", "--replace-runner", "177087:611890431"]) == 2
+    assert "--replace-runner need --runner or --runner-module" in capsys.readouterr().err
+
+
+def test_the_plan_names_each_runner_it_replaces(monkeypatch, capsys):
+    monkeypatch.setattr(deploy_service, "_connect", lambda *a: pytest.fail("connected"))
+    assert deploy_service.main(["--sensor-version", "4", "--model", "ultra96.model_bridge",
+                                "--runner-module", "src.socket_worker_hand", "--runner-cwd", "/home/xilinx/ltc",
+                                "--replace-runner", "177087:611890431", "--replace-runner", "42:7",
+                                "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert "Replaces the runner started by hand, PID 177087 (start ticks 611890431)" in out
+    assert "Replaces the runner started by hand, PID 42 (start ticks 7)" in out
+    assert '"replace": [{"pid": 177087, "start_ticks": "611890431"}, {"pid": 42, "start_ticks": "7"}]' in out
+    # As the launcher does it: a gone PID does not stop the deploy; only a refusal leaves all as it was.
+    assert "otherwise it counts as already gone and the deploy goes on" in out
+    assert "the launcher refuses before it stops anything and the new runner is not started" in out
+    assert "else nothing is stopped or started" not in out
+
+
+@pytest.mark.parametrize("code, runner, result, messages", [
+    (0, dict(status="running", pid=7, connected=True, log="/b/l", replaced=[
+        dict(pid=177087, start_ticks="611890431", argv=["python", "-m", "src.socket_worker"], stop="sigterm"),
+        dict(pid=42, start_ticks="7", argv=None, stop="already_gone")]), 0,
+     ["Runner started by hand, PID 177087 (start ticks 611890431): stopped with SIGTERM; "
+      "it ran python -m src.socket_worker",
+      "Runner started by hand, PID 42 (start ticks 7): already gone, nothing signalled\n",
+      "Model runner running (PID 7)"]),
+    (0, dict(status="running", pid=7, connected=True, log="/b/l", replaced=[
+        dict(pid=42, start_ticks="7", argv=["python3", "src/socket_worker.py"], stop="sigkill")]), 0,
+     ["Runner started by hand, PID 42 (start ticks 7): stopped with SIGKILL; it ran python3 src/socket_worker.py"]),
+    (3, dict(status="failed", previous="untouched", previous_running=None,
+             error="RuntimeError: --replace-runner 300:9 refused, it is an ultra96.server: python -m ultra96.server"),
+     1, ["--replace-runner 300:9 refused", "the new model runner is not"]),
+    # Stopping the named runner raised: the launcher lists it as failed; it was not replaced.
+    (3, dict(status="failed", previous="sigterm", replaced=[dict(pid=42, start_ticks="7", stop="failed")],
+             error="RuntimeError: the runner PID 42 did not exit after SIGKILL"),
+     1, ["Runner started by hand, PID 42 (start ticks 7): NOT stopped (see the error below); it may still "
+         "be running", "did not exit after SIGKILL", "the new model runner is not"]),
+    (3, dict(status="conflict", error="another model runner is connected"), 1,
+     ["deploy again with --replace-runner PID:TICKS"]),
+])
+def test_deploy_reports_each_replaced_runner(monkeypatch, tmp_path, capsys, code, runner, result, messages):
+    board = _Board(dict(status="deployed", runner=runner), code)
+    monkeypatch.setattr(deploy_service, "RECORDS", tmp_path)
+    monkeypatch.setattr(deploy_service, "_connect",
+                        lambda jump_user, board_user, want_sudo: (board, board, "sudo-pw"))
+    assert deploy_service.main(["--sensor-version", "4", "--model", "ultra96.model_bridge",
+                                "--runner-module", "src.socket_worker_hand", "--runner-cwd", "/home/xilinx/ltc",
+                                "--replace-runner", "177087:611890431"]) == result
+    output = capsys.readouterr()
+    for message in messages:
+        assert message in output.out + output.err
+    # The wording names the outcome; it never claims a replacement whatever the outcome.
+    assert "Replaced runner" not in output.out + output.err

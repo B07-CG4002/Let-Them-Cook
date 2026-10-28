@@ -11,7 +11,7 @@ import subprocess
 import sys
 import uuid
 
-from tools.ssh_tunnel import tunnel_command, windows_ssh
+from tools.ssh_tunnel import JUMP_HOST, default_jump, tunnel_command, windows_ssh
 from laptop.dual_bridge import _source_rate
 from tools.demo_boards import load_boards
 
@@ -33,11 +33,26 @@ def _port(value):
     return port
 
 
+def _sensor_version_option(parser):
+    parser.add_argument("--sensor-version", type=int, choices=(3, 4), default=3,
+                        help="sensor packets of BOTH gloves: 3 = the current boards (38-byte "
+                             "packets, 11 values); 4 = the three-flex boards (v4, 40-byte packets, "
+                             "12 values, flashed with flash.py --flex3). With 4 the Ultra96 service "
+                             "must be deployed with python -m tools.deploy_service "
+                             "--sensor-version 4; default: 3")
+
+
+def _jump_option(parser):
+    parser.add_argument("--jump", default=default_jump(),
+                        help="your NUS login for the jump host, user@" + JUMP_HOST +
+                             "; default: LTC_JUMP_USER@" + JUMP_HOST + " when set, else the owner's")
+
+
 def _parser():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="action", required=True)
     tunnel = commands.add_parser("tunnel", help="open the interactive SSH tunnel")
-    tunnel.add_argument("--jump", default="yanjie@stujump.comp.nus.edu.sg")
+    _jump_option(tunnel)
     tunnel.add_argument("--target", default="xilinx@makerslab-fpga-35.ddns.comp.nus.edu.sg")
     tunnel.add_argument("--port", type=_port, default=18889)
     tunnel.add_argument("--monitor-port", type=_port, default=19999,
@@ -55,7 +70,7 @@ def _parser():
                        help="keys 1 and 2 send a command to the LEFT or RIGHT glove")
     start.add_argument("--no-tunnel", action="store_true",
                        help="use a tunnel that is already open (python demo.py tunnel)")
-    start.add_argument("--jump", default="yanjie@stujump.comp.nus.edu.sg")
+    _jump_option(start)
     start.add_argument("--target", default="xilinx@makerslab-fpga-35.ddns.comp.nus.edu.sg")
     start.add_argument("--port", type=_port, default=18889,
                        help="local port forwarded to the Ultra96 ingest 8888; default: 18889")
@@ -69,6 +84,7 @@ def _parser():
                        help="session expected by the Ultra96 server; default: LTC_COMMS_SESSION or ltc-comms")
     start.add_argument("--output-root", type=Path, default=OUTPUT_ROOT)
     start.add_argument("--seed", type=int, help="repeat laptop random fixture selection")
+    _sensor_version_option(start)
     start.add_argument("--mock", action="store_true", help=argparse.SUPPRESS)  # tests only
 
     # The same capture implementation serves recording and live keyboard demos.
@@ -91,6 +107,7 @@ def _parser():
         run.add_argument("--file", type=Path, help="send a 1..65536 byte file through BLE")
         run.add_argument("--file-device", type=int, choices=(1, 2), default=1)
         run.add_argument("--seed", type=int, help="repeat laptop random fixture selection")
+        _sensor_version_option(run)
 
     report = commands.add_parser("report", help="view the latest capture, or a given report")
     report.add_argument("path", nargs="?", type=Path, help="capture folder or report.json")
@@ -99,6 +116,7 @@ def _parser():
     service.add_argument("--start", action="store_true", help="start only after confirming both ports are free")
     service.add_argument("--session-id", default=os.environ.get("LTC_COMMS_SESSION", "ltc-comms"),
                          help="session the started server accepts; default: LTC_COMMS_SESSION or ltc-comms")
+    _jump_option(service)
     return parser
 
 
@@ -117,6 +135,9 @@ def capture_command(args, report_path):
                         ("--file-device", args.file_device)):
         if value is not None:
             command.extend((flag, str(value)))
+    if getattr(args, "sensor_version", 3) == 4:
+        # Only the three-flex boards name it, so a version 3 command line stays as it was.
+        command.extend(("--sensor-version", "4"))
     return command
 
 
@@ -273,6 +294,9 @@ def run_capture(args):
     folder.mkdir()
     report_path = folder / "report.json"
     print(f"Physical two-ESP capture: {args.duration:g} seconds. Evidence: {folder}", flush=True)
+    if getattr(args, "sensor_version", 3) == 4:
+        print("Sensor packets: version 4 (the three-flex boards); the Ultra96 service must run "
+              "with --sensor-version 4.", flush=True)
     child = None
     exit_code = 2
     try:
@@ -335,7 +359,7 @@ def main(argv=None):
             return run_capture(args)
         if args.action == "service":
             from tools.demo_service import main as service_main
-            return service_main(start=args.start, session_id=args.session_id)
+            return service_main(start=args.start, session_id=args.session_id, jump=args.jump)
         return show_report(args.path if args.path is not None else latest_report(args.output_root))
     except (OSError, ValueError, subprocess.SubprocessError) as error:
         print(f"Demo could not complete: {error}", file=sys.stderr)

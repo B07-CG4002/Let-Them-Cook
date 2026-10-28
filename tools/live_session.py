@@ -8,8 +8,9 @@
    from the keyboard here while OpenSSH is asking.
 3. Waits until the board view's forward answers, which proves the login is done, and reads
    the service's state (model, phone subscriber).
-4. Starts the capture (laptop.dual_bridge --supervised) in its own process group and draws
-   the live view from its JSON stream and the board view, until q, Ctrl+C or --duration.
+4. Starts the capture (laptop.dual_bridge --supervised, plus --sensor-version 4 for the
+   three-flex boards) in its own process group and draws the live view from its JSON stream
+   and the board view, until q, Ctrl+C or --duration.
 5. Stops the capture gracefully (it reads the gloves' final counters), then the board view,
    then the tunnel, and writes the summary and the CAPTURE PASSED check at the end of run.log.
 """
@@ -70,7 +71,15 @@ def capture_command(args, report_path):
         command += ["--rate", str(args.rate)]
     if args.seed is not None:
         command += ["--seed", str(args.seed)]
+    if sensor_version(args) == 4:
+        # Only the three-flex boards name it, so a version 3 command line stays as it was.
+        command += ["--sensor-version", "4"]
     return command + ["--progress-interval", "0", "--supervised"]
+
+
+def sensor_version(args):
+    """The run's sensor packet version: 3 unless demo.py was given --sensor-version 4."""
+    return getattr(args, "sensor_version", 3)
 
 
 def port_in_use(port):
@@ -214,7 +223,7 @@ class Session:
         self.state = RunState(folder=folder, addresses={1: args.left_address, 2: args.right_address},
                               rate_hz=args.rate, session_id=args.session_id,
                               duration=args.duration, keyboard=args.keyboard,
-                              tunnel=self.tunnel_text)
+                              tunnel=self.tunnel_text, sensor_version=sensor_version(args))
         self.ssh = self.capture = self.monitor = None
         self.ssh_lines = []
         self.threads = {}
@@ -242,7 +251,7 @@ class Session:
                                  revision=revision, session_id=args.session_id, rate_hz=args.rate,
                                  duration=args.duration, keyboard=args.keyboard,
                                  addresses={1: args.left_address, 2: args.right_address},
-                                 tunnel=self.tunnel_text):
+                                 tunnel=self.tunnel_text, sensor_version=sensor_version(args)):
             self._log.write(line + "\n")
         self._log.flush()
         self._start(self._log_writer, "run-log")

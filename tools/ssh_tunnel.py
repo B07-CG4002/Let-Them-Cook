@@ -8,6 +8,18 @@ import re
 import shlex
 import subprocess
 
+JUMP_HOST = "stujump.comp.nus.edu.sg"
+
+
+def default_jump_user():
+    """The NUS account for the jump host: LTC_JUMP_USER when set, else the owner's."""
+    return os.environ.get("LTC_JUMP_USER", "").strip() or "yanjie"
+
+
+def default_jump():
+    """user@host for the jump hop, from default_jump_user()."""
+    return default_jump_user() + "@" + JUMP_HOST
+
 
 def windows_ssh():
     """Windows' own OpenSSH by absolute path, else "ssh" from PATH.
@@ -108,7 +120,8 @@ async def supervise(command, stop, *, spawn=asyncio.create_subprocess_exec):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--jump", default="yanjie@stujump.comp.nus.edu.sg")
+    parser.add_argument("--jump", default=default_jump(),
+                        help="jump-host login; default: LTC_JUMP_USER@" + JUMP_HOST + ", else yanjie")
     parser.add_argument("--target", default="xilinx@makerslab-fpga-35.ddns.comp.nus.edu.sg")
     parser.add_argument("--local-port", type=int, default=18888)
     parser.add_argument("--remote-port", type=int, default=8888)
