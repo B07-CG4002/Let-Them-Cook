@@ -1193,7 +1193,10 @@ def test_offered_a_failed_hand_hello_ends_the_connection_and_nothing_is_sent():
     finally:
         bridge.join(10)
         peer.close()
-    assert bridge.errors == [] and bridge.rest == b"" and failing.sends == 1
+    # The worker drops the connection at once, with the bridge's sample lines still unread; on
+    # Windows that resets it, so the bridge end may see a reset, and nothing else.
+    assert all(isinstance(error, (ConnectionResetError, ConnectionAbortedError)) for error in bridge.errors)
+    assert bridge.rest == b"" and failing.sends == 1
     [lost] = [r for r in records if r["type"] == "connection_lost"]
     assert lost["error_type"] == "BrokenPipeError"
     assert [r for r in records if r["type"] == "hand_hello"] == [
