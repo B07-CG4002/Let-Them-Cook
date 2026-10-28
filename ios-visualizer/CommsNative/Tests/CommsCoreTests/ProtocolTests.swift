@@ -213,6 +213,33 @@ final class ProtocolTests: XCTestCase {
         }
     }
 
+    func testVersion2SubscribeAsksForHandEventsAndSubscribedMustMatch() throws {
+        let expected = Array(#"{"v":2,"type":"SUBSCRIBE","session_id":"ltc-comms","event_format":1}"#.utf8)
+        XCTAssertEqual(try CommsProtocol.subscribe(session: "ltc-comms", handEvents: true), [0, 0, 0, UInt8(expected.count)] + expected)
+        XCTAssertEqual(try CommsProtocol.subscribe(session: "ltc-comms", handEvents: false), try CommsProtocol.subscribe(session: "ltc-comms"))
+        let quoted = try CommsProtocol.subscribe(session: #"quote"back\slash"#, handEvents: true)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(quoted.dropFirst(4))) as? [String: Any])
+        XCTAssertEqual(object["session_id"] as? String, #"quote"back\slash"#)
+        XCTAssertEqual(object.count, 4)
+        for session in ["", String(repeating: "a", count: 129), "x\n"] {
+            XCTAssertThrowsError(try CommsProtocol.subscribe(session: session, handEvents: true))
+        }
+
+        let version2 = #"{"v":2,"type":"SUBSCRIBED","session_id":"ltc-comms","event_format":1}"#
+        try CommsProtocol.subscribed(Array(version2.utf8), session: "ltc-comms", handEvents: true)
+        // Each version accepts only its own answer.
+        XCTAssertThrowsError(try CommsProtocol.subscribed(Array(subscribed.utf8), session: "ltc-comms", handEvents: true))
+        XCTAssertThrowsError(try CommsProtocol.subscribed(Array(version2.utf8), session: "ltc-comms", handEvents: false))
+        XCTAssertThrowsError(try CommsProtocol.subscribed(Array(version2.utf8), session: "ltc-comms"))
+        for body in [edit(version2, #""event_format":1"#, #""event_format":2"#), edit(version2, #""event_format":1"#, #""event_format":"1""#),
+                     edit(version2, #""event_format":1"#, #""event_format":1.0"#), edit(version2, #""event_format":1"#, #""event_format":null"#),
+                     edit(version2, #","event_format":1"#, ""), edit(version2, #""event_format":1"#, #""event_format":1,"seq":1"#),
+                     edit(version2, #""v":2"#, #""v":1"#), edit(version2, #""v":2"#, #""v":3"#),
+                     edit(version2, "ltc-comms", "other"), edit(version2, #""type":"SUBSCRIBED""#, #""type":"SUBSCRIBE""#)] {
+            XCTAssertThrowsError(try CommsProtocol.subscribed(Array(body.utf8), session: "ltc-comms", handEvents: true), "Accepted \(body)")
+        }
+    }
+
     func testFragmentedAndCoalescedFramesPreserveBodies() throws {
         var decoder = FrameDecoder()
         XCTAssertEqual(try decoder.feed([0]), [])

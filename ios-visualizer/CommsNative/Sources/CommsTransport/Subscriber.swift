@@ -6,9 +6,13 @@ import CommsCore
 final class Subscriber: ChannelInboundHandler {
     typealias InboundIn = ByteBuffer
     private let session: String
+    private let handEvents: Bool
     private let options: TransportOptions
     private let onSubscribed: () -> Void
     private let onResult: (GestureResult) -> Void
+    private let onHandEvent: (HandEvent) -> Void
+    private let onInvalidHandEvent: () -> Void
+    private let onUnacknowledged: () -> Void
     private let onFailure: (Error) -> Void
     private var decoder = FrameDecoder()
     private var subscribed = false
@@ -17,16 +21,23 @@ final class Subscriber: ChannelInboundHandler {
     private var failed = false
     private var timer: Scheduled<Void>?
 
-    init(session: String, options: TransportOptions, onSubscribed: @escaping () -> Void, onResult: @escaping (GestureResult) -> Void, onFailure: @escaping (Error) -> Void) {
-        self.session = session; self.options = options
+    /// handEvents sends the version 2 SUBSCRIBE; without it this is the version 1
+    /// subscriber, which treats every frame after SUBSCRIBED as a GESTURE_RESULT.
+    /// onUnacknowledged runs before onFailure when a version 2 SUBSCRIBE went out on
+    /// the verified connection and the connection ended without SUBSCRIBED.
+    init(session: String, handEvents: Bool = false, options: TransportOptions, onSubscribed: @escaping () -> Void,
+         onResult: @escaping (GestureResult) -> Void, onHandEvent: @escaping (HandEvent) -> Void = { _ in },
+         onInvalidHandEvent: @escaping () -> Void = {}, onUnacknowledged: @escaping () -> Void = {}, onFailure: @escaping (Error) -> Void) {
+        self.session = session; self.handEvents = handEvents; self.options = options
         self.onSubscribed = onSubscribed; self.onResult = onResult; self.onFailure = onFailure
+        self.onHandEvent = onHandEvent; self.onInvalidHandEvent = onInvalidHandEvent; self.onUnacknowledged = onUnacknowledged
     }
     func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
         if case TLSUserEvent.handshakeCompleted = event {
             guard !sentSubscribe, !failed else { return }
             sentSubscribe = true
             do {
-                let wire = try CommsProtocol.subscribe(session: session)
+                let wire = try CommsProtocol.subscribe(session: session, handEvents: handEvents)
                 var buffer = context.channel.allocator.buffer(capacity: wire.count); buffer.writeBytes(wire)
                 context.writeAndFlush(NIOAny(buffer), promise: nil)
                 arm(context, delay: options.frameTimeout)
@@ -45,9 +56,18 @@ final class Subscriber: ChannelInboundHandler {
             let frames = try decoder.feed(bytes)
             for body in frames {
                 if !subscribed {
-                    try CommsProtocol.subscribed(body, session: session)
+                    try CommsProtocol.subscribed(body, session: session, handEvents: handEvents)
                     subscribed = true; onSubscribed()
-                } else { onResult(try CommsProtocol.result(body, session: session)) }
+                } else if !handEvents {
+                    onResult(try CommsProtocol.result(body, session: session))
+                } else {
+                    // An invalid HAND_EVENT is counted and dropped; every other bad frame fails as on version 1.
+                    switch try CommsProtocol.subscribedFrame(body, session: session) {
+                    case .result(let result): onResult(result)
+                    case .handEvent(let event): onHandEvent(event)
+                    case .invalidHandEvent: onInvalidHandEvent()
+                    }
+                }
             }
             partialFrame = decoder.hasPartialFrame
             if !partialFrame { disarm() }
@@ -68,6 +88,7 @@ final class Subscriber: ChannelInboundHandler {
     private func fail(_ context: ChannelHandlerContext, _ error: Error) {
         guard !failed else { return }; failed = true
         disarm()
+        if handEvents && sentSubscribe && !subscribed { onUnacknowledged() }
         onFailure(error); context.close(promise: nil)
     }
     func errorCaught(context: ChannelHandlerContext, error: Error) { fail(context, error) }

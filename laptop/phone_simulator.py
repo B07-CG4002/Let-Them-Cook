@@ -7,7 +7,7 @@ import sys
 
 from common.tls import TLS_SERVER_NAME, client_context
 from common.wire import STREAM_LIMIT, read_frame, write_frame
-from ultra96.protocol import validate_message, validate_session
+from ultra96.protocol import validate_message, validate_session, validate_subscribed
 
 
 async def receive_results(host, port, ca_file, session_id="ltc-comms", count=0,
@@ -20,8 +20,9 @@ async def receive_results(host, port, ca_file, session_id="ltc-comms", count=0,
     writer.transport.set_write_buffer_limits(high=32768, low=16384)
     received = 0
     try:
-        await write_frame(writer, {"v": 1, "type": "SUBSCRIBE", "session_id": session_id}, timeout)
-        validate_message(await read_frame(reader, timeout), "SUBSCRIBED", session_id)
+        subscribe = {"v": 1, "type": "SUBSCRIBE", "session_id": session_id}
+        await write_frame(writer, subscribe, timeout)
+        validate_subscribed(await read_frame(reader, timeout), subscribe)
         while count <= 0 or received < count:
             result = validate_message(await read_frame(reader, timeout), "GESTURE_RESULT", session_id)
             received += 1

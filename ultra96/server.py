@@ -3,6 +3,12 @@
 Each newly accepted stream sample goes to the model (ultra96.model); its results go to the
 one subscribed phone. Sensor protocol defaults to v3; v4 requires explicit selection
 (--sensor-version 4) and changes only SENSOR_BATCH and INGEST_ACK: results stay at v=3.
+
+In v4 mode the model may also report structured per-hand events (HAND_EVENT, Wen Ree's
+envelope in common.hand_contract). ultra96.hand_gate checks each one; an accepted one goes,
+unchanged, to the subscriber only if it subscribed at version 2 (hand events asked for),
+in the same ordered queue as the results. The GESTURE_RESULT stream, its metrics, the board
+monitor's counters and the result observer events are the same with or without them.
 """
 import argparse
 import asyncio
@@ -26,10 +32,27 @@ from common.wire import ProtocolError, STREAM_LIMIT, read_frame, write_frame
 from common.sensor import VERSION
 from ultra96.model import DummyModel, ModelPort, ModelStartError, load_model
 from ultra96.monitor import ServiceMonitor
-from ultra96.protocol import (DUMMY_GESTURES, RESULT_VERSION, result_identity, trace_fields,
-                              validate_message, validate_session)
+from ultra96.protocol import (DUMMY_GESTURES, RESULT_VERSION, result_identity, subscribed,
+                              trace_fields, validate_message, validate_session)
 
 LOG = logging.getLogger(__name__)
+HAND_EVENT = "HAND_EVENT"
+_HAND_KINDS = ("pulse", "state_start", "state_refresh", "state_end", "idle", "reset")
+# A HAND_EVENT frame in the subscriber's queue is observed under its own event names
+# (result event -> hand event, and the drop reason it gives); result_send_started has none.
+_HAND_QUEUE_EVENTS = {
+    "result_enqueued": ("hand_event_enqueued", None),
+    "result_write_complete": ("hand_event_write_complete", None),
+    "result_drop_oldest": ("hand_event_dropped", "drop_oldest"),
+    "result_drop_new": ("hand_event_dropped", "drop_new"),
+    "result_drop_stale": ("hand_event_dropped", "stale"),
+    "result_abandoned": ("hand_event_dropped", "abandoned"),
+    "result_send_failed": ("hand_event_dropped", "send_failed"),
+    "result_send_cancelled": ("hand_event_dropped", "send_cancelled"),
+}
+# Service metrics of the hand-event path besides the gate's own (ultra96.hand_gate.COUNTERS).
+_HAND_METRICS = ("hand_events_published", "hand_events_unrequested", "hand_events_no_subscriber",
+                 "hand_events_dropped", "hand_gate_errors")
 _EXPECTED_ERRORS = (ProtocolError, asyncio.IncompleteReadError, asyncio.TimeoutError,
                     ConnectionError, OSError, ssl.SSLError)
 # How long an ingest connection may wait for the next frame to begin. A gated
@@ -57,12 +80,43 @@ async def _close_writer(writer):
         writer.transport.abort()
 
 
+def _hand_event(message):
+    return isinstance(message, dict) and message.get("type") == HAND_EVENT
+
+
+def _hand_fields(event):
+    """Observer fields of a HAND_EVENT: only those that are well formed, as a refused one may not be."""
+    fields = {}
+    if not isinstance(event, dict):
+        return fields
+    device, sequence, source = event.get("device_id"), event.get("event_seq"), event.get("source")
+    if type(device) is int and device in (1, 2):
+        fields["device_id"] = device
+    if type(sequence) is int and sequence >= 0:
+        fields["hand_seq"] = sequence
+    if event.get("kind") in _HAND_KINDS:
+        fields["kind"] = event["kind"]
+    if isinstance(source, dict) and all(type(source.get(key)) is int and 0 <= source[key] <= 0xFFFFFFFF
+                                        for key in ("boot_id", "seq")):
+        fields.update(boot_id=source["boot_id"], seq=source["seq"])
+    return fields
+
+
 class ResultQueue:
-    """Live-only bounded queue with monotonic age, shared by one subscriber."""
-    def __init__(self, *, observer=None, subscriber_id=None, monitor=None):
+    """Live-only bounded queue with monotonic age, shared by one subscriber.
+
+    It also carries HAND_EVENT frames for a subscriber that asked for them
+    (hand_events), under the same age and size rules. Those never touch the
+    monitor's per-glove counters or the result metrics (dropped, stale), and are
+    observed under their own event names. When the queue is full they give way
+    first (_make_room), so results are dropped only as for a version-1 subscriber.
+    """
+    def __init__(self, *, observer=None, subscriber_id=None, monitor=None, hand_events=False):
         self._queue = asyncio.Queue(maxsize=32)
         self.dropped = 0
         self.stale = 0
+        self.hand_dropped = 0  # HAND_EVENT frames pushed out or too old
+        self.hand_events = hand_events
         self.observer = observer
         self.observer_errors = 0
         self.subscriber_id = subscriber_id
@@ -71,14 +125,22 @@ class ResultQueue:
 
     def count(self, fate, message):
         """Per-glove sent/unsent for the board monitor, with or without an observer."""
-        if self.monitor is not None:
+        if self.monitor is not None and not _hand_event(message):
             self.monitor.count(message.get("device_id"), fate)
 
     def observe(self, event, message, received_at=None, **fields):
         if self.observer is None:
             return
-        fields.update({key: message[key] for key in
-                       ("session_id", "device_id", "boot_id", "seq", "request_id") if key in message})
+        if _hand_event(message):
+            event, reason = _HAND_QUEUE_EVENTS.get(event, (None, None))
+            if event is None:
+                return
+            if reason is not None:
+                fields["reason"] = reason + "_" + fields["reason"] if "reason" in fields else reason
+            fields.update(_hand_fields(message), session_id=message["session_id"])
+        else:
+            fields.update({key: message[key] for key in
+                           ("session_id", "device_id", "boot_id", "seq", "request_id") if key in message})
         fields.update(subscriber_id=self.subscriber_id, queue_size=self._queue.qsize())
         if received_at is not None:
             fields["age_seconds"] = max(0.0, time.monotonic() - received_at)
@@ -87,15 +149,43 @@ class ResultQueue:
         except Exception:
             self.observer_errors += 1
 
+    def count_stale(self, message):
+        """One frame too old to send: a result in stale, a hand event apart."""
+        if _hand_event(message):
+            self.hand_dropped += 1
+        else:
+            self.stale += 1
+
     def put(self, message, received_at=None):
-        if self._queue.full():
-            old_at, old = self._queue.get_nowait()
-            self.dropped += 1
-            self.count("unsent", old)
-            self.observe("result_drop_oldest", old, old_at)
         received_at = time.monotonic() if received_at is None else received_at
+        if self._queue.full() and not self._make_room(message, received_at):
+            return
         self._queue.put_nowait((received_at, message))
         self.observe("result_enqueued", message, received_at)
+
+    def _make_room(self, message, received_at):
+        """The queue is full. A HAND_EVENT never pushes a result out: the oldest queued
+        HAND_EVENT goes first; with only results queued, a new HAND_EVENT is itself dropped
+        and a new result drops the oldest result, exactly as for a version-1 subscriber.
+        Returns False when message itself is dropped."""
+        items = [self._queue.get_nowait() for _ in range(self._queue.qsize())]
+        index = next((i for i, (_, old) in enumerate(items) if _hand_event(old)), None)
+        if index is None and _hand_event(message):
+            for item in items:
+                self._queue.put_nowait(item)
+            self.hand_dropped += 1
+            self.observe("result_drop_new", message, received_at)
+            return False
+        old_at, old = items.pop(0 if index is None else index)
+        for item in items:
+            self._queue.put_nowait(item)
+        if _hand_event(old):
+            self.hand_dropped += 1
+        else:
+            self.dropped += 1
+        self.count("unsent", old)
+        self.observe("result_drop_oldest", old, old_at)
+        return True
 
     async def get(self, now=None):
         _, message = await self.get_timed(now=now)
@@ -106,7 +196,7 @@ class ResultQueue:
             received_at, message = await self._queue.get()
             current = time.monotonic() if now is None else now
             if current - received_at >= 2.0:
-                self.stale += 1
+                self.count_stale(message)
                 self.count("unsent", message)
                 self.observe("result_drop_stale", message, received_at, reason="dequeue")
                 continue
@@ -179,10 +269,19 @@ class CommsServer:
         if callable(configure):
             configure(sensor_version)
         converter = None
+        # Hand events exist only in sensor version 4; version 3 imports nothing for them.
+        self._hand_gate = None
+        deliver_hand = None
         if sensor_version == 4:
             from common.sensor_v4 import physical_values as converter
+            from ultra96.hand_gate import HandGate
+            self._hand_gate = HandGate(self.session_id, self.metrics, observe=self._observe,
+                                       max_namespaces=max_namespaces)
+            for key in _HAND_METRICS:
+                self.metrics[key] = 0
+            deliver_hand = self._model_hand
         self.model = ModelPort(selected_model, self._model_result, self.metrics,
-                               physical_converter=converter)
+                               physical_converter=converter, deliver_hand=deliver_hand)
         self.model_start_seconds = None
 
     def _observe(self, event, **fields):
@@ -348,6 +447,9 @@ class CommsServer:
                 self.monitor.count(message["device_id"], "accepted")
                 self._observe("result_accepted", **trace_fields(message))
                 if message["request_id"] is None:
+                    if self._hand_gate is not None:
+                        # Before the model: a hand event may name this sample at once.
+                        self._hand_sample(message)
                     # Runs before the ACK is written; the model must return immediately.
                     self.model.on_sample(message["device_id"], message["boot_id"], message["seq"],
                                          message["uptime_ms"], message["values"])
@@ -400,6 +502,63 @@ class CommsServer:
         self._observe("model_result", **identity)
         self._publish(result)
 
+    def _hand_sample(self, message):
+        """Loop thread, sensor v4: tell the hand gate about a newly accepted stream sample."""
+        try:
+            self._hand_gate.sample(message, time.monotonic())
+        except Exception as exc:  # the hand path must never cost the glove its ACK
+            self.metrics["hand_gate_errors"] += 1
+            self.model.warn("hand_gate", "hand gate refused a sample: %s", type(exc).__name__)
+
+    def _model_hand(self, kind, payload, connection):
+        """Loop thread, sensor v4: one hand message of the model (ultra96.model emit_hand)."""
+        now = time.monotonic()
+        try:
+            if kind == "closed":
+                self._hand_gate.closed(connection, now)
+                return
+            if kind == "hello":
+                accepted, reason = self._hand_gate.hello(connection, payload, now)
+            else:
+                accepted, reason = self._hand_gate.event(connection, payload, now)
+        except Exception as exc:
+            self.metrics["hand_gate_errors"] += 1
+            self.model.warn("hand_gate", "hand gate failed on a %s: %s", kind, type(exc).__name__)
+            return
+        if kind == "hello":
+            if accepted:
+                self._observe("hand_hello_accepted", session_id=self.session_id, connection=connection)
+            else:
+                self._observe("hand_hello_refused", session_id=self.session_id, connection=connection,
+                              reason=reason)
+                self.model.warn("hand_hello", "model hand hello refused: %s", reason)
+            return
+        if not accepted:
+            self._observe("hand_event_refused", session_id=self.session_id, connection=connection,
+                          reason=reason, **_hand_fields(payload))
+            if reason != "duplicate":
+                self.model.warn("hand_refused", "model hand event refused: %s", reason)
+            return
+        self._observe("hand_event_published", session_id=self.session_id, connection=connection,
+                      **_hand_fields(payload))
+        self._publish_hand(payload)
+
+    def _publish_hand(self, event):
+        """An accepted HAND_EVENT goes only to a subscriber that asked for hand events."""
+        subscriber = self._subscriber
+        if subscriber is None:
+            self.metrics["hand_events_no_subscriber"] += 1
+            reason = "no_subscriber"
+        elif not subscriber[1].hand_events:
+            self.metrics["hand_events_unrequested"] += 1
+            reason = "unrequested"
+        else:
+            self.metrics["hand_events_published"] += 1
+            subscriber[1].put(event)
+            return
+        self._observe("hand_event_dropped", session_id=self.session_id, reason=reason,
+                      **_hand_fields(event))
+
     def _duplicate(self, message):
         """Record acceptance atomically before the next await; no outage replay.
 
@@ -439,10 +598,13 @@ class CommsServer:
             validate_message(frame, "MONITOR", self.session_id)
             await self.monitor.serve(reader, writer, self.session_id, self._monitor_status)
             return
-        validate_message(frame, "SUBSCRIBE", self.session_id)
+        subscription = validate_message(frame, "SUBSCRIBE", self.session_id)
+        # Version 2 asks for HAND_EVENT frames too; only a sensor-version-4 service has any.
+        asked = subscription["v"] == 2
         self._subscriber_generation += 1
         queue = ResultQueue(observer=self._observe if self.observer is not None else None,
-                            subscriber_id=self._subscriber_generation, monitor=self.monitor)
+                            subscriber_id=self._subscriber_generation, monitor=self.monitor,
+                            hand_events=asked and self._hand_gate is not None)
         owner = (writer, queue)
         previous = self._subscriber
         self._subscriber = owner
@@ -452,7 +614,8 @@ class CommsServer:
         error_fields = {}
         try:
             self._observe("subscriber_claimed", session_id=self.session_id,
-                          subscriber_id=queue.subscriber_id)
+                          subscriber_id=queue.subscriber_id,
+                          **({"hand_events": queue.hand_events} if asked else {}))
             self.monitor.subscriber("claimed", queue.subscriber_id)
             if previous is not None:
                 self.metrics["replaced"] += 1
@@ -461,7 +624,7 @@ class CommsServer:
                               subscriber_id=queue.subscriber_id,
                               previous_subscriber_id=previous[1].subscriber_id)
                 previous[0].close()
-            await write_frame(writer, {"v": 1, "type": "SUBSCRIBED", "session_id": self.session_id})
+            await write_frame(writer, subscribed(subscription))
             self._observe("subscribed_write_complete", session_id=self.session_id,
                           subscriber_id=queue.subscriber_id, phone_receipt_confirmed=False)
             sender = asyncio.create_task(self._send_results(writer, queue))
@@ -493,6 +656,8 @@ class CommsServer:
                 queue.retire(reason)
                 self.metrics["result_drops"] += queue.dropped
                 self.metrics["result_stale"] += queue.stale
+                if queue.hand_dropped:
+                    self.metrics["hand_events_dropped"] += queue.hand_dropped
                 self.monitor.subscriber("ended", queue.subscriber_id, reason)
                 self._observe("subscriber_ended", session_id=self.session_id,
                               subscriber_id=queue.subscriber_id, reason=reason, **error_fields)
@@ -509,7 +674,7 @@ class CommsServer:
             received_at, result = await queue.get_timed()
             remaining = 2.0 - (time.monotonic() - received_at)
             if remaining <= 0:
-                queue.stale += 1
+                queue.count_stale(result)
                 queue.count("unsent", result)
                 queue.observe("result_drop_stale", result, received_at, reason="before_write")
                 continue
