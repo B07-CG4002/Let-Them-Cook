@@ -41,7 +41,7 @@ def prepare_session(a):
     root = a['root']
     root.mkdir(parents=True, exist_ok=True)
     identity = {k:a[k] for k in ('person','session','split','device_id')}
-    identity['recording_contract'] = CONFIG['version']
+    identity['recording_contract'] = a.get('recording_contract', CONFIG['version'])
     marker = root/'session.json'
     if marker.exists():
         if json.loads(marker.read_text(encoding='utf-8')) != identity:
@@ -69,7 +69,7 @@ def save_trial(a, trial, rows):
         writer.writerow(['elapsed_s','device_id','boot_id','seq','uptime_ms',*CHANNELS])
         for elapsed,p,v in rows: writer.writerow([elapsed,p.device_id,p.boot_id,p.seq,p.uptime_ms,*v])
     identity = {k:a[k] for k in ('person','session','split','device_id','gesture')}
-    write_json(sidecar,dict(**identity,recording_contract=CONFIG['version'],trial=trial,csv_sha256=digest(path),
+    write_json(sidecar,dict(**identity,recording_contract=a.get('recording_contract',CONFIG['version']),trial=trial,csv_sha256=digest(path),
                created_utc=datetime.now(timezone.utc).isoformat()))
     saturated = sum(any(v in (-32768,32767) for v in p.values) for _,p,_ in rows)
     return path, len(rows), t[-1], saturated

@@ -102,3 +102,4 @@ nlviewcommon.logfile
 # Three-flex hardware checks and fresh recordings
 /data/hand_flex3_checks/
 /data/hand_flex3/
+/data/hand_raw_flex3/

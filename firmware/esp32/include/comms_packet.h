@@ -9,11 +9,18 @@
 #endif
 static_assert(COMMS_FLEX3_GLOVE == 0 || COMMS_FLEX3_GLOVE == 1, "COMMS_FLEX3_GLOVE must be 0 or 1");
 
+#ifndef COMMS_WIDE_GYRO
+#define COMMS_WIDE_GYRO 0
+#endif
+static_assert(COMMS_WIDE_GYRO == 0 || COMMS_WIDE_GYRO == 1, "COMMS_WIDE_GYRO must be 0 or 1");
+static_assert(!COMMS_WIDE_GYRO || COMMS_FLEX3_GLOVE, "v5 requires twelve channels");
+
 namespace comms {
 
 // Legacy: v3, 38 bytes, 11 channels. Opt-in COMMS_FLEX3_GLOVE=1:
 // v4, 40 bytes, appending flex3 (GPIO39) after flex2. Same 16-byte header.
-constexpr uint8_t kPacketVersion = COMMS_FLEX3_GLOVE ? 4 : 3;
+// Explicit v5 keeps the 40-byte layout but encodes gyro at 10 counts/deg/s.
+constexpr uint8_t kPacketVersion = COMMS_WIDE_GYRO ? 5 : (COMMS_FLEX3_GLOVE ? 4 : 3);
 constexpr size_t kPacketHeaderSize = 16;
 constexpr size_t kChannelCount = COMMS_FLEX3_GLOVE ? 12 : 11;
 constexpr size_t kPacketSize = kPacketHeaderSize + kChannelCount * 2;

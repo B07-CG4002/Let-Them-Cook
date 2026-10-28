@@ -18,7 +18,7 @@ constexpr uint8_t kSourceFlagGated = 0x01;
 // (comms_send_queue.h). A laptop that predates it refuses the unknown bit
 // before subscribing instead of counting such notifications as malformed.
 constexpr uint8_t kSourceFlagBatched = 0x02;
-static_assert(kPacketVersion == (COMMS_FLEX3_GLOVE ? 4 : 3), "update the LCS3 source statistics marker");
+static_assert(kPacketVersion >= 3 && kPacketVersion <= 5, "update source statistics marker");
 
 struct SourceStats {
   uint32_t bootId;
@@ -54,7 +54,7 @@ inline bool serializeSourceStats(uint8_t* output, size_t capacity, uint8_t devic
   output[0] = 'L';
   output[1] = 'C';
   output[2] = 'S';
-  output[3] = COMMS_FLEX3_GLOVE ? '4' : '3';
+  output[3] = static_cast<uint8_t>('0' + kPacketVersion);
   output[4] = deviceId;
   output[5] = static_cast<uint8_t>((gated ? kSourceFlagGated : 0) | kSourceFlagBatched);
   output[6] = 0;

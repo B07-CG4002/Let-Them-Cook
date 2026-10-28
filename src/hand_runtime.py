@@ -76,8 +76,13 @@ class ModelBundle:
             config=json.loads((self.folder/hand/'config.json').read_text())
             if config.get('feature_columns')!=CHANNELS or config.get('class_names')!=LABELS:
                 raise ValueError('Model feature/class order differs')
-            expected_version='SYNTHETIC_TEST_ONLY' if self.synthetic else 'independent_hand_flex3_v1'
-            if config.get('version')!=expected_version:raise ValueError('Synthetic/trained configuration scope differs')
+            allowed_versions=('SYNTHETIC_TEST_ONLY',) if self.synthetic else ('independent_hand_flex3_v1','independent_hand_flex3_gyro_v5_v1')
+            if config.get('version') not in allowed_versions:raise ValueError('Synthetic/trained configuration scope differs')
+            if config.get('version')=='independent_hand_flex3_gyro_v5_v1':
+                from src.hand_ai_flex3.core import CONFIG
+                expected=dict(CONFIG,version='independent_hand_flex3_gyro_v5_v1',sensor_packet_version=5,
+                              gyro_transport_scale=10,gyro_sensor_full_scale_dps=1000)
+                if config!=expected:raise ValueError('Wide-gyro preprocessing contract differs')
             parameters.flags.writeable=False
             mean.flags.writeable=False;std.flags.writeable=False
             self.models[device]=dict(parameters=parameters,mean=mean,std=std,

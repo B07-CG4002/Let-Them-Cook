@@ -1,3 +1,6 @@
 /fpga/overlays/independent_hand_v1/** -text whitespace=cr-at-eol
 /reports/hand12_board_20261027/** -text whitespace=cr-at-eol
 /reports/hand12_board_20261027/*.rpt -whitespace
+/fpga/models/hand12_v5_20261029/** -text whitespace=cr-at-eol
+/models/hand_v5_20261029/** -text whitespace=cr-at-eol
+/reports/hand12_v5_20261029/** -text whitespace=cr-at-eol
