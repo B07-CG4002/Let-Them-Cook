@@ -5,13 +5,20 @@ Unity regenerates its Xcode project on every iOS build, so this runs after each
 build. It adds a local Swift package reference to ios-visualizer/CommsNative
 and links the CommsNative product into the UnityFramework target, which is
 where IL2CPP resolves the game's [DllImport("__Internal")] Comms* calls.
-Nothing else in the export changes: signing stays on the xcodebuild command
-line. Reapplying is a no-op.
+Linking changes nothing else in the export, and signing (team and style)
+stays on the xcodebuild command line; --pin changes only the export's
+Package.resolved and --bundle-id only the app target's
+PRODUCT_BUNDLE_IDENTIFIER. Reapplying any mode is a no-op.
 
   link_commsnative.py --export <dir>          link the package
   link_commsnative.py --export <dir> --pin    after Xcode resolved packages:
                                               copy the tested versions from
                                               CommsNative/Package.resolved
+  link_commsnative.py --export <dir> --bundle-id <id>
+                                              set the app target's bundle
+                                              identifier, for a signing team
+                                              that cannot register the export's
+                                              own (the other targets keep theirs)
 """
 from pathlib import Path
 import argparse
@@ -201,6 +208,40 @@ def link(text, relative):
     return text
 
 
+def set_bundle_id(text, bundle_id):
+    """Set PRODUCT_BUNDLE_IDENTIFIER in every configuration of the one app target.
+
+    A command-line PRODUCT_BUNDLE_IDENTIFIER would also rename UnityFramework
+    and the test bundle, so the app target's own settings are rewritten instead.
+    Returns the new text and the identifiers it replaced.
+    """
+    if not re.fullmatch(r'[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+', bundle_id):
+        raise ValueError('Not a bundle identifier: ' + bundle_id)
+    root = _scalar(re.sub(r'/\*.*?\*/', '', text, flags=re.S), 'rootObject')
+    if root is None or _scalar(_body(text, root), 'isa') != 'PBXProject':
+        raise ValueError('No PBXProject root object')
+    apps = [t for t in _list_ids(_body(text, root), 'targets') or []
+            if _scalar(_body(text, t), 'isa') == 'PBXNativeTarget'
+            and _scalar(_body(text, t), 'productType') == 'com.apple.product-type.application']
+    if len(apps) != 1:
+        raise ValueError('Expected exactly one application target')
+    configuration_list = _scalar(_body(text, apps[0]), 'buildConfigurationList')
+    configurations = _list_ids(_body(text, configuration_list), 'buildConfigurations') if configuration_list else None
+    if not configurations:
+        raise ValueError('The application target has no build configurations')
+    old = set()
+    for configuration in configurations:
+        start, end = _object_span(text, configuration)
+        body = text[start:end]
+        settings = list(re.finditer(r'(\bPRODUCT_BUNDLE_IDENTIFIER\s*=\s*)([^;]*);', body))
+        if len(settings) != 1:
+            raise ValueError('Expected one PRODUCT_BUNDLE_IDENTIFIER in configuration ' + configuration)
+        old.add(settings[0].group(2).strip().strip('"'))
+        body = body[:settings[0].start(2)] + bundle_id + body[settings[0].end(2):]
+        text = text[:start] + body + text[end:]
+    return text, sorted(old)
+
+
 def pin(export):
     """Give the export's resolved pins the versions tested in CommsNative."""
     path = export / RESOLVED
@@ -231,7 +272,9 @@ def _write(path, data):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--export', type=Path, required=True, help='Unity iOS build folder (holds Unity-iPhone.xcodeproj)')
-    parser.add_argument('--pin', action='store_true', help='pin resolved package versions to CommsNative/Package.resolved')
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument('--pin', action='store_true', help='pin resolved package versions to CommsNative/Package.resolved')
+    mode.add_argument('--bundle-id', help="set the app target's bundle identifier (nothing else changes)")
     args = parser.parse_args()
     export = args.export.resolve()
     try:
@@ -241,6 +284,12 @@ def main():
             return
         project = export / 'Unity-iPhone.xcodeproj/project.pbxproj'
         before = project.read_text(encoding='utf-8')
+        if args.bundle_id is not None:
+            after, old = set_bundle_id(before, args.bundle_id)
+            if after != before:
+                _write(project, after.encode('utf-8'))
+            print('App bundle identifier: %s -> %s' % (', '.join(old), args.bundle_id))
+            return
         relative = os.path.relpath(PACKAGE, export)
         after = link(before, relative)
         if after != before:
