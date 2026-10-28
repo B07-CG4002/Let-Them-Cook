@@ -11,7 +11,7 @@ from pathlib import Path
 from common.tls import client_context, server_context, TLS_SERVER_NAME
 from common.wire import read_frame, write_frame
 from laptop.bridge import Bridge, BridgeConfig
-from ultra96.protocol import validate_message
+from ultra96.protocol import validate_message, validate_subscribed
 from ultra96.server import CommsServer
 
 
@@ -32,8 +32,9 @@ async def rehearse(pki_dir, duration=60, target=100, ble=False, diagnostic_unpro
     try:
         phone, phone_writer = await asyncio.open_connection("127.0.0.1", server.gateway_port,
             ssl=client_context(folder / "ca-cert.pem"), server_hostname=TLS_SERVER_NAME)
-        await write_frame(phone_writer, dict(v=1, type="SUBSCRIBE", session_id="ltc-comms"))
-        validate_message(await read_frame(phone), "SUBSCRIBED", "ltc-comms")
+        subscribe = dict(v=1, type="SUBSCRIBE", session_id="ltc-comms")
+        await write_frame(phone_writer, subscribe)
+        validate_subscribed(await read_frame(phone), subscribe)
         async def receive():
             nonlocal results, duplicate_results, first_result, last_result
             while True:

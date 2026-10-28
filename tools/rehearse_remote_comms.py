@@ -19,7 +19,7 @@ from common.sensor import SensorPacket, choose_fixture, encode_packet
 from common.tls import TLS_SERVER_NAME, client_context
 from common.wire import STREAM_LIMIT, ProtocolError, read_frame, write_frame
 from laptop.bridge import Bridge, BridgeConfig, StreamTracker
-from ultra96.protocol import validate_message
+from ultra96.protocol import validate_message, validate_subscribed
 
 
 async def read_live_frame(reader, idle_timeout, frame_timeout=5.0):
@@ -191,8 +191,9 @@ async def rehearse_remote(ca_file, duration=40.0, target=100, ble=False,
             gateway_port, ssl=context, server_hostname=TLS_SERVER_NAME,
             limit=STREAM_LIMIT, ssl_handshake_timeout=5.0), 5.0)
         writer.transport.set_write_buffer_limits(high=32768, low=16384)
-        await write_frame(writer, dict(v=1, type="SUBSCRIBE", session_id=session_id))
-        validate_message(await read_frame(reader), "SUBSCRIBED", session_id)
+        subscribe = dict(v=1, type="SUBSCRIBE", session_id=session_id)
+        await write_frame(writer, subscribe)
+        validate_subscribed(await read_frame(reader), subscribe)
         subscriber["connections"] += 1
         emit("subscribed", connection=subscriber["connections"])
 

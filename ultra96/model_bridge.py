@@ -17,6 +17,20 @@ arrive while no runner is connected, or while the runner's queue is full, are
 dropped and counted. Bad result lines are counted and skipped; they never close
 the connection.
 
+Under sensor protocol version 4 (12 channels) the hello also offers hand events,
+and the runner may send two more kinds of line:
+
+    service -> runner   {"type": "hello", "format": 1, "channels": [12 names], "hand_events": 1}
+    runner -> service   {"type": "hand_hello", "hello": {the worker's hello}}      (once per connection,
+                                                                                 before any hand_event)
+                        {"type": "hand_event", "event": {one complete HAND_EVENT}}
+
+The bridge hands them unchanged to the service's emit_hand with the number of the
+runner connection (1, 2, ... in connection order), and tells it when that
+connection ends ("closed"). It does not check the event schema; the service does
+(ultra96.hand_gate). In version 3 mode the hello is unchanged and hand lines are
+bad lines.
+
 The socket is COMMS_MODEL_SOCKET, or model-runner.sock in the deployment folder
 (the parent of this source folder), created with mode 0600.
 """
@@ -35,9 +49,12 @@ from common.sensor import CHANNELS
 
 LOG = logging.getLogger(__name__)
 FORMAT = 1
+HAND_EVENTS = 1  # the hello's "hand_events" value in sensor version 4 mode
 QUEUE_SIZE = 1024  # about 10 s of both gloves at 50 Hz
 MAX_LINE_BYTES = 4096
 _WARNING_INTERVAL = 1.0
+# Runner line type -> (its payload key, which is also the emit_hand kind; the count it adds to).
+_HAND_LINES = {"hand_hello": ("hello", "hand_hellos"), "hand_event": ("event", "hand_events")}
 
 
 def socket_path():
@@ -52,14 +69,31 @@ class Bridge:
 
     def __init__(self, queue_size=QUEUE_SIZE):
         self.channels = tuple(CHANNELS)
+        # Offered in the hello, and hand lines accepted, only in sensor version 4 mode.
+        self.hand_events = False
         self.queue_size = queue_size
         self.counts = dict(samples_sent=0, samples_dropped_no_runner=0, samples_dropped_full=0,
-                           results=0, results_refused=0, bad_lines=0, connections=0)
+                           results=0, results_refused=0, bad_lines=0, connections=0,
+                           hand_hellos=0, hand_events=0, hand_refused=0)
         self._emit = None
+        self._emit_hand = None
         self._lock = threading.Lock()
         self._current = None  # (socket, queue) of the connected runner
         self._listener = None
         self._warned = {}
+
+    def configure_sensor_version(self, version):
+        """Before start: version 4 selects the 12 channels and offers hand events to the runner."""
+        if type(version) is not int or version not in (3, 4):
+            raise ValueError("sensor version must be 3 or 4")
+        if self._listener is not None or self._current is not None:
+            raise RuntimeError("cannot change sensor version after bridge start")
+        if version == 4:
+            from common.sensor_v4 import CHANNELS as selected
+        else:
+            selected = CHANNELS
+        self.channels = tuple(selected)
+        self.hand_events = version == 4
 
     def start(self, emit, path=None):
         """Remember emit; with a path, listen there for the runner."""
@@ -68,6 +102,10 @@ class Bridge:
             self._listener = listen(Path(path))
             threading.Thread(target=self._accept_loop, name="model-bridge-accept", daemon=True).start()
             LOG.info("model bridge waiting for the runner on %s", path)
+
+    def start_hand_events(self, emit_hand):
+        """Remember emit_hand(kind, payload, connection); the service calls this right after start."""
+        self._emit_hand = emit_hand
 
     def on_sample(self, device_id, boot_id, seq, uptime_ms, values):
         """Event-loop thread: queue the sample for the runner and return at once."""
@@ -86,19 +124,22 @@ class Bridge:
     def attach(self, conn):
         """Make conn the runner connection (replacing any other) and serve it on two threads."""
         sends = queue.Queue(self.queue_size)
+        hello = dict(type="hello", format=FORMAT, channels=list(self.channels))
+        if self.hand_events:
+            hello["hand_events"] = HAND_EVENTS
         # The hello is queued before on_sample can see this queue, so it is always first.
-        sends.put(json.dumps(dict(type="hello", format=FORMAT, channels=list(self.channels)),
-                             separators=(",", ":")))
+        sends.put(json.dumps(hello, separators=(",", ":")))
         with self._lock:
             previous, self._current = self._current, (conn, sends)
             self.counts["connections"] += 1
+            number = self.counts["connections"]  # this connection's number for emit_hand
         if previous is not None:
             LOG.warning("a new model runner connected; closing the previous one")
             _close(previous)
         threading.Thread(target=self._send_loop, args=(conn, sends), name="model-bridge-send",
                          daemon=True).start()
-        threading.Thread(target=self._receive_loop, args=(conn, sends), name="model-bridge-receive",
-                         daemon=True).start()
+        threading.Thread(target=self._receive_loop, args=(conn, sends, number),
+                         name="model-bridge-receive", daemon=True).start()
 
     def close(self):
         with self._lock:
@@ -130,7 +171,7 @@ class Bridge:
             if line.startswith('{"type":"sample"'):
                 self._count("samples_sent")
 
-    def _receive_loop(self, conn, sends):
+    def _receive_loop(self, conn, sends, number=0):
         reader = conn.makefile("rb")
         try:
             while True:
@@ -146,20 +187,39 @@ class Bridge:
                     _skip_to_newline(reader)
                     continue
                 if raw.strip():
-                    self._handle(raw)
+                    self._handle(raw, number)
         finally:
             reader.close()
             self._detach(conn, sends)
+            # After this connection's last line, on the same thread, so the service sees it last.
+            emit_hand = self._emit_hand
+            if self.hand_events and emit_hand is not None:
+                emit_hand("closed", None, number)
 
-    def _handle(self, raw):
+    def _handle(self, raw, number=0):
         try:
             message = json.loads(raw.decode("utf-8"))
-            if not isinstance(message, dict) or message.get("type") != "result":
+            kind = message.get("type") if isinstance(message, dict) else None
+            if isinstance(kind, str) and kind in _HAND_LINES and self.hand_events:
+                payload = message[_HAND_LINES[kind][0]]
+                if not isinstance(payload, dict):
+                    raise ValueError("hand line payload is not an object")
+            elif kind == "result":
+                fields = [message[key] for key in ("gesture", "confidence", "device_id", "boot_id", "seq")]
+            else:
                 raise ValueError("not a result")
-            fields = [message[key] for key in ("gesture", "confidence", "device_id", "boot_id", "seq")]
         except (ValueError, KeyError, UnicodeDecodeError, RecursionError):  # deep nesting recurses
             self._count("bad_lines")
             self._warn("bad", "model runner sent a line that is not a result; skipped")
+            return
+        if kind != "result":
+            emit_kind, count = _HAND_LINES[kind]
+            emit_hand = self._emit_hand
+            if emit_hand is not None and emit_hand(emit_kind, payload, number):
+                self._count(count)
+            else:
+                self._count("hand_refused")
+                self._warn("hand_refused", "model runner hand line refused (no hand events or service stopping)")
             return
         if self._emit(*fields):
             self._count("results")
@@ -272,18 +332,14 @@ def start(emit):
     _BRIDGE.start(emit, socket_path())
 
 
+def start_hand_events(emit_hand):
+    _BRIDGE.start_hand_events(emit_hand)
+
+
 def on_sample(device_id, boot_id, seq, uptime_ms, values):
     _BRIDGE.on_sample(device_id, boot_id, seq, uptime_ms, values)
 
 
 def configure_sensor_version(version):
     """Called before model start; never change a connected runner's contract."""
-    if type(version) is not int or version not in (3,4):
-        raise ValueError("sensor version must be 3 or 4")
-    if _BRIDGE._listener is not None or _BRIDGE._current is not None:
-        raise RuntimeError("cannot change sensor version after bridge start")
-    if version == 4:
-        from common.sensor_v4 import CHANNELS as selected
-    else:
-        selected = CHANNELS
-    _BRIDGE.channels = tuple(selected)
+    _BRIDGE.configure_sensor_version(version)

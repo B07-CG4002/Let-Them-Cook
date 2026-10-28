@@ -27,13 +27,19 @@ _FIELDS = {
     "MONITOR_UPDATE": _BASE | {"update", "uptime_seconds", "model", "subscriber", "identities",
                                "identity_limit", "devices", "service", "events", "events_dropped"},
 }
-# Subscription and monitor envelopes stay at version 1. Results stay at version 3 under
-# sensor protocol v4 too: both phone apps accept only v=3 results. Only SENSOR_BATCH and
-# INGEST_ACK follow the selected sensor version.
+# Monitor envelopes stay at version 1. Results stay at version 3 under sensor protocol
+# v4 too: both phone apps accept only v=3 results. Only SENSOR_BATCH and INGEST_ACK
+# follow the selected sensor version.
 RESULT_VERSION = VERSION
 _SENSOR_KINDS = ("SENSOR_BATCH", "INGEST_ACK")
 _VERSIONS = {"SENSOR_BATCH": VERSION, "INGEST_ACK": VERSION, "GESTURE_RESULT": RESULT_VERSION,
-             "SUBSCRIBE": 1, "SUBSCRIBED": 1, "MONITOR": 1, "MONITORING": 1, "MONITOR_UPDATE": 1}
+             "MONITOR": 1, "MONITORING": 1, "MONITOR_UPDATE": 1}
+# SUBSCRIBE and SUBSCRIBED come in two versions. Version 1 (results only) is what every
+# installed phone app sends. Version 2 opts in to HAND_EVENT frames as well, in the same
+# ordered stream; it names the hand-event format, and SUBSCRIBED answers in the version asked.
+HAND_EVENT_FORMAT = 1
+_SUBSCRIPTION_KINDS = ("SUBSCRIBE", "SUBSCRIBED")
+_SUBSCRIPTION_FIELDS = {1: _BASE, 2: _BASE | {"event_format"}}
 _MONITOR_DEVICE = {"accepted", "duplicates", "results", "commands", "refused", "sent", "unsent"}
 _MONITOR_SERVICE = {"rejected", "client_limit", "idle_evicted", "subscribers", "replaced",
                     "model_samples", "model_errors", "model_slow_calls", "model_results_late"}
@@ -129,10 +135,12 @@ def validate_session(session_id):
 
 
 def validate_message(message, expected_type=None, session_id=None, *, sensor_version=VERSION):
-    """Validate one protocol-version-3 message (subscription and monitor envelopes are version 1).
+    """Validate one protocol-version-3 message (monitor envelopes are version 1).
 
     sensor_version (3, or an opt-in 4) sets the version of SENSOR_BATCH and INGEST_ACK and
     the number of sample values; GESTURE_RESULT is version 3 whatever it is.
+    SUBSCRIBE and SUBSCRIBED are version 1, or version 2 with event_format 1 (hand events
+    asked for), in either sensor mode.
     request_id is always present in data messages: null for samples and model
     results, uint32 equal to seq for commands.
     """
@@ -146,13 +154,22 @@ def validate_message(message, expected_type=None, session_id=None, *, sensor_ver
     if expected_type is not None and kind != expected_type:
         raise ProtocolError("unexpected message type")
     version = message.get("v")
-    if type(version) is not int or version != (sensor_version if kind in _SENSOR_KINDS else _VERSIONS[kind]):
-        raise ProtocolError("unsupported protocol version")
-    if set(message) != _FIELDS[kind]:
+    if kind in _SUBSCRIPTION_KINDS:
+        if type(version) is not int or version not in _SUBSCRIPTION_FIELDS:
+            raise ProtocolError("unsupported protocol version")
+        fields = _SUBSCRIPTION_FIELDS[version]
+    else:
+        if type(version) is not int or version != (sensor_version if kind in _SENSOR_KINDS else _VERSIONS[kind]):
+            raise ProtocolError("unsupported protocol version")
+        fields = _FIELDS[kind]
+    if set(message) != fields:
         raise ProtocolError("unknown message type or unexpected fields")
     validate_session(message["session_id"])
     if session_id is not None and message["session_id"] != session_id:
         raise ProtocolError("wrong configured session")
+    if "event_format" in fields and (type(message["event_format"]) is not int
+                                     or message["event_format"] != HAND_EVENT_FORMAT):
+        raise ProtocolError("unsupported event_format")
     if kind in ("SENSOR_BATCH", "INGEST_ACK", "GESTURE_RESULT"):
         if not _integer(message["device_id"], 1, 2):
             raise ProtocolError("invalid device_id")
@@ -183,6 +200,26 @@ def validate_message(message, expected_type=None, session_id=None, *, sensor_ver
             raise ProtocolError("confidence must be a finite number in [0, 1]")
     elif kind == "MONITOR_UPDATE":
         _monitor_update(message)
+    return message
+
+
+def subscribed(subscribe):
+    """The SUBSCRIBED answer to a valid SUBSCRIBE: the same version and, for version 2, event_format."""
+    answer = {"v": subscribe["v"], "type": "SUBSCRIBED", "session_id": subscribe["session_id"]}
+    if subscribe["v"] == 2:
+        answer["event_format"] = HAND_EVENT_FORMAT
+    return answer
+
+
+def validate_subscribed(message, subscribe):
+    """A client's check of the service's answer: exactly the SUBSCRIBED of the SUBSCRIBE it sent.
+
+    validate_message alone accepts SUBSCRIBED of either version; a client that asked at
+    version 1 must not accept a version-2 answer (or the reverse).
+    """
+    validate_message(message, "SUBSCRIBED", subscribe["session_id"])
+    if message != subscribed(subscribe):
+        raise ProtocolError("SUBSCRIBED does not answer the SUBSCRIBE that was sent")
     return message
 
 

@@ -15,11 +15,11 @@ Three runners are known (--runner):
                     Communications added to it (edited with his agreement): it sends results back
                     to the model bridge. Its files (the worker, his src/hand_*.py runtime, the
                     common/ modules they import, the overlay .bit, .hwh and its manifest) are
-                    uploaded from a commit like the full runner, default HEAD: the team repo still
-                    has his observe-only worker, which is refused. The overlay must be Wen Ree's
-                    board-verified pair (its SHA-256 is checked before anything is uploaded). The
-                    copy gets an empty logs/ folder, where the worker writes a new JSONL record
-                    file at each start (--out).
+                    uploaded from a commit like the full runner, default HEAD (the team main has it
+                    since team PR #37; his observe-only worker of 2026-10-27 is refused). The
+                    overlay must be Wen Ree's board-verified pair (its SHA-256 is checked before
+                    anything is uploaded). The copy gets an empty logs/ folder, where the worker
+                    writes a new JSONL record file at each start (--out).
 The copy goes to BOARD_ROOT/model-runner/<name>; the SHA-256 of every file is checked against the
 original (and, for an upload, against the commit), and the tool prints the deploy command that
 starts the runner from the copy. It changes nothing else: the originals, the running service and
@@ -329,8 +329,8 @@ def check_code(runner, files, ref):
     for name, marker in sorted(runner.markers.items()):
         if marker.encode() not in files[name]:
             raise ValueError("{} at {} has no {!r}: it is not the worker with the compat delivery "
-                             "(the team repo still has Wen Ree's observe-only worker, which sends no "
-                             "results). {}; nothing was uploaded".format(
+                             "(Wen Ree's observe-only worker of 2026-10-27 sends no results). "
+                             "{}; nothing was uploaded".format(
                                  name, ref, marker, "Commit it first" if ref == "HEAD" else
                                  "Stage from a commit that has it, such as HEAD"))
 

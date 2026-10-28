@@ -3,10 +3,14 @@
 # install and launch it on a connected iPhone. Run on a Mac from anywhere.
 #
 #   ios-visualizer/tools/build_game_ios.sh --team <team ID> [--device <id>] [--install] [--launch]
-#       [--export <dir>] [--copy-setup]
+#       [--export <dir>] [--copy-setup] [--bundle-id <id>]
 #
 # --copy-setup (with --install) copies the public Connect setup from the comms
 # test app with copy_phone_setup.sh, so only the passwords are typed.
+# --bundle-id sets the app's bundle identifier in the export (link_commsnative.py
+# --bundle-id), for a team that Apple will not register the export's own to
+# because another team holds it. The export keeps the new identifier; it is a
+# separate app on the iPhone, with its own data.
 # --device takes the identifier or the UDID that `xcrun devicectl list devices`
 # reports. COMMS_CONTENT_PACKAGES=<dir> supplies local package tarballs that the
 # game's Packages/manifest.json names with "file:../ContentPackages/..." but
@@ -20,8 +24,10 @@
 # copy of the game's tracked files in .comms-local/game-ios/vis, so untracked
 # files in vis/ (such as Finder's " 2" duplicates) never reach the build.
 # Steps: copy the project, Unity batch build to .comms-local/game-ios/xcode,
-# link CommsNative (link_commsnative.py), pin the tested package versions,
-# sign and build with xcodebuild, then install and launch with devicectl.
+# link CommsNative (link_commsnative.py) and, with --bundle-id, set the app's
+# identifier, pin the tested package versions, sign and build with xcodebuild,
+# check that UnityFramework defines CommsNextResult, CommsHandState and
+# CommsNextHandEvent, then install and launch with devicectl.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd -P)"
@@ -34,6 +40,7 @@ INSTALL=0
 LAUNCH=0
 COPY_SETUP=0
 SKIP_UNITY=0
+BUNDLE_ID=""
 EXPORT="$WORK/xcode"
 # Xcode's output stays out of ~/Documents: there the file provider tags new
 # bundles with Finder info, which codesign refuses ("detritus not allowed").
@@ -46,6 +53,8 @@ while [ $# -gt 0 ]; do
         --install) INSTALL=1; shift ;;
         --launch) INSTALL=1; LAUNCH=1; shift ;;
         --copy-setup) COPY_SETUP=1; shift ;;
+        --bundle-id) [ -n "${2:-}" ] || { echo "--bundle-id needs a bundle identifier" >&2; exit 2; }
+                     BUNDLE_ID="$2"; shift 2 ;;
         --skip-unity) SKIP_UNITY=1; shift ;;  # relink and rebuild the last export only
         --export) EXPORT="$(cd "$2" && pwd -P)"; SKIP_UNITY=1; shift 2 ;;
         *) echo "Unknown option: $1" >&2; exit 2 ;;
@@ -141,6 +150,9 @@ if [ "$EXPORT" != "$WORK/xcode" ]; then
         xargs -0 file 2>/dev/null | sed -n 's/: *Mach-O.*//p' | while IFS= read -r binary; do chmod +x "$binary"; done
 fi
 python3 "$ROOT/ios-visualizer/tools/link_commsnative.py" --export "$EXPORT"
+if [ -n "$BUNDLE_ID" ]; then
+    python3 "$ROOT/ios-visualizer/tools/link_commsnative.py" --export "$EXPORT" --bundle-id "$BUNDLE_ID"
+fi
 XCODE=(xcodebuild -project "$EXPORT/Unity-iPhone.xcodeproj" -scheme Unity-iPhone -configuration Release
        -derivedDataPath "$DERIVED" -clonedSourcePackagesDirPath "$DERIVED/SourcePackages")
 resolve() {
@@ -163,9 +175,11 @@ APP="$DERIVED/Build/Products/Release-iphoneos/$(sed -n 's/^  productName: //p' "
 [ -d "$APP" ] || APP="$(find "$DERIVED/Build/Products/Release-iphoneos" -maxdepth 1 -name '*.app' | head -1)"
 echo "Built $APP"
 nm -gU "$APP/Frameworks/UnityFramework.framework/UnityFramework" > "$WORK/symbols.txt"
-if ! grep -q ' _CommsNextResult$' "$WORK/symbols.txt"; then
-    echo "UnityFramework does not define CommsNextResult; CommsNative is not linked" >&2; exit 1
-fi
+for symbol in CommsNextResult CommsHandState CommsNextHandEvent; do
+    if ! grep -q " _$symbol\$" "$WORK/symbols.txt"; then
+        echo "UnityFramework does not define $symbol; CommsNative is not linked or is older" >&2; exit 1
+    fi
+done
 
 if [ "$INSTALL" = 1 ]; then
     xcrun devicectl device install app --device "$DEVICE" "$APP"

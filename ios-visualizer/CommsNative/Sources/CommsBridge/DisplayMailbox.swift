@@ -51,14 +51,17 @@ final class DisplayMailbox {
 
 private let sharedState = DisplayState()
 private let sharedMailbox = DisplayMailbox(state: sharedState)
+private let sharedHands = HandEventState()
+private let sharedHandMailbox = HandMailbox(state: sharedHands)
 
 @_cdecl("CommsStart")
 public func commsStart() {
     sharedMailbox.resetDelivery()
     #if os(iOS)
-    DispatchQueue.main.async { IntegrationController.shared.install(state: sharedState) }
+    DispatchQueue.main.async { IntegrationController.shared.install(state: sharedState, hands: sharedHands) }
     #else
     _ = sharedState.stop(status: "iPhone setup required")
+    _ = sharedHands.stop()
     #endif
 }
 
@@ -73,10 +76,25 @@ public func commsNextResult(_ buffer: UnsafeMutablePointer<CChar>?, _ capacity: 
     sharedMailbox.nextResult(into: buffer, capacity: capacity)
 }
 
+// int32_t CommsHandState(char* buffer, int32_t capacity); both hands' state as compact
+// JSON, same return convention as CommsNextResult (never 0). Never blocks, safe every frame.
+@_cdecl("CommsHandState")
+public func commsHandState(_ buffer: UnsafeMutablePointer<CChar>?, _ capacity: Int32) -> Int32 {
+    sharedHandMailbox.handState(into: buffer, capacity: capacity)
+}
+
+// int32_t CommsNextHandEvent(char* buffer, int32_t capacity); the next accepted HAND_EVENT
+// as compact JSON, same return convention as CommsNextResult. Never blocks, safe every frame.
+@_cdecl("CommsNextHandEvent")
+public func commsNextHandEvent(_ buffer: UnsafeMutablePointer<CChar>?, _ capacity: Int32) -> Int32 {
+    sharedHandMailbox.nextHandEvent(into: buffer, capacity: capacity)
+}
+
 @_cdecl("CommsStop")
 public func commsStop() {
     // Invalidate immediately, before a queued UIKit teardown can run.
     _ = sharedState.stop(status: "Stopped")
+    _ = sharedHands.stop()
     #if os(iOS)
     DispatchQueue.main.async { IntegrationController.shared.uninstall() }
     #endif

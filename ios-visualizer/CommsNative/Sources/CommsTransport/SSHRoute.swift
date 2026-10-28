@@ -35,6 +35,9 @@ struct TransportOptions {
     var frameTimeout = TimeAmount.seconds(5)
     var retryMinimum = TimeAmount.milliseconds(500)
     var retryMaximum = TimeAmount.seconds(5)
+    // Subscribe with version 2 (GESTURE_RESULT and HAND_EVENT) until the service shows it
+    // has no hand events; CommsClient then uses version 1 for the rest of its life.
+    var handEvents = true
 }
 
 enum SSHAuthenticationHop: String {
