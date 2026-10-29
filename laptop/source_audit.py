@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import struct
 from typing import Optional
 
+from common import sensor_versions
 from common.sensor import SensorPacket
 
 
@@ -14,6 +15,8 @@ SOURCE_STATS_UUID = "6e1c0006-7a45-4dc4-b678-3f2d5a9c1001"
 _SOURCE_STATS = struct.Struct("<4sBB2xIIIIIII")
 # LCS3 follows sensor packet version 3. A board still running version 2
 # firmware reports LCS1, so an audited bridge refuses it before subscribing.
+# Versions 4 and 5 report LCS4 and LCS5 in the same 36 bytes
+# (common.sensor_versions.source_stats_magic).
 SOURCE_STATS_MAGIC = b"LCS3"
 SOURCE_STATS_SIZE = _SOURCE_STATS.size
 # Flag bit 0: the board sends only while its glove module reports movement.
@@ -60,8 +63,7 @@ class SourceStats:
 def parse_source_stats(data: bytes, *, expected_device_id: Optional[int] = None,
                        sensor_version: int = 3) -> SourceStats:
     """Parse the exact protected 36-byte source-statistics value."""
-    if type(sensor_version) is not int or sensor_version not in (3,4):
-        raise ValueError("sensor_version must be 3 or 4")
+    expected_magic = sensor_versions.source_stats_magic(sensor_version)
     if (expected_device_id is not None
             and (type(expected_device_id) is not int
                  or expected_device_id not in (1, 2))):
@@ -75,7 +77,6 @@ def parse_source_stats(data: bytes, *, expected_device_id: Optional[int] = None,
         raise ValueError("source statistics reserved bytes must be zero")
     (magic, device_id, flags, boot_id, next_seq, submitted, failures,
      idle, unread, refused) = _SOURCE_STATS.unpack(raw)
-    expected_magic = SOURCE_STATS_MAGIC if sensor_version == 3 else b"LCS4"
     if magic != expected_magic:
         raise ValueError("invalid source statistics magic; flash this board with the current firmware")
     if flags & ~_KNOWN_FLAGS:

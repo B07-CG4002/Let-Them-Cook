@@ -3,7 +3,7 @@
 Connects only to this Phone's loopback SSH forward. TLS identity remains the
 Ultra96 service identity. No Laptop connection, replay request or plaintext mode.
 With --hand-events it subscribes with version 2 and also receives the per-hand
-HAND_EVENT frames of a sensor-version-4 service; without it nothing changes.
+HAND_EVENT frames of a sensor-version-4 or -5 service; without it nothing changes.
 """
 import argparse
 import asyncio
@@ -510,7 +510,7 @@ def main(argv=None):
     parser.add_argument("--duration", type=float, help="Overall test duration in seconds")
     parser.add_argument("--hand-events", action="store_true",
                         help="Subscribe with version 2 and also print accepted HAND_EVENT frames "
-                             "(a sensor-version-4 service); --count still counts results")
+                             "(a sensor-version-4 or -5 service); --count still counts results")
     args = parser.parse_args(argv)
     if not 1 <= args.port <= 65535 or args.count < 0:
         parser.error("invalid port, count or session")

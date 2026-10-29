@@ -1,4 +1,5 @@
-"""Sensor protocol v4 on the Ultra96 service: samples and ACKs at v=4, every result still at v=3.
+"""Sensor protocol v4 and v5 on the Ultra96 service: samples and ACKs at v=4 or v=5, every result
+still at v=3.
 
 Both phone apps accept only v=3 results, so the service publishes v=3 GESTURE_RESULT
 envelopes in either sensor mode; the monitor envelopes stay at v=1.
@@ -9,7 +10,7 @@ import threading
 
 import pytest
 
-from common import sensor, sensor_v4
+from common import sensor, sensor_v4, sensor_versions
 from common.wire import ProtocolError, read_frame, write_frame
 from ultra96.protocol import DUMMY_GESTURES, RESULT_VERSION, validate_message
 
@@ -31,7 +32,7 @@ def ack(version, **change):
 
 
 def sample(version, device=1, boot=42, seq=0, request_id=None):
-    codec = sensor_v4 if version == 4 else sensor
+    codec = sensor_versions.codec(version)
     fixtures = codec.DUMMY_FIXTURES
     return codec.SensorPacket(device, boot, seq, seq * 20, fixtures[seq % len(fixtures)]).to_message(
         SESSION, request_id)
@@ -41,9 +42,9 @@ def sample(version, device=1, boot=42, seq=0, request_id=None):
 
 def test_results_are_version_3_whatever_the_sensor_version():
     assert RESULT_VERSION == 3
-    for version in (3, 4):
+    for version in (3, 4, 5):
         assert validate_message(result(), "GESTURE_RESULT", SESSION, sensor_version=version) == result()
-        for bad in (4, 2, 1):
+        for bad in (5, 4, 2, 1):
             with pytest.raises(ProtocolError, match="unsupported protocol version"):
                 validate_message(result(v=bad), "GESTURE_RESULT", SESSION, sensor_version=version)
     command = result(seq=5, request_id=5, result_id="cmd:1:7:5")
@@ -51,19 +52,21 @@ def test_results_are_version_3_whatever_the_sensor_version():
 
 
 def test_samples_and_acks_follow_the_sensor_version():
-    for version in (3, 4):
-        other = 7 - version
+    for version in (3, 4, 5):
         assert validate_message(sample(version), sensor_version=version)["v"] == version
         assert validate_message(ack(version), sensor_version=version)["v"] == version
-        with pytest.raises(ProtocolError):
-            validate_message(sample(version), sensor_version=other)
-        with pytest.raises(ProtocolError, match="unsupported protocol version"):
-            validate_message(ack(version), sensor_version=other)
+        for other in {3, 4, 5} - {version}:
+            with pytest.raises(ProtocolError):
+                validate_message(sample(version), sensor_version=other)
+            with pytest.raises(ProtocolError, match="unsupported protocol version"):
+                validate_message(ack(version), sensor_version=other)
     # The default is still version 3.
-    with pytest.raises(ProtocolError):
-        validate_message(ack(4))
-    with pytest.raises(ProtocolError, match="sensor_version must be 3 or 4"):
-        validate_message(result(), sensor_version=5)
+    for version in (4, 5):
+        with pytest.raises(ProtocolError):
+            validate_message(ack(version))
+    for bad in (6, 2, True, "5", None):
+        with pytest.raises(ProtocolError, match="sensor_version must be 3, 4 or 5"):
+            validate_message(result(), sensor_version=bad)
 
 
 def test_monitor_and_subscription_envelopes_stay_at_version_1_in_v4():
@@ -114,7 +117,7 @@ async def subscribe(pki, server):
     return reader, writer
 
 
-@pytest.mark.parametrize("version", [3, 4])
+@pytest.mark.parametrize("version", [3, 4, 5])
 def test_the_service_acks_at_the_sensor_version_and_publishes_v3_results(pki, version):
     async def check():
         server = await start_server(pki, sensor_version=version)

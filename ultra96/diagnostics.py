@@ -21,7 +21,7 @@ _EVENTS = frozenset({
     "result_send_cancelled", "result_abandoned", "subscriber_claimed",
     "subscriber_replaced", "subscribed_write_complete", "subscriber_ended",
     "model_result", "model_result_refused",
-    # Sensor version 4 hand events: their own names, so the result-path evidence above
+    # Sensor version 4 and 5 hand events: their own names, so the result-path evidence above
     # is the same with or without them.
     "hand_hello_accepted", "hand_hello_refused", "hand_event_published", "hand_event_refused",
     "hand_event_enqueued", "hand_event_write_complete", "hand_event_dropped", "hand_state_ended",

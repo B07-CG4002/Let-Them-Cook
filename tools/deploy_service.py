@@ -30,16 +30,18 @@ installs a renewed server certificate, and then, on the board:
      refused before anything is stopped, and the new runner is not started.
 Apart from step 6 it never uses sudo, and it never touches other users' processes.
 
---sensor-version 4 (opt-in; default 3) starts the new service with --sensor-version 4:
-twelve-channel SENSOR_BATCH and INGEST_ACK at v=4, results still at v=3. Its board
-folder is source-co-v4-<stamp>; a v3 deploy keeps source-co-v3-<stamp> and the same argv.
+--sensor-version 4 or 5 (opt-in; default 3) starts the new service with that
+--sensor-version: twelve-channel SENSOR_BATCH and INGEST_ACK at v=4 or v=5, results
+still at v=3 (5: the three-flex gloves with the wide gyro range, gyro x10). Its board
+folder is source-co-v4-<stamp> or source-co-v5-<stamp>; a v3 deploy keeps
+source-co-v3-<stamp> and the same argv.
 
     python -m tools.deploy_service --server-cert-dir <folder with server-cert.pem and server-key.pem>
     python -m tools.deploy_service --dry-run
     python -m tools.deploy_service --model ultra96.model_bridge --runner /home/xilinx/<folder>/<runner>.py
     python -m tools.deploy_service --model ultra96.model_bridge --runner-module src.socket_worker \
         --runner-cwd /tmp/cnn_conv1d/ai_integration --runner-arg=--weights --runner-arg <file> ...
-    python -m tools.deploy_service --sensor-version 4 --model ultra96.model_bridge \
+    python -m tools.deploy_service --sensor-version 5 --model ultra96.model_bridge \
         --runner-module src.socket_worker_hand --runner-cwd <board checkout> ... \
         --replace-runner 177087:611890431
 """
@@ -54,6 +56,7 @@ import shlex
 import socket
 import sys
 
+from common import sensor_versions
 from tools.demo_service import BOARD_ROOT
 from tools.ssh_tunnel import JUMP_HOST, default_jump_user
 from ultra96.protocol import validate_session
@@ -73,7 +76,7 @@ REPLACED_STOPS = {
     "already_gone": "already gone, nothing signalled",
     "failed": "NOT stopped (see the error below); it may still be running and hold the bridge connection",
 }
-# The paired runners read eleven channels (sensor v3); the hand worker reads twelve (v4).
+# The paired runners read eleven channels (sensor v3); the hand worker reads twelve (v4 or v5).
 ELEVEN_CHANNEL_RUNNERS = ("src.socket_worker", "src.socket_worker_full")
 HAND_RUNNER = "src.socket_worker_hand"
 
@@ -210,9 +213,9 @@ if options.get("model"):
     new_args += ["--model", options["model"]]
 if options.get("model_path"):
     new_args += ["--model-path", options["model_path"]]
-# Only an opt-in v4 deploy adds an argument; a v3 service starts exactly as before.
-if options.get("sensor_version", 3) == 4:
-    new_args += ["--sensor-version", "4"]
+# Only an opt-in v4 or v5 deploy adds an argument; a v3 service starts exactly as before.
+if options.get("sensor_version", 3) != 3:
+    new_args += ["--sensor-version", str(options["sensor_version"])]
 
 
 def alive(process):
@@ -398,8 +401,8 @@ def options_from(args):
     if not 5 <= args.start_timeout <= 300:
         raise ValueError("--start-timeout must be 5..300 seconds")
     sensor_version = getattr(args, "sensor_version", 3)
-    if type(sensor_version) is not int or sensor_version not in (3, 4):
-        raise ValueError("--sensor-version must be 3 or 4")
+    if type(sensor_version) is not int or sensor_version not in sensor_versions.VERSIONS:
+        raise ValueError("--sensor-version must be 3, 4 or 5")
     options = dict(session_id=args.session_id, event_log=not args.no_event_log, model=args.model,
                    model_path=args.model_path, start_timeout=args.start_timeout,
                    sensor_version=sensor_version)
@@ -441,13 +444,14 @@ def _check_runner_version(module, script, sensor_version):
     """Refuse a runner that reads the other sensor version's channels."""
     # A module by its name; a script by its file name (src/socket_worker.py run directly).
     name = module if module is not None else PurePosixPath(script).name
-    if sensor_version == 4 and name in ELEVEN_CHANNEL_RUNNERS + ("socket_worker.py", "socket_worker_full.py"):
-        raise ValueError("--sensor-version 4 sends twelve channels, but {} is an eleven-channel paired "
+    if (sensor_version in sensor_versions.TWELVE_CHANNEL
+            and name in ELEVEN_CHANNEL_RUNNERS + ("socket_worker.py", "socket_worker_full.py")):
+        raise ValueError("--sensor-version {} sends twelve channels, but {} is an eleven-channel paired "
                          "runner; give the twelve-channel runner ({}) or deploy with --sensor-version 3"
-                         .format(name, HAND_RUNNER))
+                         .format(sensor_version, name, HAND_RUNNER))
     if sensor_version == 3 and name in (HAND_RUNNER, "socket_worker_hand.py"):
-        raise ValueError("{} reads the twelve sensor-v4 channels: deploy it with --sensor-version 4"
-                         .format(name))
+        raise ValueError("{} reads the twelve sensor-v4/v5 channels: deploy it with --sensor-version 4 "
+                         "or 5 (the gloves' version)".format(name))
 
 
 def replace_entries(values):
@@ -522,9 +526,10 @@ def deploy(args):
     version = options["sensor_version"]
     source = BOARD_ROOT + "/source-co-v{}-".format(version) + stamp
     print(f"Board folder: {source}")
-    print("Sensor protocol: " + ("v4 (opt-in, --sensor-version 4: twelve channels; SENSOR_BATCH and "
-                                 "INGEST_ACK at v=4, results at v=3)" if version == 4
-                                 else "v3 (eleven channels; the default)"))
+    print("Sensor protocol: " + ("v{0} (opt-in, --sensor-version {0}: twelve channels{1}; SENSOR_BATCH "
+                                 "and INGEST_ACK at v={0}, results at v=3)".format(
+                                     version, ", gyro x10" if version == 5 else "")
+                                 if version != 3 else "v3 (eleven channels; the default)"))
     print(f"Files: {len(files)} from common/ and ultra96/; certificate: "
           f"{'install ' + str(certificate[0].parent) if certificate else 'keep the one on the board'}")
     print("Options: " + json.dumps(options, sort_keys=True))
@@ -646,9 +651,10 @@ def main(argv=None):
                         help="with --runner or --runner-module: a model runner started by hand to stop "
                              "before the new runner starts (repeat); 'python demo.py service' lists "
                              "them. Only that PID with those start ticks, and only a Python model runner")
-    parser.add_argument("--sensor-version", type=int, choices=(3, 4), default=3,
-                        help="sensor protocol of the new service: 3 (default) or the opt-in 4 "
-                             "(twelve channels; results stay at v=3)")
+    parser.add_argument("--sensor-version", type=int, choices=sensor_versions.VERSIONS, default=3,
+                        help="sensor protocol of the new service: 3 (default), the opt-in 4 "
+                             "(twelve channels) or the opt-in 5 (twelve channels, gyro x10: the "
+                             "three-flex gloves with the wide gyro range); results stay at v=3")
     parser.add_argument("--no-event-log", action="store_true", help="start without --event-log-dir")
     parser.add_argument("--start-timeout", type=float, default=30.0,
                         help="seconds to wait for both listeners (model loading counts)")

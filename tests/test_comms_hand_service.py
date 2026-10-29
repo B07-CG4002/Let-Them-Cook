@@ -22,7 +22,7 @@ import time
 
 import pytest
 
-from common import sensor, sensor_v4
+from common import sensor, sensor_v4, sensor_versions
 from common.hand_contract import make_hello
 from common.wire import read_frame, write_frame
 from src.hand_events import EventEncoder
@@ -470,7 +470,7 @@ async def frame_body(reader, timeout=5.0):
 
 
 def sample(version, device, boot, seq):
-    codec = sensor_v4 if version == 4 else sensor
+    codec = sensor_versions.codec(version)
     fixtures = codec.DUMMY_FIXTURES
     return codec.SensorPacket(device, boot, seq, 1000 + 20 * seq, fixtures[seq % len(fixtures)]).to_message(SESSION)
 
@@ -566,8 +566,11 @@ def gesture_results(run):
             for frame in frames if frame["type"] == "GESTURE_RESULT"]
 
 
-def test_a_v2_subscriber_gets_results_and_hand_events_in_order_exactly_as_the_runner_sent_them(pki):
-    run = asyncio.run(scenario(pki, subscription=2))
+# Version 5 (the gyro at x10) must deliver hand events exactly as version 4: the gate passes each
+# accepted sample unchanged to Wen Ree's admission, whose sample check accepts 4 and 5.
+@pytest.mark.parametrize("version", [4, 5])
+def test_a_v2_subscriber_gets_results_and_hand_events_in_order_exactly_as_the_runner_sent_them(pki, version):
+    run = asyncio.run(scenario(pki, subscription=2, version=version))
     sent = [(json.dumps(event, separators=(",", ":"))).encode("utf-8") for event in run["sent"]]
     results = iter(run["results"])
     events = iter(sent)
@@ -592,6 +595,7 @@ def test_a_v2_subscriber_gets_results_and_hand_events_in_order_exactly_as_the_ru
             metrics["hand_events_unrequested"], metrics["hand_events_no_subscriber"]) == (1, 5, 1, 5, 0, 0, 0)
     assert metrics["model_results"] == 4 and metrics["model_results_duplicate"] == 0
     assert run["bridge"].counts["hand_events"] == 6 and run["bridge"].counts["bad_lines"] == 0
+    assert metrics["hand_gate_errors"] == 0 and metrics["accepted"] == 4
     names = [event for event, _ in run["events"]]
     assert names.count("hand_event_published") == 5 and names.count("hand_event_write_complete") == 5
     assert [fields["reason"] for event, fields in run["events"] if event == "hand_event_refused"] == ["duplicate"]
@@ -650,11 +654,12 @@ def test_a_v1_subscriber_of_a_v4_service_sees_the_same_bytes_and_evidence_as_wit
     assert with_hands["server"].metrics["hand_events_unrequested"] == 5
 
 
-def test_only_new_stream_samples_reach_the_gate_and_a_new_boot_resets_only_that_hand(pki):
+@pytest.mark.parametrize("version", [4, 5])
+def test_only_new_stream_samples_reach_the_gate_and_a_new_boot_resets_only_that_hand(pki, version):
     async def check():
         events = []
         model = BridgeModel()
-        server = await start_server(pki, model=model, sensor_version=4,
+        server = await start_server(pki, model=model, sensor_version=version,
                                     observer=lambda event, **fields: events.append((event, fields)))
         writers, runner = [], None
         try:
@@ -663,7 +668,7 @@ def test_only_new_stream_samples_reach_the_gate_and_a_new_boot_resets_only_that_
             laptop, laptop_writer = await connect(pki, server.ingest_port)
             writers.append(laptop_writer)
             runner = await blocking(Runner, model.bridge)
-            glove = Glove(laptop, laptop_writer, 4)
+            glove = Glove(laptop, laptop_writer, version)
             script = Script(EPOCHS[0])
             await blocking(runner.send, dict(type="hand_hello", hello=script.hello))
             left = await glove.send(runner, LEFT, 11, 0)
@@ -671,7 +676,7 @@ def test_only_new_stream_samples_reach_the_gate_and_a_new_boot_resets_only_that_
             # A retransmission and a command are accepted by the service but never reach the gate.
             await write_frame(laptop_writer, left)
             assert (await read_frame(laptop))["status"] == "duplicate"
-            await write_frame(laptop_writer, dict(sample(4, LEFT, 11, 1), request_id=1))
+            await write_frame(laptop_writer, dict(sample(version, LEFT, 11, 1), request_id=1))
             assert (await read_frame(laptop))["status"] == "accepted"
             assert json.loads(await frame_body(phone))["request_id"] == 1  # the command's echo
             gate = server._hand_gate
@@ -747,11 +752,14 @@ def test_a_version_3_service_has_no_gate_and_answers_a_v2_subscribe_with_results
     assert claimed[0]["hand_events"] is False
 
 
-def test_the_runner_closing_ends_its_states_and_a_new_hello_starts_fresh(pki):
+@pytest.mark.parametrize("version", [4, 5])
+def test_the_runner_closing_ends_its_states_and_a_new_hello_starts_fresh(pki, version):
+    # The second hello comes after a sample was accepted, so it rebuilds the admission ledger
+    # from the gate's replay: in version 5 too.
     async def check():
         events = []
         model = BridgeModel()
-        server = await start_server(pki, model=model, sensor_version=4,
+        server = await start_server(pki, model=model, sensor_version=version,
                                     observer=lambda event, **fields: events.append((event, fields)))
         writers, runners = [], []
         try:
@@ -759,7 +767,7 @@ def test_the_runner_closing_ends_its_states_and_a_new_hello_starts_fresh(pki):
             writers.append(phone_writer)
             laptop, laptop_writer = await connect(pki, server.ingest_port)
             writers.append(laptop_writer)
-            glove = Glove(laptop, laptop_writer, 4)
+            glove = Glove(laptop, laptop_writer, version)
             first = await blocking(Runner, model.bridge)
             runners.append(first)
             script = Script(EPOCHS[0])
@@ -789,7 +797,8 @@ def test_the_runner_closing_ends_its_states_and_a_new_hello_starts_fresh(pki):
                 await frame_body(phone, timeout=0.3)
             metrics = server.metrics
             assert (metrics["hand_hellos"], metrics["hand_events_accepted"], metrics["hand_events_refused"],
-                    metrics["hand_events_published"]) == (2, 2, 1, 2)
+                    metrics["hand_events_published"], metrics["hand_hellos_refused"],
+                    metrics["hand_gate_errors"]) == (2, 2, 1, 2, 0, 0)
             assert model.bridge.counts["connections"] == 2
             assert [fields["connection"] for event, fields in events if event == "hand_hello_accepted"] == [1, 2]
             assert [fields["reason"] for event, fields in events if event == "hand_event_refused"] == ["invalid"]

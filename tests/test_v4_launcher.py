@@ -1,5 +1,9 @@
 """Sensor version 4 (the three-flex boards) through the laptop launcher and its tools.
 
+Version 5 (the same boards with the wide gyro range) has its own checks in
+test_v5_transport.py; the shared paths here also name it where version 4 is no longer
+the only twelve-channel version.
+
 Every check here is local: synthetic (--mock) input or recorded rows, a CommsServer on
 this machine and no BLE, SSH, Ultra96 or phone. Version 3 stays the default everywhere,
 with unchanged command lines; these tests pin that too.
@@ -48,11 +52,12 @@ def v4_config(device, **extra):
 
 # --- laptop.dual_bridge ---------------------------------------------------------------------
 
-def test_dual_bridge_option_defaults_to_3_and_accepts_only_3_or_4():
+def test_dual_bridge_option_defaults_to_3_and_accepts_only_3_4_or_5():
     assert _parser().parse_args(["--ca", "unused", "--mock"]).sensor_version == 3
-    assert _parser().parse_args(["--ca", "unused", "--mock", "--sensor-version", "4"]
-                                ).sensor_version == 4
-    for bad in ("2", "5", "four"):
+    for version in (4, 5):
+        assert _parser().parse_args(["--ca", "unused", "--mock", "--sensor-version", str(version)]
+                                    ).sensor_version == version
+    for bad in ("2", "6", "four"):
         with pytest.raises(SystemExit):
             _parser().parse_args(["--ca", "unused", "--mock", "--sensor-version", bad])
 
@@ -205,7 +210,7 @@ def test_start_names_the_sensor_version_only_for_version_4(tmp_path):
     assert command4[-5:] == ["--sensor-version", "4", "--progress-interval", "0", "--supervised"]
     assert [part for part in command4 if part not in ("--sensor-version", "4")] == command
     with pytest.raises(SystemExit):
-        demo._parser().parse_args(base + ["--sensor-version", "5"])
+        demo._parser().parse_args(base + ["--sensor-version", "6"])
 
 
 @pytest.mark.parametrize("mode", ["run", "live"])
@@ -227,8 +232,9 @@ def test_help_names_the_three_flex_boards_and_the_v4_service():
                                    env=dict(os.environ, COLUMNS="400"))
         assert completed.returncode == 0
         text = " ".join(completed.stdout.split())
-        assert "--sensor-version {3,4}" in text and "flash.py --flex3" in text
-        assert "tools.deploy_service --sensor-version 4" in text
+        assert "--sensor-version {3,4,5}" in text and "flash.py --flex3" in text
+        assert "flash.py --wide-gyro" in text
+        assert "tools.deploy_service with the same --sensor-version" in text
 
 
 def test_values_are_labelled_by_their_own_version():
@@ -237,7 +243,7 @@ def test_values_are_labelled_by_their_own_version():
     assert values_text(ROW12[:11]) == values_text(ROW12[:11], 3)
     assert "flex3" not in values_text(ROW12[:11])
     assert values_text(ROW12).startswith("values ")  # 12 values are not a version 3 packet
-    assert values_text(ROW12, 5).startswith("values ")
+    assert values_text(ROW12, 6).startswith("values ")  # no such version
     assert values_lines(ROW12, 4)[1].endswith("flex3 0.5000 0..1")
 
 
@@ -518,7 +524,7 @@ def test_an_invalid_address_is_refused_before_any_connection(monkeypatch, tmp_pa
     assert stopped.value.code == 2
 
 
-@pytest.mark.parametrize("version", [3, 4])
+@pytest.mark.parametrize("version", [3, 4, 5])
 def test_check_runs_the_selected_version_through_a_local_service_and_subscriber(
         monkeypatch, tmp_path, version):
     """The real check() with the BLE loop replaced by the bridge's own synthetic source."""
@@ -546,4 +552,4 @@ def test_check_runs_the_selected_version_through_a_local_service_and_subscriber(
         (summary["received"] - 1) / (summary["last_received_at"] - summary["first_received_at"]), 3)
     assert check_board.verdict(summary, rate=50, commands=0, sensor_version=version) == []
     assert summary["sensor_goodput"]["packet_bytes"] == (
-        (40 if version == 4 else 38) * summary["sensor_goodput"]["packets"])
+        (38 if version == 3 else 40) * summary["sensor_goodput"]["packets"])

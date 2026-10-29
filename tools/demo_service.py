@@ -83,7 +83,7 @@ def _deployment(path):
                                        and model_path.isprintable()):
         return None
     # A service started without --sensor-version speaks v3.
-    if sensor_version not in (None, "3", "4"):
+    if sensor_version not in (None, "3", "4", "5"):
         return None
     return folder, model, model_path, 3 if sensor_version is None else int(sensor_version)
 
@@ -130,8 +130,8 @@ def start_script(session_id):
     model_arguments = "".join(" " + flag + " " + shlex.quote(value)
                               for flag, value in (("--model", model), ("--model-path", model_path))
                               if value is not None)
-    if sensor_version == 4:
-        model_arguments += " --sensor-version 4"
+    if sensor_version != 3:
+        model_arguments += " --sensor-version " + str(sensor_version)
     # A failed listener query is an error, never evidence that the ports are free.
     return f'''set -eu
 cd {shlex.quote(folder)}

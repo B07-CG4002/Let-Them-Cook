@@ -8,6 +8,7 @@ statistics reconcile: generated on the board = received = acknowledged.
     python -m tools.check_board right
     python -m tools.check_board left --rate 50 --duration 65 --commands 3 --report out.json
     python -m tools.check_board right --sensor-version 4 --address ADDR --duration 300
+    python -m tools.check_board left --sensor-version 5 --address ADDR
 
 Use it after flashing. Only the named board is contacted (by its address in
 .comms-local/boards.json, or by --address); the other may stay powered. With
@@ -16,7 +17,9 @@ board can be checked; left|right then only selects device ID 1|2, which must be
 the ID the board was flashed with. Pair a board first (python -m
 laptop.windows_pairing --address ADDR). --sensor-version 4 checks a three-flex
 board (flash.py --flex3: 40-byte packets, 12 values, LCS4) against a version 4
-local service. The last lines report sequence gaps: missing sequence numbers,
+local service; --sensor-version 5 one with the wide gyro range (flash.py
+--glove --wide-gyro for the gloves, flash.py --wide-gyro for a bare board: the same
+40 bytes and 12 values, gyro x10, LCS5) against a version 5 local service. The last lines report sequence gaps: missing sequence numbers,
 the gaps they form and the longest one.
 """
 import argparse
@@ -26,7 +29,7 @@ from pathlib import Path
 import sys
 import tempfile
 
-from common import sensor, sensor_v4
+from common.sensor_versions import CODECS, VERSIONS
 from common.tls import client_context, server_context, TLS_SERVER_NAME
 from common.wire import read_frame, write_frame
 from laptop.bridge import Bridge, BridgeConfig, StreamTracker
@@ -37,7 +40,6 @@ from ultra96.server import CommsServer
 _FAILURE_FIELDS = ("malformed", "ack_errors", "transport_errors", "ble_errors", "cleanup_errors",
                    "queue_dropped", "stale_dropped", "gaps", "duplicates", "out_of_order",
                    "identity_mismatches")
-CODECS = {sensor.VERSION: sensor, sensor_v4.VERSION: sensor_v4}
 
 
 class GapTracker(StreamTracker):
@@ -222,9 +224,10 @@ def main(argv=None):
     parser.add_argument("--address", metavar="ADDR",
                         help="check the board at this Bluetooth address instead of the saved "
                              "left/right one; .comms-local/boards.json is not read or changed")
-    parser.add_argument("--sensor-version", type=int, choices=(3, 4), default=3,
-                        help="3 (38-byte packets, 11 values) or 4 (the three-flex boards: 40-byte "
-                             "packets, 12 values, LCS4); default: 3")
+    parser.add_argument("--sensor-version", type=int, choices=VERSIONS, default=3,
+                        help="3 (38-byte packets, 11 values), 4 (the three-flex boards: 40-byte "
+                             "packets, 12 values, LCS4) or 5 (the three-flex boards with the wide "
+                             "gyro range: 40-byte packets, 12 values, gyro x10, LCS5); default: 3")
     parser.add_argument("--rate", type=int, default=50)
     parser.add_argument("--duration", type=float, default=65.0)
     parser.add_argument("--commands", type=int, default=3)
