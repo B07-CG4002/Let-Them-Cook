@@ -346,18 +346,21 @@ SOCKET = deploy_service.BOARD_ROOT + "/model-runner.sock"
 
 
 def hand12_commit(overlay, changed=None):
-    """git_files for a commit with placeholder code (the worker naming its compat delivery), this
-    checkout's overlay and the changed files."""
+    """git_files for a commit with placeholder code (the worker naming its compat delivery, the
+    runtime naming the version-5 configuration it accepts), this checkout's overlay and the
+    changed files."""
     def git_files(ref, names):
         files = {name: overlay.get(name, ("hand12 " + name).encode()) for name in names}
         files[WORKER] = b"DELIVERY='compat_v3_gesture_result'\n"
+        files["src/hand_runtime.py"] = b"allowed=('independent_hand_flex3_v1','independent_hand_flex3_gyro_v5_v1')\n"
         files.update(changed or {})
         return files
     return git_files
 
 
-def hand12_command(dest, bundle="bundle", extra=""):
-    return ("python -m tools.deploy_service --sensor-version 4 --model ultra96.model_bridge "
+def hand12_command(dest, bundle="bundle", extra="", version=4):
+    return ("python -m tools.deploy_service --sensor-version " + str(version) +
+            " --model ultra96.model_bridge "
             "--runner-module src.socket_worker_hand --runner-cwd " + dest +
             " --runner-arg=--bundle --runner-arg " + bundle +
             " --runner-arg=--backend --runner-arg fpga --runner-arg=--bit --runner-arg " + dest +
@@ -392,7 +395,8 @@ def test_wen_rees_observe_only_worker_is_refused_before_connecting(overlay, monk
     monkeypatch.setattr(stage, "_connect", no_connect)
     observe_only = b'"""Observe/replay a twelve-channel bridge and write LOCAL diagnostic events."""\n'
     monkeypatch.setattr(stage, "git_files", hand12_commit(overlay, {WORKER: observe_only}))
-    assert stage.main(["--runner", "hand12", "--bundle", BOARD_BUNDLE, "--from-git", "upstream/main"]) == 2
+    assert stage.main(["--runner", "hand12", "--bundle", BOARD_BUNDLE, "--from-git", "upstream/main",
+                       "--sensor-version", "4"]) == 2
     err = capsys.readouterr().err
     assert WORKER + " at upstream/main has no 'compat_v3_gesture_result'" in err
     assert "observe-only worker" in err and "such as HEAD" in err and "nothing was uploaded" in err
@@ -428,22 +432,33 @@ def test_the_remote_command_passes_the_folders_only_when_there_are_some():
     assert argv(folders=("logs",))[-2:] == ["copy", '["logs"]']
 
 
-def test_the_hand12_deploy_command_reads_v4_the_bundle_and_the_overlay():
+@pytest.mark.parametrize("version", [4, 5])
+def test_the_hand12_deploy_command_reads_its_version_the_bundle_and_the_overlay(version):
     dest = stage.destination(HAND12.name)
     assert dest == deploy_service.BOARD_ROOT + "/model-runner/hand12_v1"
-    assert stage.deploy_command(dest, "hand12") == hand12_command(dest)
+    assert stage.deploy_command(dest, "hand12", sensor_version=version) == hand12_command(
+        dest, version=version)
     assert stage.deploy_command(dest, "hand12", bundle=BOARD_BUNDLE, allow_synthetic=True,
-                                replace=["177087:611890431", "2:3"]) == hand12_command(
+                                replace=["177087:611890431", "2:3"],
+                                sensor_version=version) == hand12_command(
         dest, BOARD_BUNDLE, " --runner-arg=--allow-synthetic --replace-runner 177087:611890431"
-                            " --replace-runner 2:3")
+                            " --replace-runner 2:3", version)
 
 
-def test_the_deploy_tool_accepts_the_hand12_command(monkeypatch):
+@pytest.mark.parametrize("version", [None, 3, 6, True, "5"])
+def test_the_hand12_deploy_command_never_guesses_a_sensor_version(version):
+    with pytest.raises(ValueError, match="needs sensor version 4 or 5"):
+        stage.deploy_command(stage.destination(HAND12.name), "hand12", sensor_version=version)
+
+
+@pytest.mark.parametrize("version", [4, 5])
+def test_the_deploy_tool_accepts_the_hand12_command(monkeypatch, version):
     dest = stage.destination(HAND12.name)
     captured = {}
     monkeypatch.setattr(deploy_service, "deploy", lambda args: captured.update(
         args=args, options=deploy_service.options_from(args)) or 0)
-    command = stage.deploy_command(dest, "hand12", replace=["177087:611890431"])
+    command = stage.deploy_command(dest, "hand12", replace=["177087:611890431"],
+                                   sensor_version=version)
     assert deploy_service.main(command.split()[3:]) == 0
     runner = captured["options"]["runner"]
     assert runner["module"] == "src.socket_worker_hand" and runner["cwd"] == dest
@@ -451,7 +466,7 @@ def test_the_deploy_tool_accepts_the_hand12_command(monkeypatch):
                               dest + "/fpga/overlays/independent_hand_v1/cnn_hand12_v1.bit",
                               "--socket", "/var/tmp/cg4002-week7-yanjie-20260907/model-runner.sock",
                               "--out", dest + "/logs"]
-    assert captured["options"]["sensor_version"] == 4
+    assert captured["options"]["sensor_version"] == version
     assert [entry["pid"] for entry in runner["replace"]] == [177087]
 
 
@@ -464,7 +479,7 @@ def test_hand12_dry_run_checks_a_local_bundle_and_plans_its_upload(synthetic_bun
                         commit(ref, names))
     capsys.readouterr()
     assert stage.main(["--runner", "hand12", "--bundle", str(synthetic_bundle), "--allow-synthetic",
-                       "--dry-run"]) == 0
+                       "--sensor-version", "4", "--dry-run"]) == 0
     out = capsys.readouterr().out
     assert seen == [("HEAD", HAND12.expected())]
     manifest = json.loads((synthetic_bundle / "manifest.json").read_text())
@@ -478,6 +493,7 @@ def test_hand12_dry_run_checks_a_local_bundle_and_plans_its_upload(synthetic_bun
     dest = stage.destination("hand12_v1")
     assert "  " + hand12_command(dest, extra=" --runner-arg=--allow-synthetic") in lines
     assert "a synthetic test bundle" in out and "not a trained model" in out
+    assert "Sensor version: v4 (40 bytes, 12 values, gyro x100, LCS4), given with --sensor-version" in out
     assert "PID 177087, start_ticks 611890431 on 2026-10-27" in out
     assert "--replace-runner 177087:611890431" in out and "python demo.py service" in out
     assert lines[-1] == "Dry run: nothing was connected or changed."
@@ -486,9 +502,100 @@ def test_hand12_dry_run_checks_a_local_bundle_and_plans_its_upload(synthetic_bun
 def test_a_synthetic_bundle_needs_allow_synthetic(synthetic_bundle, overlay, monkeypatch, capsys):
     monkeypatch.setattr(stage, "_connect", no_connect)
     monkeypatch.setattr(stage, "git_files", hand12_commit(overlay))
-    assert stage.main(["--runner", "hand12", "--bundle", str(synthetic_bundle), "--dry-run"]) == 2
+    assert stage.main(["--runner", "hand12", "--bundle", str(synthetic_bundle), "--sensor-version",
+                       "4", "--dry-run"]) == 2
     err = capsys.readouterr().err
     assert "--allow-synthetic" in err and "not a trained model" in err
+
+
+@pytest.mark.parametrize("bundle", ["synthetic", "board"])
+def test_a_bundle_that_does_not_name_its_version_needs_sensor_version(
+        bundle, synthetic_bundle, overlay, monkeypatch, capsys):
+    # A synthetic bundle names no sensor version, and a board path is not read here: the
+    # deploy command must not guess one (the gloves may run 4 or 5).
+    monkeypatch.setattr(stage, "_connect", no_connect)
+    monkeypatch.setattr(stage, "git_files", hand12_commit(overlay))
+    value = str(synthetic_bundle) if bundle == "synthetic" else BOARD_BUNDLE
+    assert stage.main(["--runner", "hand12", "--bundle", value, "--allow-synthetic", "--dry-run"]) == 2
+    err = capsys.readouterr().err
+    assert "does not name its sensor version" in err and "--sensor-version 4 or 5" in err
+    assert stage.main(["--runner", "hand12", "--bundle", value, "--allow-synthetic",
+                       "--sensor-version", "5", "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert "  " + hand12_command(stage.destination("hand12_v1"), "bundle" if bundle == "synthetic"
+                                 else BOARD_BUNDLE, " --runner-arg=--allow-synthetic", 5) in (
+        out.splitlines())
+
+
+V5_BUNDLE = REPO / "fpga" / "models" / "hand12_v5_20261029"
+
+
+@pytest.mark.skipif(not (V5_BUNDLE / "manifest.json").is_file(), reason="Wen Ree's v5 bundle")
+def test_wen_rees_trained_v5_bundle_stages_with_a_version_5_deploy_command(overlay, monkeypatch,
+                                                                           capsys):
+    monkeypatch.setattr(stage, "_connect", no_connect)
+    monkeypatch.setattr(stage, "git_files", hand12_commit(overlay))
+    capsys.readouterr()
+    assert stage.main(["--runner", "hand12", "--bundle", str(V5_BUNDLE), "--name",
+                       "hand12_v5_20261029", "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    lines = out.splitlines()
+    dest = stage.destination("hand12_v5_20261029")
+    # Trained, so no --allow-synthetic; the version comes from the bundle's own config.json.
+    assert "  " + hand12_command(dest, version=5) in lines
+    assert "trained LEFT and RIGHT models" in out and "SYNTHETIC" not in out
+    assert ("Sensor version: v5 (40 bytes, 12 values, gyro x10, LCS5), named by the bundle; the "
+            "gloves must send it (real gloves: python flash.py --glove --wide-gyro; bare test boards, "
+            "dummy data: python flash.py --wide-gyro) and the service runs it") in lines
+    manifest = json.loads((V5_BUNDLE / "manifest.json").read_text())
+    for name in list(manifest["generated_sha256"]) + ["manifest.json"]:
+        data = (V5_BUNDLE / name).read_bytes()
+        assert "  {:>10}  {}  bundle/{}".format(
+            len(data), hashlib.sha256(data).hexdigest()[:16], name) in lines
+    # The same --sensor-version is accepted; another one is refused before anything is uploaded.
+    assert stage.main(["--runner", "hand12", "--bundle", str(V5_BUNDLE), "--sensor-version", "5",
+                       "--dry-run"]) == 0
+    capsys.readouterr()
+    assert stage.main(["--runner", "hand12", "--bundle", str(V5_BUNDLE), "--sensor-version", "4",
+                       "--dry-run"]) == 2
+    err = capsys.readouterr().err
+    assert "--sensor-version 4 differs from the bundle's sensor_packet_version 5" in err
+
+
+@pytest.mark.skipif(not (V5_BUNDLE / "manifest.json").is_file(), reason="Wen Ree's v5 bundle")
+def test_a_v5_bundle_is_refused_with_a_runtime_that_cannot_read_it(overlay, monkeypatch, capsys):
+    # The bundle passes this checkout's runtime, but the staged commit's runtime is older.
+    old_runtime = {"src/hand_runtime.py": b"allowed_versions=('independent_hand_flex3_v1',)\n"}
+    monkeypatch.setattr(stage, "_connect", no_connect)
+    monkeypatch.setattr(stage, "git_files", hand12_commit(overlay, old_runtime))
+    assert stage.main(["--runner", "hand12", "--bundle", str(V5_BUNDLE), "--from-git", "405db87",
+                       "--dry-run"]) == 2
+    err = capsys.readouterr().err
+    assert "src/hand_runtime.py at 405db87 has no 'independent_hand_flex3_gyro_v5_v1'" in err
+    assert "nothing was uploaded" in err
+    # A version-4 bundle needs no such marker (any hand12 runtime reads it).
+    stage.check_runtime_version(old_runtime, 4, "405db87")
+
+
+@pytest.mark.parametrize("left, right, message", [
+    (4, 5, "the bundle's hands name different sensor versions: LEFT 4, RIGHT 5"),
+    (5, None, "different sensor versions"),
+    (3, 3, "names sensor version 3"),
+    ("5", "5", "names sensor version '5'"),
+])
+def test_the_bundle_version_must_be_one_twelve_channel_version_for_both_hands(left, right, message):
+    def config(version):
+        return json.dumps({} if version is None else {"sensor_packet_version": version}).encode()
+    files = {"bundle/left/config.json": config(left), "bundle/right/config.json": config(right)}
+    with pytest.raises(ValueError, match=message):
+        stage.bundle_sensor_version(files)
+
+
+def test_the_bundle_version_is_read_from_both_hands_configs():
+    for version in (4, 5, None):
+        body = json.dumps({} if version is None else {"sensor_packet_version": version}).encode()
+        files = {"bundle/left/config.json": body, "bundle/right/config.json": body}
+        assert stage.bundle_sensor_version(files) == version
 
 
 def test_a_damaged_local_bundle_is_refused(synthetic_bundle, overlay, tmp_path, monkeypatch, capsys):
@@ -506,7 +613,7 @@ def test_hand12_with_a_board_bundle_path_only_names_it(overlay, monkeypatch, cap
     monkeypatch.setattr(stage, "_connect", no_connect)
     monkeypatch.setattr(stage, "git_files", hand12_commit(overlay))
     assert stage.main(["--runner", "hand12", "--bundle", BOARD_BUNDLE, "--replace-runner",
-                       "177087:611890431", "--dry-run"]) == 0
+                       "177087:611890431", "--sensor-version", "4", "--dry-run"]) == 0
     out = capsys.readouterr().out
     assert " bundle/" not in out and "board path " + BOARD_BUNDLE in out
     dest = stage.destination("hand12_v1")
@@ -520,7 +627,7 @@ def test_allow_synthetic_with_a_board_bundle_path_does_not_call_it_synthetic(ove
     monkeypatch.setattr(stage, "_connect", no_connect)
     monkeypatch.setattr(stage, "git_files", hand12_commit(overlay))
     assert stage.main(["--runner", "hand12", "--bundle", BOARD_BUNDLE, "--allow-synthetic",
-                       "--dry-run"]) == 0
+                       "--sensor-version", "4", "--dry-run"]) == 0
     out = capsys.readouterr().out
     # Not read here, so whether it is synthetic is unknown: the flag is passed on, nothing claimed.
     assert "SYNTHETIC" not in out and "gestures mean nothing" not in out
@@ -546,6 +653,8 @@ def test_without_a_bundle_the_hand12_runner_says_where_one_comes_from(overlay, m
     (["--bundle", BOARD_BUNDLE], "hand12 runner only"),
     (["--runner", "full", "--allow-synthetic"], "hand12 runner only"),
     (["--runner", "full", "--replace-runner", "177087:611890431"], "hand12 runner only"),
+    (["--runner", "full", "--sensor-version", "5"], "hand12 runner only"),
+    (["--sensor-version", "4"], "hand12 runner only"),
     (["--runner", "hand12", "--bundle", BOARD_BUNDLE, "--source", "/tmp/hand12"], "--source"),
     (["--runner", "hand12", "--bundle", BOARD_BUNDLE, "--replace-runner", "177087"], "PID:START_TICKS"),
     (["--runner", "hand12", "--bundle", BOARD_BUNDLE, "--replace-runner", "0:611890431"],
@@ -571,7 +680,7 @@ def test_an_overlay_other_than_the_board_verified_pair_is_refused_before_connect
         name, overlay, monkeypatch, capsys):
     monkeypatch.setattr(stage, "_connect", no_connect)
     monkeypatch.setattr(stage, "git_files", hand12_commit(overlay, {OVERLAY + name: b"another build"}))
-    assert stage.main(["--runner", "hand12", "--bundle", BOARD_BUNDLE]) == 2
+    assert stage.main(["--runner", "hand12", "--bundle", BOARD_BUNDLE, "--sensor-version", "5"]) == 2
     err = capsys.readouterr().err
     assert OVERLAY + name in err and "board-verified" in err and "nothing was uploaded" in err
 
@@ -593,7 +702,7 @@ def test_hand12_uploads_the_code_overlay_and_bundle_for_the_board_to_check(
     monkeypatch.setattr(stage, "_run", run)
     capsys.readouterr()
     assert stage.main(["--runner", "hand12", "--bundle", str(synthetic_bundle), "--allow-synthetic",
-                       "--replace-runner", "177087:611890431"]) == 0
+                       "--sensor-version", "4", "--replace-runner", "177087:611890431"]) == 0
     manifest = json.loads((synthetic_bundle / "manifest.json").read_text())
     bundle = ["bundle/" + name for name in list(manifest["generated_sha256"]) + ["manifest.json"]]
     assert sorted(uploaded) == sorted(list(HAND12.expected()) + bundle)
@@ -607,8 +716,8 @@ def test_hand12_uploads_the_code_overlay_and_bundle_for_the_board_to_check(
     assert argv[-2:] == ["move", '["logs"]'] and json.loads(argv[7]) == stage.listing(uploaded)
     assert argv[5] == stage.destination("hand12_v1")
     record = json.loads(next((tmp_path / "records").glob("model-runner-stage-*.json")).read_text())
-    assert (record["runner"], record["git_ref"], record["bundle"], record["bundle_synthetic"]) == (
-        "hand12", "HEAD", "bundle", True)
+    assert (record["runner"], record["git_ref"], record["bundle"], record["bundle_synthetic"],
+            record["sensor_version"]) == ("hand12", "HEAD", "bundle", True, 4)
     out = capsys.readouterr().out
     assert "Copied: {} files".format(len(uploaded)) in out
     assert "  " + hand12_command(stage.destination("hand12_v1"), extra=(

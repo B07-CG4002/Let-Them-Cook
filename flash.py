@@ -7,6 +7,10 @@ sample (IDLE included) at 50 Hz from boot.
 the dummy module on bare boards, or with --glove the real three-flex gloves. Capture it
 with python demo.py ... --sensor-version 4 against a service deployed with
 python -m tools.deploy_service --sensor-version 4.
+--wide-gyro: the three-flex format with the wide gyro range (version 5: the same 40 bytes
+and 12 values, gyro carried at 10 counts per deg/s, LCS5; with --glove the sensor runs at
+±1000 deg/s), the format of Wen Ree's trained hand12 v5 models. It implies --flex3. Capture
+it with --sensor-version 5 against a service deployed with --sensor-version 5.
 """
 import argparse
 import json
@@ -96,14 +100,23 @@ def _read_board_address(port):
     return _bluetooth_address(result.stdout)
 
 
-def environments(glove=False, flex3=False):
-    """The LEFT and RIGHT PlatformIO environments, e.g. firebeetle32-left-glove-flex3."""
-    suffix = ("-glove" if glove else "") + ("-flex3" if flex3 else "")
+def environments(glove=False, flex3=False, wide_gyro=False):
+    """The LEFT and RIGHT PlatformIO environments, e.g. firebeetle32-left-glove-flex3.
+
+    wide_gyro (version 5) is a three-flex format, so it implies flex3:
+    firebeetle32-left-flex3-wide, firebeetle32-left-glove-flex3-wide."""
+    flex3 = flex3 or wide_gyro
+    suffix = ("-glove" if glove else "") + ("-flex3" if flex3 else "") + ("-wide" if wide_gyro else "")
     return tuple("firebeetle32-" + label + suffix for label in ROLES)
 
 
-def _flash(glove=False, flex3=False):
-    targets = dict(zip(ROLES, environments(glove, flex3)))
+def sensor_version(flex3=False, wide_gyro=False):
+    """The sensor packet version the flashed boards send: 3, 4 (--flex3) or 5 (--wide-gyro)."""
+    return 5 if wide_gyro else (4 if flex3 else 3)
+
+
+def _flash(glove=False, flex3=False, wide_gyro=False):
+    targets = dict(zip(ROLES, environments(glove, flex3, wide_gyro)))
     _run([sys.executable, "-m", "tools.generate_dummy_fixtures"])
     # The real gloves (two- or three-flex) build the glove owner's module from copies;
     # refuse stale ones.
@@ -140,9 +153,11 @@ def _flash(glove=False, flex3=False):
     save_boards(*detected)
     print(f'Board mapping saved: {CONFIG_PATH}\nLEFT={detected[0]}\nRIGHT={detected[1]}')
     print("Both uploads succeeded. Disconnect laptop USB and power both boards independently for the BLE demo.")
-    if flex3:
-        print("These boards send sensor packet version 4: capture them with --sensor-version 4 "
-              "(python demo.py start --sensor-version 4) against a version 4 Ultra96 service.")
+    version = sensor_version(flex3, wide_gyro)
+    if version != 3:
+        print("These boards send sensor packet version {0}: capture them with --sensor-version {0} "
+              "(python demo.py start --sensor-version {0}) against a version {0} Ultra96 "
+              "service.".format(version))
 
 
 def _pair(selection):
@@ -172,6 +187,12 @@ def main(argv=None):
                              "50 Hz from boot): firebeetle32-left/right-flex3 (dummy module, bare "
                              "boards) or, with --glove, firebeetle32-left/right-glove-flex3 (the "
                              "real three-flex gloves)")
+    parser.add_argument("--wide-gyro", action="store_true",
+                        help="the three-flex format with the wide gyro range (sensor version 5: "
+                             "40-byte packets, 12 values, gyro x10, LCS5; implies --flex3): "
+                             "firebeetle32-left/right-flex3-wide (dummy module, bare boards) or, "
+                             "with --glove, firebeetle32-left/right-glove-flex3-wide (the real "
+                             "gloves, sensor at ±1000 deg/s)")
     args = parser.parse_args(argv)  # --help exits before any hardware operation.
     try:
         if args.ports:
@@ -192,7 +213,7 @@ def main(argv=None):
             print("Private serial monitor: keep passkeys off camera. No log is saved; Ctrl+C exits.")
             _run(_pio() + ["device", "monitor", "--port", port, "--baud", "115200", "--no-reconnect"])
         else:
-            _flash(glove=args.glove, flex3=args.flex3)
+            _flash(glove=args.glove, flex3=args.flex3, wide_gyro=args.wide_gyro)
         return 0
     except KeyboardInterrupt:
         print("\nCancelled; remaining operations were not run.")

@@ -3,8 +3,10 @@
 A capture (python demo.py run or live) records every sensor packet the laptop
 received in packets.jsonl. This writes one CSV row per sample:
 device_id, glove, boot_id, seq, uptime_ms, then ax ay az (g), gx gy gz (deg/s),
-yaw pitch roll (deg), flex1 flex2 (0..1), restored as int16 / scale. A capture of
-the three-flex boards (sensor version 4) adds a flex3 column. Use it to record
+yaw pitch roll (deg), flex1 flex2 (0..1), restored as int16 / scale with the scales
+of the capture's version. A capture of the three-flex boards (sensor version 4, or 5
+with the wide gyro range: gyro travels at x10 instead of x100, the CSV is deg/s
+either way) adds a flex3 column. Use it to record
 data through the real chain once the gloves run the Communications firmware
 (their Bluetooth Classic recording scripts can no longer connect).
 
@@ -19,12 +21,11 @@ from pathlib import Path
 import sys
 import tempfile
 
-from common import sensor, sensor_v4
+from common.sensor_versions import CODECS
 
 ROOT = Path(__file__).resolve().parents[1]
 GLOVES = {1: "left", 2: "right"}
-# Version 3 packets carry 11 values; version 4, the three-flex boards, 12 (flex3 added).
-CODECS = {sensor.VERSION: sensor, sensor_v4.VERSION: sensor_v4}
+# Version 3 packets carry 11 values; versions 4 and 5, the three-flex boards, 12 (flex3 added).
 
 
 def _evidence_path(source):
@@ -76,7 +77,7 @@ def samples(path, device=None, version=3):
     Every sample must have the capture's version: a capture never mixes versions.
     """
     if version not in CODECS:
-        raise ValueError("sensor version {!r} is not 3 or 4".format(version))
+        raise ValueError("sensor version {!r} is not 3, 4 or 5".format(version))
     codec = CODECS[version]
     seen = set()
     with open(path, encoding="utf-8") as stream:
@@ -110,7 +111,7 @@ def export(source, out, device=None):
     no partial CSV behind."""
     version = capture_version(source)
     if version not in CODECS:
-        raise ValueError("sensor version {!r} is not 3 or 4".format(version))
+        raise ValueError("sensor version {!r} is not 3, 4 or 5".format(version))
     out = Path(out)
     rows = 0
     partial = tempfile.NamedTemporaryFile("w", encoding="utf-8", newline="", dir=out.parent,

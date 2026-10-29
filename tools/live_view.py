@@ -17,11 +17,11 @@ import json
 import math
 import threading
 
-from common import sensor, sensor_v4
+from common.sensor_versions import CODECS
 
 GLOVES = {1: "LEFT", 2: "RIGHT"}
-# Each packet's own version selects its codec: 3 has 11 values, 4 (the three-flex boards) 12.
-CODECS = {3: sensor, 4: sensor_v4}
+# Each packet's own version selects its codec (common.sensor_versions): 3 has 11 values,
+# 4 and 5 (the three-flex boards; 5 with the gyro at x10) 12.
 WHO_WIDTH = 6
 BOARD_COUNTERS = ("accepted", "duplicates", "results", "commands", "refused", "sent", "unsent")
 SERVICE_COUNTERS = ("rejected", "client_limit", "idle_evicted", "subscribers", "replaced",
@@ -70,7 +70,7 @@ def uptime_text(seconds):
 
 
 def values_text(values, version=3):
-    """The 11 (version 3) or 12 (version 4) values in physical units, grouped by sensor,
+    """The 11 (version 3) or 12 (versions 4 and 5) values in physical units, grouped by sensor,
     on one line."""
     return "  ".join(_value_groups(values, version))
 
@@ -693,12 +693,15 @@ def log_line(when, who, text):
 
 
 def packets_text(sensor_version):
-    """The sensor packet format of a version, for the run log: "v4 (40 bytes, 12 values)"."""
+    """The sensor packet format of a version, for the run log: "v4 (40 bytes, 12 values)";
+    "v5 (40 bytes, 12 values, gyro x10)"."""
     codec = CODECS.get(sensor_version)
     if codec is None:
         return "v{} (unknown format)".format(sensor_version)
-    return "v{} ({} bytes, {} values)".format(sensor_version, codec.PACKET_SIZE,
-                                              codec.CHANNEL_COUNT)
+    # Version 5 differs from 4 only in the gyro's scale (x10, not x100), so it says so.
+    return "v{} ({} bytes, {} values{})".format(sensor_version, codec.PACKET_SIZE,
+                                                codec.CHANNEL_COUNT,
+                                                ", gyro x10" if sensor_version == 5 else "")
 
 
 def header_lines(*, folder, started, command, revision, session_id, rate_hz, duration,

@@ -2,6 +2,7 @@
 import math
 import re
 
+from common import sensor_versions
 from common.sensor import CHANNEL_COUNT, VERSION
 from common.wire import ProtocolError
 
@@ -28,7 +29,7 @@ _FIELDS = {
                                "identity_limit", "devices", "service", "events", "events_dropped"},
 }
 # Monitor envelopes stay at version 1. Results stay at version 3 under sensor protocol
-# v4 too: both phone apps accept only v=3 results. Only SENSOR_BATCH and INGEST_ACK
+# v4 and v5 too: both phone apps accept only v=3 results. Only SENSOR_BATCH and INGEST_ACK
 # follow the selected sensor version.
 RESULT_VERSION = VERSION
 _SENSOR_KINDS = ("SENSOR_BATCH", "INGEST_ACK")
@@ -137,15 +138,18 @@ def validate_session(session_id):
 def validate_message(message, expected_type=None, session_id=None, *, sensor_version=VERSION):
     """Validate one protocol-version-3 message (monitor envelopes are version 1).
 
-    sensor_version (3, or an opt-in 4) sets the version of SENSOR_BATCH and INGEST_ACK and
-    the number of sample values; GESTURE_RESULT is version 3 whatever it is.
+    sensor_version (3, or an opt-in 4 or 5) sets the version of SENSOR_BATCH and INGEST_ACK
+    and the number of sample values (11 in version 3, 12 in 4 and 5); GESTURE_RESULT is
+    version 3 whatever it is.
     SUBSCRIBE and SUBSCRIBED are version 1, or version 2 with event_format 1 (hand events
     asked for), in either sensor mode.
     request_id is always present in data messages: null for samples and model
     results, uint32 equal to seq for commands.
     """
-    if type(sensor_version) is not int or sensor_version not in (3,4):
-        raise ProtocolError("sensor_version must be 3 or 4")
+    try:
+        channel_count = len(sensor_versions.codec(sensor_version).CHANNELS)
+    except ValueError as error:
+        raise ProtocolError(str(error)) from None
     if not isinstance(message, dict):
         raise ProtocolError("message must be an object")
     kind = message.get("type")
@@ -185,9 +189,9 @@ def validate_message(message, expected_type=None, session_id=None, *, sensor_ver
         if not _integer(message["uptime_ms"], 0, 0xFFFFFFFF):
             raise ProtocolError("invalid uptime_ms")
         values = message["values"]
-        if (not isinstance(values, list) or len(values) != (CHANNEL_COUNT if sensor_version == 3 else 12)
+        if (not isinstance(values, list) or len(values) != channel_count
                 or any(not _integer(value, -32768, 32767) for value in values)):
-            raise ProtocolError("values must contain exactly {} int16 integers".format(11 if sensor_version == 3 else 12))
+            raise ProtocolError("values must contain exactly {} int16 integers".format(channel_count))
     elif kind == "INGEST_ACK":
         if message["status"] not in ("accepted", "duplicate"):
             raise ProtocolError("invalid acknowledgement status")

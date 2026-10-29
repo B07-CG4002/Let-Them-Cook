@@ -5,12 +5,11 @@ import json
 import math
 from pathlib import Path
 
-# The v3 codec gets its own name: show_packet_examples uses "sensor" for a record.
-from common import sensor as sensor_v3, sensor_v4
+from common.sensor_versions import CODECS
 from ultra96.protocol import validate_session
 
-# Version 3 packets carry 11 values (38 bytes); version 4, the three-flex boards, 12 (40 bytes).
-CODECS = {sensor_v3.VERSION: sensor_v3, sensor_v4.VERSION: sensor_v4}
+# Version 3 packets carry 11 values (38 bytes); versions 4 and 5, the three-flex boards, 12
+# (40 bytes; version 5 carries the gyro at x10 instead of x100).
 
 
 def _object(pairs):
@@ -48,15 +47,16 @@ def _integer(value, low, high, field):
 
 
 def _version(row, field, expected=None):
-    """Only protocol-version-3 and version-4 captures are read; older ones are named as such.
+    """Only protocol-version-3, -4 and -5 captures are read; older ones are named as such.
 
     expected is the capture's one version once known: a capture never mixes versions.
     """
     version = row.get("version")
     if type(version) is int and version not in CODECS:
         raise ValueError(f"{field} is protocol version {version}; this tool reads only version-3 "
-                         "captures (11 values) and version-4 captures (12 values, the three-flex "
-                         "boards); check older captures with the code from before version 3")
+                         "captures (11 values) and version-4 and -5 captures (12 values, the "
+                         "three-flex boards); check older captures with the code from before "
+                         "version 3")
     _integer(version, min(CODECS), max(CODECS), field)
     if expected is not None and version != expected:
         raise ValueError(f"{field} is protocol version {version} in a version-{expected} capture")
@@ -84,7 +84,7 @@ def report_sensor_version(report):
         raise ValueError("report.json names more than one sensor version")
     version = named.pop()
     if type(version) is not int or version not in CODECS:
-        raise ValueError(f"report.json names sensor version {version!r}; expected 3 or 4")
+        raise ValueError(f"report.json names sensor version {version!r}; expected 3, 4 or 5")
     return version
 
 
@@ -106,8 +106,9 @@ def show_packet_examples(folder: Path) -> bool:
     Current sensor_ack records contain device/boot/seq/status but omit version,
     session and request_id. Session comes from report.json; these event types are
     telemetry, whose request_id is null. Those provenance limits are printed.
-    Protocol-version-3 captures (38-byte packets, 11 values) and version-4 captures
-    (40-byte packets, 12 values: the three-flex boards) are accepted. The version comes
+    Protocol-version-3 captures (38-byte packets, 11 values) and version-4 and -5 captures
+    (40-byte packets, 12 values: the three-flex boards; 5 carries the gyro at x10) are
+    accepted. The version comes
     from report.json when it names one, else from the first sensor record; every record
     must have it, and each raw packet's own version byte selects its codec.
     This is a packet illustration, not a whole-capture or phone-delivery audit.

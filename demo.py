@@ -11,6 +11,7 @@ import subprocess
 import sys
 import uuid
 
+from common import sensor_versions
 from tools.ssh_tunnel import JUMP_HOST, default_jump, tunnel_command, windows_ssh
 from laptop.dual_bridge import _source_rate
 from tools.demo_boards import load_boards
@@ -34,12 +35,15 @@ def _port(value):
 
 
 def _sensor_version_option(parser):
-    parser.add_argument("--sensor-version", type=int, choices=(3, 4), default=3,
+    parser.add_argument("--sensor-version", type=int, choices=sensor_versions.VERSIONS, default=3,
                         help="sensor packets of BOTH gloves: 3 = the current boards (38-byte "
                              "packets, 11 values); 4 = the three-flex boards (v4, 40-byte packets, "
-                             "12 values, flashed with flash.py --flex3). With 4 the Ultra96 service "
-                             "must be deployed with python -m tools.deploy_service "
-                             "--sensor-version 4; default: 3")
+                             "12 values, flashed with flash.py --glove --flex3; bare test boards: "
+                             "flash.py --flex3); 5 = the three-flex boards with the wide gyro range "
+                             "(v5, 40-byte packets, 12 values, gyro x10, flashed with flash.py --glove "
+                             "--wide-gyro; bare test boards: flash.py --wide-gyro). With 4 or 5 the "
+                             "Ultra96 service must be deployed with python -m tools.deploy_service with "
+                             "the same --sensor-version; default: 3")
 
 
 def _jump_option(parser):
@@ -135,9 +139,10 @@ def capture_command(args, report_path):
                         ("--file-device", args.file_device)):
         if value is not None:
             command.extend((flag, str(value)))
-    if getattr(args, "sensor_version", 3) == 4:
+    version = getattr(args, "sensor_version", 3)
+    if version != 3:
         # Only the three-flex boards name it, so a version 3 command line stays as it was.
-        command.extend(("--sensor-version", "4"))
+        command.extend(("--sensor-version", str(version)))
     return command
 
 
@@ -294,9 +299,11 @@ def run_capture(args):
     folder.mkdir()
     report_path = folder / "report.json"
     print(f"Physical two-ESP capture: {args.duration:g} seconds. Evidence: {folder}", flush=True)
-    if getattr(args, "sensor_version", 3) == 4:
-        print("Sensor packets: version 4 (the three-flex boards); the Ultra96 service must run "
-              "with --sensor-version 4.", flush=True)
+    version = getattr(args, "sensor_version", 3)
+    if version != 3:
+        print("Sensor packets: version {} (the three-flex boards{}); the Ultra96 service must run "
+              "with --sensor-version {}.".format(version, ", wide gyro range" if version == 5 else "",
+                                                 version), flush=True)
     child = None
     exit_code = 2
     try:

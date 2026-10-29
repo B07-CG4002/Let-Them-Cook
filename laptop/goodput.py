@@ -7,7 +7,7 @@ from collections import deque
 import math
 import threading
 
-from common.sensor import PACKET_SIZE, SensorPacket
+from common import sensor_versions
 
 
 def _time(value):
@@ -18,12 +18,8 @@ def _time(value):
 
 class GoodputMeter:
     def __init__(self, window_seconds=5.0, *, sensor_version=3):
-        if type(sensor_version) is not int or sensor_version not in (3,4):
-            raise ValueError("sensor_version must be 3 or 4")
-        self._packet_type, self._packet_size = SensorPacket, PACKET_SIZE
-        if sensor_version == 4:
-            from common import sensor_v4
-            self._packet_type, self._packet_size = sensor_v4.SensorPacket, sensor_v4.PACKET_SIZE
+        codec = sensor_versions.codec(sensor_version)
+        self._packet_type, self._packet_size = codec.SensorPacket, codec.PACKET_SIZE
         self.window_seconds = _time(window_seconds)
         if self.window_seconds <= 0:
             raise ValueError('window must be positive')

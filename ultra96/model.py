@@ -12,9 +12,10 @@ A model is any object or module with two callables:
 and it reports results by calling
     emit(gesture, confidence, device_id, boot_id, seq) -> bool
 from any thread. values is a tuple of 11 floats in the agreed physical units
-(12 under sensor protocol version 4).
+(12 under sensor protocol version 4 or 5; version 5 differs from 4 only in how the
+gyro travels, so the model gets the same deg/s either way).
 
-In sensor-version-4 mode a model may also have
+In sensor-version-4 or -5 mode a model may also have
     start_hand_events(emit_hand)                  called once, right after start(emit)
 and then report structured hand events by calling
     emit_hand(kind, payload, connection) -> bool
@@ -143,7 +144,7 @@ class ModelPort:
     and is supplied by the server. All metric updates happen on the loop thread,
     except model_results_late, which is counted under a lock.
 
-    With deliver_hand(kind, payload, connection) (sensor version 4) a model that has
+    With deliver_hand(kind, payload, connection) (sensor version 4 or 5) a model that has
     start_hand_events(emit_hand) is given emit_hand as well. Its calls reach
     deliver_hand on the loop thread in the order they were made, interleaved with
     the results in that order too (both go through call_soon_threadsafe).

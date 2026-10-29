@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import hashlib
 import struct
 
+from common import sensor_versions
 from common.sensor import _integer, decode_packet, SensorPacket, VERSION
 
 CONTROL_UUID = '6e1c0007-7a45-4dc4-b678-3f2d5a9c1001'
@@ -33,8 +34,7 @@ def chunk_size(mtu):
 
 
 def _validate(frame, mtu, sensor_version=VERSION):
-    if type(sensor_version) is not int or sensor_version not in (3,4):
-        raise ValueError("sensor_version must be 3 or 4")
+    selected = sensor_versions.codec(sensor_version)
     limit = chunk_size(mtu)
     if not isinstance(frame, ControlFrame):
         raise ValueError('expected ControlFrame')
@@ -54,11 +54,7 @@ def _validate(frame, mtu, sensor_version=VERSION):
             raise ValueError('error response must not contain success payload')
         return
     if opcode == COMMAND:
-        if sensor_version == 4:
-            from common.sensor_v4 import decode_packet as selected_decoder
-        else:
-            selected_decoder = decode_packet
-        packet = selected_decoder(frame.payload)
+        packet = selected.decode_packet(frame.payload)
         if (frame.offset or packet.version != sensor_version or packet.device_id != frame.device_id
                 or packet.seq != frame.request_id):
             raise ValueError('uncorrelated command sensor packet')
@@ -123,11 +119,5 @@ def parse_file_metadata(payload):
 
 
 def transformed_values(values, *, sensor_version=VERSION):
-    if type(sensor_version) is not int or sensor_version not in (3,4):
-        raise ValueError("sensor_version must be 3 or 4")
-    if sensor_version == 4:
-        from common.sensor_v4 import SensorPacket as selected_packet
-    else:
-        selected_packet = SensorPacket
-    packet = selected_packet(1, 0, 0, 0, values)
+    packet = sensor_versions.codec(sensor_version).SensorPacket(1, 0, 0, 0, values)
     return tuple(-32768 if value == 32767 else value + 1 for value in packet.values)

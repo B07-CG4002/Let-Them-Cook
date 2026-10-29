@@ -1,4 +1,4 @@
-"""The service's gate for structured hand events (sensor protocol version 4 only).
+"""The service's gate for structured hand events (sensor protocol version 4 or 5 only).
 
 The model runner reports each hand's events in Wen Ree's HAND_EVENT envelope
 (common.hand_contract) through ultra96.model's emit_hand. Before one is published
@@ -16,7 +16,8 @@ to a phone that asked for hand events, this gate checks it on the event-loop thr
   that hand (lease expiry or a glove reconnect), so the worker's own end of it
   still reaches the phone. A state_start, pulse, idle or reset ends any active state.
 
-Every newly accepted stream sample is fed in with its acceptance time. The last
+Every newly accepted stream sample, version 4 or 5, is fed in unchanged with its
+acceptance time (Wen Ree's common.hand_contract.validate_sensor accepts both). The last
 REPLAY_SAMPLES samples of each hand are kept with those times, so a hello that
 arrives after samples rebuilds the admission ledger as if it had come first.
 A new boot_id on one hand (the glove reconnected) ends that hand's state only.
@@ -74,7 +75,7 @@ class HandGate:
         return None if active is None else dict(active)
 
     def sample(self, message, now):
-        """A newly accepted v4 stream sample (not a command, not a duplicate) at server time now."""
+        """A newly accepted v4 or v5 stream sample (not a command, not a duplicate) at server time now."""
         device, boot = message["device_id"], message["boot_id"]
         current = self._boots[device]
         if boot != current:

@@ -15,6 +15,7 @@ import threading
 import time
 from typing import Any, Optional
 
+from common import sensor_versions
 from common.sensor import (decode_packet, split_notification, choose_fixture, SensorPacket,
                            encode_packet, PACKET_SIZE, SENSOR_MTU_FLOOR,
                            MAX_PACKETS_PER_NOTIFICATION)
@@ -60,8 +61,7 @@ class BridgeConfig:
     starvation_cooldown: float = 10.0
 
     def __post_init__(self):
-        if type(self.sensor_version) is not int or self.sensor_version not in (3,4):
-            raise ValueError("sensor_version must be 3 or 4")
+        sensor_versions.check(self.sensor_version)
         if self.host != "127.0.0.1":
             raise ValueError("bridge must connect to its local SSH forward at 127.0.0.1")
         if type(self.port) is not int or not 1 <= self.port <= 65535:
@@ -233,14 +233,15 @@ class _PipelineCleanupError(RuntimeError):
 class Bridge:
     def __init__(self, config, *, connector=None, clock=time.monotonic, evidence=None):
         self.config = config
-        self._sensor_v4 = None
-        if config.sensor_version == 4:
-            from common import sensor_v4
-            self._sensor_v4 = sensor_v4
-        self.packet_size = self._sensor_v4.PACKET_SIZE if self._sensor_v4 else PACKET_SIZE
-        self.sensor_mtu_floor = self._sensor_v4.SENSOR_MTU_FLOOR if self._sensor_v4 else SENSOR_MTU_FLOOR
-        self.max_packets_per_notification = (self._sensor_v4.MAX_PACKETS_PER_NOTIFICATION
-                                             if self._sensor_v4 else MAX_PACKETS_PER_NOTIFICATION)
+        # Versions 4 and 5 (twelve channels) use their codec module; version 3 this
+        # module's globals.
+        self._sensor_codec = None
+        if config.sensor_version != 3:
+            self._sensor_codec = sensor_versions.codec(config.sensor_version)
+        self.packet_size = self._sensor_codec.PACKET_SIZE if self._sensor_codec else PACKET_SIZE
+        self.sensor_mtu_floor = self._sensor_codec.SENSOR_MTU_FLOOR if self._sensor_codec else SENSOR_MTU_FLOOR
+        self.max_packets_per_notification = (self._sensor_codec.MAX_PACKETS_PER_NOTIFICATION
+                                             if self._sensor_codec else MAX_PACKETS_PER_NOTIFICATION)
         self.clock = clock
         self.inbox = RawInbox(config.queue_capacity)
         self.metrics = Metrics()
@@ -280,7 +281,8 @@ class Bridge:
         # that proves they stopped. A gated board's coverage is judged over it.
         self.source_ticking_since = None
         self.source_ticking_until = None
-        self.goodput = GoodputMeter() if config.sensor_version == 3 else GoodputMeter(sensor_version=4)
+        self.goodput = (GoodputMeter() if config.sensor_version == 3
+                        else GoodputMeter(sensor_version=config.sensor_version))
         self.evidence = evidence
         self.negotiated_mtu = None
         self.source_rate_confirmed = None
@@ -288,20 +290,22 @@ class Bridge:
         self.rng = random.Random(config.seed) if config.seed is not None else None
         self.control = (ControlChannel(config.expected_device_id, timeout=config.io_timeout,
                                        evidence=evidence, bounded=self._bounded,
-                                       **({"sensor_version": 4} if config.sensor_version == 4 else {}))
+                                       **({"sensor_version": config.sensor_version}
+                                          if config.sensor_version != 3 else {}))
                         if config.controls_enabled else None)
         self.commands = (CommandPipeline(self.control, self.forward_command)
                          if self.control is not None else None)
 
     def _codec(self, name, *args):
         # Keep v3 global lookup so existing dependency-injected tests still work.
-        function = getattr(self._sensor_v4, name) if self._sensor_v4 else globals()[name]
+        function = getattr(self._sensor_codec, name) if self._sensor_codec else globals()[name]
         return function(*args)
 
     def _parse_stats(self, data, *, expected_device_id=None):
         if self.config.sensor_version == 3:
             return parse_source_stats(data, expected_device_id=expected_device_id)
-        return parse_source_stats(data, expected_device_id=expected_device_id, sensor_version=4)
+        return parse_source_stats(data, expected_device_id=expected_device_id,
+                                  sensor_version=self.config.sensor_version)
 
     def log(self, kind, **fields):
         if self.evidence is not None:
@@ -1197,7 +1201,7 @@ class Bridge:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--sensor-version", type=int, choices=(3,4), default=3)
+    parser.add_argument("--sensor-version", type=int, choices=sensor_versions.VERSIONS, default=3)
     parser.add_argument("--device", type=int, choices=(1,2), help="expected physical glove device ID")
     parser.add_argument("--source-audit", action="store_true")
     parser.add_argument("--controls", action="store_true", help="authenticated controls; requires --source-audit and --device")

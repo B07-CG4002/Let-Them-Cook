@@ -77,14 +77,23 @@ def test_start_restarts_the_deployed_sensor_version(service, monkeypatch, tmp_pa
     arguments = launch_arguments(service.start_script("ltc-comms"))
     assert arguments[-4:] == ["--model", "ultra96.model_bridge", "--sensor-version", "4"]
     assert service.newest_deployment() == (v4, "ultra96.model_bridge", None, 4)
-    # A record whose sensor version is neither 3 nor 4 is not trusted: fall back to an older one.
-    for stamp, bad in (("20261027T030000Z", "5"), ("20261027T040000Z", "4; reboot")):
+    # Version 5 (the gloves with the wide gyro range) is restarted the same way.
+    v5 = service.BOARD_ROOT + "/source-co-v5-20261029T020000Z"
+    write_record(records, "20261029T020000Z", {"status": "deployed", "current": running(
+        v5, "--session-id", "ltc-comms", "--model", "ultra96.model_bridge", "--sensor-version", "5")})
+    arguments = launch_arguments(service.start_script("ltc-comms"))
+    assert arguments[-4:] == ["--model", "ultra96.model_bridge", "--sensor-version", "5"]
+    assert service.newest_deployment() == (v5, "ultra96.model_bridge", None, 5)
+    # A record whose sensor version is not 3, 4 or 5 is not trusted: fall back to an older one.
+    for stamp, bad in (("20261029T030000Z", "6"), ("20261029T040000Z", "5; reboot"),
+                       ("20261029T050000Z", "2")):
         write_record(records, stamp, {"status": "deployed", "current": running(
-            service.BOARD_ROOT + "/source-co-v4-" + stamp, "--sensor-version", bad)})
-        assert service.newest_deployment() == (v4, "ultra96.model_bridge", None, 4)
+            service.BOARD_ROOT + "/source-co-v5-" + stamp, "--sensor-version", bad)})
+        assert service.newest_deployment() == (v5, "ultra96.model_bridge", None, 5)
 
 
-@pytest.mark.parametrize("extra, version", [((), 3), (("--sensor-version", "4"), 4)])
+@pytest.mark.parametrize("extra, version", [((), 3), (("--sensor-version", "4"), 4),
+                                            (("--sensor-version", "5"), 5)])
 def test_start_prints_the_sensor_version_it_restarts(service, monkeypatch, tmp_path, capsys, extra, version):
     records = tmp_path / "deployments"
     monkeypatch.setattr(service, "DEPLOYMENTS", records)

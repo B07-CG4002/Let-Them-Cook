@@ -1,10 +1,12 @@
 """TLS-only B07 Communications service. Ingestion ACKs and Phone results use separate ports.
 
 Each newly accepted stream sample goes to the model (ultra96.model); its results go to the
-one subscribed phone. Sensor protocol defaults to v3; v4 requires explicit selection
-(--sensor-version 4) and changes only SENSOR_BATCH and INGEST_ACK: results stay at v=3.
+one subscribed phone. Sensor protocol defaults to v3; v4 and v5 (the three-flex gloves,
+twelve channels; v5 carries gyro at 10 counts per deg/s, v4 at 100) require explicit
+selection (--sensor-version 4 or 5) and change only SENSOR_BATCH and INGEST_ACK: results
+stay at v=3. The model gets physical units, restored once here with that version's scales.
 
-In v4 mode the model may also report structured per-hand events (HAND_EVENT, Wen Ree's
+In v4 and v5 mode the model may also report structured per-hand events (HAND_EVENT, Wen Ree's
 envelope in common.hand_contract). ultra96.hand_gate checks each one; an accepted one goes,
 unchanged, to the subscriber only if it subscribed at version 2 (hand events asked for),
 in the same ordered queue as the results. The GESTURE_RESULT stream, its metrics, the board
@@ -29,6 +31,7 @@ import traceback
 
 from common.tls import server_context
 from common.wire import ProtocolError, STREAM_LIMIT, read_frame, write_frame
+from common import sensor_versions
 from common.sensor import VERSION
 from ultra96.model import DummyModel, ModelPort, ModelStartError, load_model
 from ultra96.monitor import ServiceMonitor
@@ -220,9 +223,7 @@ class CommsServer:
         if (not isinstance(ingest_idle_timeout, (int, float)) or isinstance(ingest_idle_timeout, bool)
                 or not math.isfinite(ingest_idle_timeout) or ingest_idle_timeout <= 0):
             raise ValueError("ingest idle timeout must be positive finite seconds")
-        if type(sensor_version) is not int or sensor_version not in (3,4):
-            raise ValueError("sensor_version must be 3 or 4")
-        self.sensor_version = sensor_version
+        self.sensor_version = sensor_versions.check(sensor_version)
         self.ingest_idle_timeout = float(ingest_idle_timeout)
         self.ssl_context = ssl_context
         self.session_id = validate_session(session_id)
@@ -269,11 +270,12 @@ class CommsServer:
         if callable(configure):
             configure(sensor_version)
         converter = None
-        # Hand events exist only in sensor version 4; version 3 imports nothing for them.
+        # Hand events exist only in the twelve-channel versions 4 and 5; version 3 imports
+        # nothing for them. Each version restores physical units with its own scales.
         self._hand_gate = None
         deliver_hand = None
-        if sensor_version == 4:
-            from common.sensor_v4 import physical_values as converter
+        if sensor_version in sensor_versions.TWELVE_CHANNEL:
+            converter = sensor_versions.codec(sensor_version).physical_values
             from ultra96.hand_gate import HandGate
             self._hand_gate = HandGate(self.session_id, self.metrics, observe=self._observe,
                                        max_namespaces=max_namespaces)
@@ -503,7 +505,7 @@ class CommsServer:
         self._publish(result)
 
     def _hand_sample(self, message):
-        """Loop thread, sensor v4: tell the hand gate about a newly accepted stream sample."""
+        """Loop thread, sensor v4 or v5: tell the hand gate about a newly accepted stream sample."""
         try:
             self._hand_gate.sample(message, time.monotonic())
         except Exception as exc:  # the hand path must never cost the glove its ACK
@@ -511,7 +513,7 @@ class CommsServer:
             self.model.warn("hand_gate", "hand gate refused a sample: %s", type(exc).__name__)
 
     def _model_hand(self, kind, payload, connection):
-        """Loop thread, sensor v4: one hand message of the model (ultra96.model emit_hand)."""
+        """Loop thread, sensor v4 or v5: one hand message of the model (ultra96.model emit_hand)."""
         now = time.monotonic()
         try:
             if kind == "closed":
@@ -599,7 +601,7 @@ class CommsServer:
             await self.monitor.serve(reader, writer, self.session_id, self._monitor_status)
             return
         subscription = validate_message(frame, "SUBSCRIBE", self.session_id)
-        # Version 2 asks for HAND_EVENT frames too; only a sensor-version-4 service has any.
+        # Version 2 asks for HAND_EVENT frames too; only a sensor-version-4 or -5 service has any.
         asked = subscription["v"] == 2
         self._subscriber_generation += 1
         queue = ResultQueue(observer=self._observe if self.observer is not None else None,
@@ -805,7 +807,7 @@ def _ingest_idle_timeout(value):
 
 def _parser():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--sensor-version", type=int, choices=(3,4), default=3)
+    parser.add_argument("--sensor-version", type=int, choices=sensor_versions.VERSIONS, default=3)
     parser.add_argument("--cert", required=True)
     parser.add_argument("--key", required=True)
     parser.add_argument("--session-id", default="ltc-comms")

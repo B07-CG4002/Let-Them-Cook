@@ -10,8 +10,8 @@ Three runners are known (--runner):
                     of this checkout (--from-git, default upstream/main: run `git fetch upstream`
                     first), uploaded and moved into place, in the repository's own layout. With
                     --source it copies a board folder in that layout instead.
-  hand12            Wen Ree's independent-hand worker src.socket_worker_hand (sensor protocol v4,
-                    one model per hand) on the cnn_hand12_v1 overlay, with the compat delivery
+  hand12            Wen Ree's independent-hand worker src.socket_worker_hand (sensor protocol v4
+                    or v5, one model per hand) on the cnn_hand12_v1 overlay, with the compat delivery
                     Communications added to it (edited with his agreement): it sends results back
                     to the model bridge. Its files (the worker, his src/hand_*.py runtime, the
                     common/ modules they import, the overlay .bit, .hwh and its manifest) are
@@ -38,12 +38,19 @@ tools.hand_hls_prepare --synthetic --out <new folder>) is not a trained model an
 --allow-synthetic. --replace-runner PID:START_TICKS is passed on to the deploy command, which then
 replaces that runner started by hand (`python demo.py service` lists them with their start ticks).
 
+The printed deploy command starts the service with the sensor version the bundle was trained on:
+each hand's config.json names it (sensor_packet_version: 4, or 5 for the gloves with the wide gyro
+range, such as fpga/models/hand12_v5_20261029). The gloves must send that version too. A bundle
+that names none (a synthetic one) or a board path needs --sensor-version 4 or 5; a --sensor-version
+that differs from the bundle's is refused.
+
     python -m tools.stage_model_runner --dry-run
     python -m tools.stage_model_runner
     python -m tools.stage_model_runner --runner full --dry-run
     python -m tools.stage_model_runner --runner full --weights fpga/hls/eightclass_weights_standard_20261021.npz --name cnn_full_std
     python -m tools.stage_model_runner --runner hand12 --bundle <bundle folder> --dry-run
     python -m tools.stage_model_runner --runner hand12 --bundle <bundle folder> --replace-runner 177087:611890431
+    python -m tools.stage_model_runner --runner hand12 --bundle fpga/models/hand12_v5_20261029 --name hand12_v5_20261029 --dry-run
 """
 import argparse
 from datetime import datetime, timezone
@@ -56,6 +63,7 @@ import shlex
 import subprocess
 import sys
 
+from common import sensor_versions
 from tools.demo_service import BOARD_ROOT
 from tools.deploy_service import RECORDS, _connect, _git_bash_hint, replace_entries
 from tools.ssh_tunnel import default_jump_user
@@ -255,15 +263,20 @@ def destination(name):
 
 
 def deploy_command(dest, runner="conv1d", weights=None, bundle=None, allow_synthetic=False,
-                   replace=()):
-    """The PowerShell line that starts the runner from the copy (as Wen Ree starts it)."""
+                   replace=(), sensor_version=None):
+    """The PowerShell line that starts the runner from the copy (as Wen Ree starts it).
+
+    The hand12 runner needs sensor_version: 4 or 5, the version its bundle was trained on."""
     runner = RUNNERS[runner]
     cwd = dest + ("/" + runner.folder if runner.folder else "")
     if runner.weights is None:
-        # The hand worker reads sensor protocol v4 and a model bundle, on the FPGA, from the
-        # service's model socket (ultra96.model_bridge: model-runner.sock in BOARD_ROOT), and
-        # writes a new record file in the copy's logs folder at each start.
-        parts = ["python", "-m", "tools.deploy_service", "--sensor-version", "4",
+        if type(sensor_version) is not int or sensor_version not in sensor_versions.TWELVE_CHANNEL:
+            raise ValueError("the hand12 deploy command needs sensor version 4 or 5, not {!r}".format(
+                sensor_version))
+        # The hand worker reads twelve channels (sensor protocol v4 or v5) and a model bundle, on
+        # the FPGA, from the service's model socket (ultra96.model_bridge: model-runner.sock in
+        # BOARD_ROOT), and writes a new record file in the copy's logs folder at each start.
+        parts = ["python", "-m", "tools.deploy_service", "--sensor-version", str(sensor_version),
                  "--model", "ultra96.model_bridge", "--runner-module", runner.module,
                  "--runner-cwd", cwd,
                  "--runner-arg=--bundle", "--runner-arg", BUNDLE if bundle is None else bundle,
@@ -335,11 +348,29 @@ def check_code(runner, files, ref):
                                  "Stage from a commit that has it, such as HEAD"))
 
 
+# The text a runtime file at the staged commit must contain to read a bundle of a sensor
+# version: Wen Ree's src/hand_runtime.py accepts version-5 bundles since team PR #40.
+RUNTIME_MARKERS = {5: ("src/hand_runtime.py", "independent_hand_flex3_gyro_v5_v1")}
+
+
+def check_runtime_version(files, sensor_version, ref):
+    """Refuse a commit whose hand runtime cannot read a bundle of this sensor version.
+
+    The bundle is checked here with this checkout's runtime, but the board runs the commit's."""
+    marker = RUNTIME_MARKERS.get(sensor_version)
+    if marker is not None and marker[1].encode() not in files[marker[0]]:
+        raise ValueError("{} at {} has no {!r}: that runtime refuses a sensor-version-{} bundle. Stage "
+                         "from a commit with Wen Ree's team pull request #40, such as HEAD; nothing "
+                         "was uploaded".format(marker[0], ref, marker[1], sensor_version))
+
+
 def bundle_files(folder, allow_synthetic=False):
-    """({BUNDLE/name: bytes}, synthetic) of a local hand model bundle, checked as the runner checks it.
+    """({BUNDLE/name: bytes}, synthetic, sensor version) of a local hand model bundle, checked
+    as the runner checks it.
 
     Every file the manifest's generated_sha256 lists is uploaded (the runner checks them all
-    again on the board), plus manifest.json."""
+    again on the board), plus manifest.json. The sensor version is the one both hands'
+    config.json name (bundle_sensor_version)."""
     from src.hand_runtime import ModelBundle  # Wen Ree's check; it needs NumPy, so only here
     try:
         checked = ModelBundle(folder, allow_synthetic=allow_synthetic)
@@ -355,21 +386,58 @@ def bundle_files(folder, allow_synthetic=False):
         if name in hashes and hashlib.sha256(data).hexdigest() != hashes[name]:
             raise ValueError("the bundle file {} changed after it was checked".format(name))
         files[BUNDLE + "/" + name] = data
-    return files, checked.synthetic
+    return files, checked.synthetic, bundle_sensor_version(files)
+
+
+def bundle_sensor_version(files):
+    """The sensor version both hands of a checked bundle were trained on (4 or 5), or None.
+
+    Each hand's config.json names it as sensor_packet_version; a synthetic bundle names none.
+    The two hands must agree, and a named version must be a twelve-channel one."""
+    named = []
+    for hand in ("left", "right"):
+        config = json.loads(files[BUNDLE + "/" + hand + "/config.json"].decode("utf-8"))
+        named.append(config.get("sensor_packet_version"))
+    if named[0] != named[1]:
+        raise ValueError("the bundle's hands name different sensor versions: LEFT {!r}, RIGHT {!r}"
+                         .format(*named))
+    version = named[0]
+    if version is not None and (type(version) is not int
+                                or version not in sensor_versions.TWELVE_CHANNEL):
+        raise ValueError("the bundle names sensor version {!r}; the hand12 runner reads the twelve "
+                         "channels of version 4 or 5".format(version))
+    return version
 
 
 def hand_bundle(value, allow_synthetic=False):
-    """(the --bundle value the runner gets, {copy path: bytes} to upload, synthetic or None).
+    """(the --bundle value the runner gets, {copy path: bytes} to upload, synthetic or None,
+    the sensor version the bundle names or None).
 
     A local folder is checked and uploaded into the copy's bundle folder; an absolute board path
-    is only named, so whether it is synthetic is not known here (None)."""
+    is only named, so whether it is synthetic, and its version, are not known here (None)."""
     if Path(value).is_dir():
-        files, synthetic = bundle_files(value, allow_synthetic)
-        return BUNDLE, files, synthetic
+        files, synthetic, version = bundle_files(value, allow_synthetic)
+        return BUNDLE, files, synthetic, version
     if not (value.startswith("/") and value.isprintable() and " " not in value):
         raise ValueError("--bundle {!r} is not a local folder, and a board path must be absolute "
                          "(start with /, no spaces)".format(value) + _git_bash_hint([value]))
-    return value, {}, None
+    return value, {}, None, None
+
+
+def hand_sensor_version(named, given):
+    """The sensor version of the hand12 deploy: the bundle's (named), which a --sensor-version
+    (given) must equal; given alone when the bundle names none."""
+    if named is not None:
+        if given is not None and given != named:
+            raise ValueError("--sensor-version {} differs from the bundle's sensor_packet_version {}: "
+                             "the model was trained on version {} packets, so the gloves and the "
+                             "service must run version {}".format(given, named, named, named))
+        return named
+    if given is None:
+        raise ValueError("the bundle does not name its sensor version (a synthetic bundle, or a "
+                         "board path, which is not read here): give --sensor-version 4 or 5, the "
+                         "version the gloves send")
+    return given
 
 
 def _upload(board, folder, files):
@@ -415,9 +483,11 @@ def stage(args):
         # The deploy tool's own check, so the printed command is never one it refuses.
         replace_entries(args.replace_runner)
     else:
-        if args.bundle is not None or args.allow_synthetic or args.replace_runner:
-            raise ValueError("--bundle, --allow-synthetic and --replace-runner are for the hand12 "
-                             "runner only; the {} runner reads --weights".format(args.runner))
+        if (args.bundle is not None or args.allow_synthetic or args.replace_runner
+                or getattr(args, "sensor_version", None) is not None):
+            raise ValueError("--bundle, --allow-synthetic, --replace-runner and --sensor-version are "
+                             "for the hand12 runner only; the {} runner reads --weights".format(
+                                 args.runner))
         weights = runner.weights if args.weights is None else args.weights
         if not weights or not weights.isprintable() or _git_bash_hint([weights]):
             raise ValueError("--weights must be a path relative to the runner folder, or an absolute "
@@ -434,20 +504,23 @@ def stage(args):
         raise ValueError("--source must be an absolute path on the board" + _git_bash_hint([source]))
     dest = destination(args.name or runner.name)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    bundle = synthetic = None
+    bundle = synthetic = named = sensor_version = None
     uploads = {}
     if reads_bundle:
-        bundle, uploads, synthetic = hand_bundle(args.bundle, args.allow_synthetic)
+        bundle, uploads, synthetic, named = hand_bundle(args.bundle, args.allow_synthetic)
+        sensor_version = hand_sensor_version(named, getattr(args, "sensor_version", None))
         # A checked local bundle needs the flag only when it is synthetic.
         command = deploy_command(dest, args.runner, bundle=bundle,
                                  allow_synthetic=args.allow_synthetic if synthetic is None else synthetic,
-                                 replace=args.replace_runner)
+                                 replace=args.replace_runner, sensor_version=sensor_version)
     else:
         command = deploy_command(dest, args.runner, weights)
     files = None
     if git_ref is not None:
         files = git_files(git_ref, expected)
         check_code(runner, files, git_ref)
+        if reads_bundle:
+            check_runtime_version(files, sensor_version, git_ref)
         check_overlay(runner, files)
         files.update(uploads)
         print("Upload from {} of this checkout -> {}".format(git_ref, dest))
@@ -463,6 +536,13 @@ def stage(args):
     elif reads_bundle:
         print("Bundle: board path {}, only named in the deploy command (not uploaded or checked "
               "here; the runner checks it when it starts)".format(bundle))
+    if reads_bundle:
+        flag = "--wide-gyro" if sensor_version == 5 else "--flex3"
+        print("Sensor version: {}, {}; the gloves must send it (real gloves: python flash.py --glove {}; "
+              "bare test boards, dummy data: python flash.py {}) and the service runs it".format(
+                  sensor_versions.describe(sensor_version),
+                  "named by the bundle" if named is not None else "given with --sensor-version",
+                  flag, flag))
     for name in runner.folders:
         print("The copy gets an empty folder {}/{}; the runner writes its records there".format(dest, name))
     if synthetic:
@@ -507,7 +587,8 @@ def stage(args):
     if git_ref is not None:
         record["git_ref"] = git_ref
     if reads_bundle:
-        record.update(bundle=bundle, bundle_source=args.bundle, bundle_synthetic=synthetic)
+        record.update(bundle=bundle, bundle_source=args.bundle, bundle_synthetic=synthetic,
+                      sensor_version=sensor_version)
     RECORDS.mkdir(parents=True, exist_ok=True)
     path = RECORDS / "model-runner-stage-{}.json".format(stamp)
     path.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -548,6 +629,10 @@ def main(argv=None):
     parser.add_argument("--replace-runner", action="append", default=[], metavar="PID:START_TICKS",
                         help="hand12 only: passed on to the deploy command, which replaces this "
                              "runner started by hand (repeat for several)")
+    parser.add_argument("--sensor-version", type=int, choices=sensor_versions.TWELVE_CHANNEL,
+                        help="hand12 only: the sensor version of the deploy command, 4 or 5. A local "
+                             "bundle names its own (each hand's config.json), which this must equal; "
+                             "needed for a synthetic bundle or a board path")
     parser.add_argument("--name", help="the copy's folder name under BOARD_ROOT/model-runner "
                                        "(default: cnn_conv1d, cnn_full_20261020 or hand12_v1)")
     parser.add_argument("--jump-user", default=default_jump_user(),

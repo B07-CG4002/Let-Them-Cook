@@ -257,7 +257,7 @@ def test_remote_program_on_linux(tmp_path):
                             timeout=600, env=environment)
     output = result.stdout.decode("utf-8", "replace").replace("\0", "")
     assert result.returncode == 0, output[-4000:]
-    assert "RESULT pass=55 fail=0" in output
+    assert "RESULT pass=58 fail=0" in output
 
 
 def test_ssh_errors_end_in_a_failed_line(monkeypatch, tmp_path, capsys):
@@ -282,41 +282,66 @@ def test_a_jump_host_without_password_login_points_at_the_vpn(monkeypatch, capsy
     assert "connect the NUS VPN" in err
 
 
-# --- --sensor-version 3|4 and --replace-runner PID:START_TICKS -------------------------------
+# --- --sensor-version 3|4|5 and --replace-runner PID:START_TICKS -----------------------------
 
-def test_the_sensor_version_is_3_unless_4_is_chosen():
+def test_the_sensor_version_is_3_unless_4_or_5_is_chosen():
     assert deploy_service.options_from(_args())["sensor_version"] == 3
-    assert deploy_service.options_from(_args(sensor_version=3))["sensor_version"] == 3
-    assert deploy_service.options_from(_args(sensor_version=4))["sensor_version"] == 4
-    for bad in (2, 5, "4", True, None):
+    for version in (3, 4, 5):
+        assert deploy_service.options_from(_args(sensor_version=version))["sensor_version"] == version
+    for bad in (2, 6, "4", "5", True, None):
         with pytest.raises(ValueError, match="--sensor-version"):
             deploy_service.options_from(_args(sensor_version=bad))
 
 
-def test_the_remote_program_adds_the_sensor_version_only_for_4():
-    # The v3 argv stays exactly as before; the Linux test checks both on real processes.
+def test_the_remote_program_adds_the_sensor_version_only_for_4_or_5():
+    # The v3 argv stays exactly as before; the Linux test checks it on real processes.
     program = deploy_service.REMOTE_PROGRAM
-    assert 'if options.get("sensor_version", 3) == 4:\n    new_args += ["--sensor-version", "4"]' in program
+    assert ('if options.get("sensor_version", 3) != 3:\n'
+            '    new_args += ["--sensor-version", str(options["sensor_version"])]') in program
     assert program.count("--sensor-version") == 1
+
+
+def remote_service_args(options):
+    """The new service's argv the board program builds from options (its new_args lines)."""
+    program = deploy_service.REMOTE_PROGRAM
+    start = program.index("new_args = [sys.executable")
+    end = program.index("\n\n\ndef alive(")
+    scope = dict(sys=sys, options=dict(dict(session_id="ltc-comms"), **options),
+                 tls=Path("/b/tls"), evidence=Path("/b/evidence"), stamp="S")
+    exec(program[start:end], scope)
+    return scope["new_args"]
+
+
+@pytest.mark.parametrize("version, tail", [(None, ["ltc-comms"]), (3, ["ltc-comms"]),
+                                           (4, ["--sensor-version", "4"]),
+                                           (5, ["--sensor-version", "5"])])
+def test_the_new_service_runs_the_chosen_sensor_version(version, tail):
+    options = {} if version is None else dict(sensor_version=version)
+    assert remote_service_args(options)[-len(tail):] == tail
 
 
 @pytest.mark.parametrize("version, folder, line", [
     ([], "/source-co-v3-", "Sensor protocol: v3"),
     (["--sensor-version", "3"], "/source-co-v3-", "Sensor protocol: v3"),
-    (["--sensor-version", "4"], "/source-co-v4-", "Sensor protocol: v4"),
+    (["--sensor-version", "4"], "/source-co-v4-", "Sensor protocol: v4 (opt-in, --sensor-version 4: "
+                                                  "twelve channels; SENSOR_BATCH and INGEST_ACK at v=4"),
+    (["--sensor-version", "5"], "/source-co-v5-", "Sensor protocol: v5 (opt-in, --sensor-version 5: "
+                                                  "twelve channels, gyro x10; SENSOR_BATCH and "
+                                                  "INGEST_ACK at v=5, results at v=3)"),
 ])
 def test_the_plan_names_the_sensor_version_and_its_board_folder(monkeypatch, capsys, version, folder, line):
     monkeypatch.setattr(deploy_service, "_connect", lambda *a: pytest.fail("connected"))
     assert deploy_service.main(["--dry-run"] + version) == 0
     out = capsys.readouterr().out
     assert folder + "20" in out and line in out
-    assert '"sensor_version": {}'.format(4 if "4" in version else 3) in out
+    assert '"sensor_version": {}'.format(version[-1] if version else 3) in out
 
 
-def test_a_sensor_version_other_than_3_or_4_is_refused_by_the_parser(capsys):
-    with pytest.raises(SystemExit) as stopped:
-        deploy_service.main(["--dry-run", "--sensor-version", "5"])
-    assert stopped.value.code == 2 and "invalid choice" in capsys.readouterr().err
+def test_a_sensor_version_other_than_3_4_or_5_is_refused_by_the_parser(capsys):
+    for bad in ("2", "6"):
+        with pytest.raises(SystemExit) as stopped:
+            deploy_service.main(["--dry-run", "--sensor-version", bad])
+        assert stopped.value.code == 2 and "invalid choice" in capsys.readouterr().err
 
 
 def _module_runner(**changes):
@@ -335,14 +360,17 @@ def _module_runner(**changes):
 def test_version_4_refuses_the_eleven_channel_paired_runners(changes):
     with pytest.raises(ValueError, match="eleven-channel paired runner.*src.socket_worker_hand"):
         deploy_service.options_from(_module_runner(**changes))
+    with pytest.raises(ValueError, match="--sensor-version 5 sends twelve channels.*eleven-channel"):
+        deploy_service.options_from(_module_runner(sensor_version=5, **changes))
     # The same runners deploy as before with version 3.
     assert "runner" in deploy_service.options_from(_module_runner(sensor_version=3, **changes))
 
 
 @pytest.mark.parametrize("changes", [dict(), dict(runner_module=None, runner="/home/xilinx/w/src/socket_worker_hand.py")])
-def test_the_hand_worker_needs_version_4(changes):
+def test_the_hand_worker_needs_version_4_or_5(changes):
     assert "runner" in deploy_service.options_from(_module_runner(**changes))
-    with pytest.raises(ValueError, match="deploy it with --sensor-version 4"):
+    assert "runner" in deploy_service.options_from(_module_runner(sensor_version=5, **changes))
+    with pytest.raises(ValueError, match="deploy it with --sensor-version 4 or 5"):
         deploy_service.options_from(_module_runner(sensor_version=3, **changes))
 
 

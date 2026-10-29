@@ -14,6 +14,7 @@ import sys
 import threading
 from typing import Optional
 
+from common import sensor_versions
 from laptop.bridge import Bridge, BridgeConfig
 from laptop import reporting
 from laptop.controls import keyboard_loop
@@ -607,10 +608,12 @@ def _parser():
     parser.add_argument("--mock", action="store_true",
                         help="explicit two-device synthetic input, not BLE evidence")
     parser.add_argument("--diagnostic-unprotected", action="store_true")
-    parser.add_argument("--sensor-version", type=int, choices=(3, 4), default=3,
+    parser.add_argument("--sensor-version", type=int, choices=sensor_versions.VERSIONS, default=3,
                         help="sensor packet version of BOTH boards: 3 (38-byte packets, 11 "
-                             "values, LCS3) or 4 (the three-flex boards: 40-byte packets, 12 "
-                             "values, LCS4); the Ultra96 service must use the same; default: 3")
+                             "values, LCS3), 4 (the three-flex boards: 40-byte packets, 12 "
+                             "values, LCS4) or 5 (the three-flex boards with the wide gyro "
+                             "range: 40-byte packets, 12 values, gyro x10, LCS5); the Ultra96 "
+                             "service must use the same; default: 3")
     parser.add_argument("--supervised", action="store_true",
                         help="for demo.py start: JSON lines on stdout (evidence, status, log, "
                              "finished), stop/command lines on stdin, no stderr output")

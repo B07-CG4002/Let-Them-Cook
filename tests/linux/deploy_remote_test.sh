@@ -276,9 +276,40 @@ sed -i 's/^def main():/def main():\n    raise SystemExit(3)/' "$BASE/source-co-v
 RB16=$(cat "$BASE/evidence/server.pid")
 check "v4 rollback: rolled back, still --sensor-version 4" '[ $code -ne 0 ] && grep -q "\"status\": \"rolled_back\"" "$BASE/out16.json" && tr "\0" " " < /proc/$RB16/cmdline | grep -q -- "--sensor-version 4"'
 
+# --- 18. an opt-in v5 deploy over the v4 service: --sensor-version 5; INGEST_ACK v=5, results v=3 ---
+V5OPTS='{"event_log": true, "model": null, "model_path": null, "sensor_version": 5, "session_id": "ltc-comms", "start_timeout": 30}'
+newsrc source-co-v5-T17
+/usr/bin/python3 -c "$PROG" "$BASE" "$BASE/source-co-v5-T17" T17 "$V5OPTS" > "$BASE/out17.json" 2> "$BASE/err17.txt"; code=$?
+V5PID=$(cat "$BASE/evidence/server.pid")
+check "v5 deploy: exit 0, deployed from the new source" '[ $code -eq 0 ] && grep -q "\"status\": \"deployed\"" "$BASE/out17.json" && [ "$(readlink /proc/$V5PID/cwd)" = "$BASE/source-co-v5-T17" ]'
+check "v5 deploy: argv ends with --sensor-version 5" 'tr "\0" " " < /proc/$V5PID/cmdline | grep -q -- "--sensor-version 5 $"'
+(cd "$BASE/source-co-v5-T17" && /usr/bin/python3 - "$SRC/pki-a/ca-cert.pem" > "$BASE/e2e17.txt" 2>&1 <<'PY'
+import asyncio, sys
+from common.tls import client_context, TLS_SERVER_NAME
+from common.wire import read_frame, write_frame
+from common.sensor_v5 import SensorPacket, DUMMY_FIXTURES
+from ultra96.protocol import validate_message
+ca = sys.argv[1]
+async def main():
+    pr, pw = await asyncio.open_connection("127.0.0.1", 9999, ssl=client_context(ca), server_hostname=TLS_SERVER_NAME)
+    await write_frame(pw, dict(v=1, type="SUBSCRIBE", session_id="ltc-comms"))
+    validate_message(await read_frame(pr), "SUBSCRIBED", "ltc-comms")
+    ir, iw = await asyncio.open_connection("127.0.0.1", 8888, ssl=client_context(ca), server_hostname=TLS_SERVER_NAME)
+    for seq in range(3):
+        await write_frame(iw, SensorPacket(1, 79, seq, seq * 20, DUMMY_FIXTURES[seq % len(DUMMY_FIXTURES)]).to_message("ltc-comms"))
+        ack = validate_message(await read_frame(ir), "INGEST_ACK", "ltc-comms", sensor_version=5)
+        res = validate_message(await read_frame(pr), "GESTURE_RESULT", "ltc-comms", sensor_version=5)
+        assert ack["v"] == 5 and res["v"] == 3, (ack, res)
+        print("ack", ack["v"], ack["status"], "result", res["v"], res["result_id"], res["gesture"])
+    print("E2E_V5_OK")
+asyncio.run(main())
+PY
+)
+check "v5 end to end: INGEST_ACK v=5, GESTURE_RESULT v=3" 'grep -q E2E_V5_OK "$BASE/e2e17.txt"'
+
 cleanup
 echo "RESULT pass=$pass fail=$fail"
-for f in err1 err2 err3 err4 err5 err6 err7 err8 err9 err10 err11 err12 err13 err14 err15 err16; do echo "--- $f"; tail -3 "$BASE/$f.txt"; done
-echo "--- e2e"; cat "$BASE/e2e.txt"; echo "--- e2e7"; cat "$BASE/e2e7.txt"; echo "--- e2e15"; cat "$BASE/e2e15.txt"
+for f in err1 err2 err3 err4 err5 err6 err7 err8 err9 err10 err11 err12 err13 err14 err15 err16 err17; do echo "--- $f"; tail -3 "$BASE/$f.txt"; done
+echo "--- e2e"; cat "$BASE/e2e.txt"; echo "--- e2e7"; cat "$BASE/e2e7.txt"; echo "--- e2e15"; cat "$BASE/e2e15.txt"; echo "--- e2e17"; cat "$BASE/e2e17.txt"
 rm -rf "$BASE"
-[ "$fail" -eq 0 ] && [ "$pass" -eq 55 ]
+[ "$fail" -eq 0 ] && [ "$pass" -eq 58 ]

@@ -17,8 +17,9 @@ arrive while no runner is connected, or while the runner's queue is full, are
 dropped and counted. Bad result lines are counted and skipped; they never close
 the connection.
 
-Under sensor protocol version 4 (12 channels) the hello also offers hand events,
-and the runner may send two more kinds of line:
+Under sensor protocol version 4 or 5 (12 channels, the same names; the values are
+physical units either way, so the runner sees no difference) the hello also offers
+hand events, and the runner may send two more kinds of line:
 
     service -> runner   {"type": "hello", "format": 1, "channels": [12 names], "hand_events": 1}
     runner -> service   {"type": "hand_hello", "hello": {the worker's hello}}      (once per connection,
@@ -45,11 +46,12 @@ import struct
 import threading
 import time
 
+from common import sensor_versions
 from common.sensor import CHANNELS
 
 LOG = logging.getLogger(__name__)
 FORMAT = 1
-HAND_EVENTS = 1  # the hello's "hand_events" value in sensor version 4 mode
+HAND_EVENTS = 1  # the hello's "hand_events" value in sensor version 4 or 5 mode
 QUEUE_SIZE = 1024  # about 10 s of both gloves at 50 Hz
 MAX_LINE_BYTES = 4096
 _WARNING_INTERVAL = 1.0
@@ -69,7 +71,7 @@ class Bridge:
 
     def __init__(self, queue_size=QUEUE_SIZE):
         self.channels = tuple(CHANNELS)
-        # Offered in the hello, and hand lines accepted, only in sensor version 4 mode.
+        # Offered in the hello, and hand lines accepted, only in sensor version 4 or 5 mode.
         self.hand_events = False
         self.queue_size = queue_size
         self.counts = dict(samples_sent=0, samples_dropped_no_runner=0, samples_dropped_full=0,
@@ -83,17 +85,12 @@ class Bridge:
         self._warned = {}
 
     def configure_sensor_version(self, version):
-        """Before start: version 4 selects the 12 channels and offers hand events to the runner."""
-        if type(version) is not int or version not in (3, 4):
-            raise ValueError("sensor version must be 3 or 4")
+        """Before start: version 4 or 5 selects the 12 channels and offers hand events to the runner."""
+        selected = sensor_versions.codec(version)
         if self._listener is not None or self._current is not None:
             raise RuntimeError("cannot change sensor version after bridge start")
-        if version == 4:
-            from common.sensor_v4 import CHANNELS as selected
-        else:
-            selected = CHANNELS
-        self.channels = tuple(selected)
-        self.hand_events = version == 4
+        self.channels = tuple(selected.CHANNELS)
+        self.hand_events = version in sensor_versions.TWELVE_CHANNEL
 
     def start(self, emit, path=None):
         """Remember emit; with a path, listen there for the runner."""
