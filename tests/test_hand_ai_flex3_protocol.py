@@ -53,7 +53,7 @@ inline void delay(unsigned ms){fakeNow+=ms*1000;}
 inline void analogReadResolution(int){}
 inline void pinMode(int,int){}
 inline int analogRead(int pin){if(pin==39){++read39;return 3000;}return pin==34?1000:2000;}
-struct SerialStub { void println(const char*){} }; extern SerialStub Serial;
+struct SerialStub { void println(const char*){} template<class... T> void printf(const char*,T...){} }; extern SerialStub Serial;
 '''
         wire=r'''
 #pragma once
@@ -66,7 +66,7 @@ struct WireStub {
  int endTransmission(bool=true){return 0;}
  size_t requestFrom(uint8_t,size_t n){pos=0;count=int(n);return n;}
  int available(){return count-pos;}
- int read(){int p=pos++;return count==1?0x70:(p==4?0x40:0);}
+ int read(){int p=pos++;return count==1?(reg==0x75?0x70:0):(p==4?0x40:0);}
 }; extern WireStub Wire;
 '''
         harness=r'''
