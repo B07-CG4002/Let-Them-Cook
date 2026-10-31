@@ -10,7 +10,7 @@ import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock
 
 from common import sensor_v4, sensor_v5
 from common.control import RESPONSE_UUID
@@ -75,7 +75,8 @@ class FakeClient:
 
 
 class FlowTests(unittest.IsolatedAsyncioTestCase):
-    async def test_real_rate_control_and_matching_v5_notifications(self):
+    @patch.object(wide_ble,'windows_throughput',new_callable=AsyncMock,return_value=None)
+    async def test_real_rate_control_and_matching_v5_notifications(self,_profile):
         FakeClient.instances=[];FakeClient.magic=b'LCS5'
         with patch.dict(sys.modules,{'bleak':SimpleNamespace(BleakClient=FakeClient)}):
             async with wide_ble.connection(1) as (client,queue,health):

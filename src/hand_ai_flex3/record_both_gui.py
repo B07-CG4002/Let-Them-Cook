@@ -1,4 +1,5 @@
 """One GO cue, two BLE gloves, separate source-timestamped native trial files."""
+from src.hand_ai_flex3.async_queue import queue_item
 import asyncio
 from contextlib import AsyncExitStack
 import json
@@ -81,6 +82,8 @@ def save_pair(config, trials, rows):
                         acquisition='shared host GO; independent source clocks, not sample-aligned')
             if len(devices)==2:
                 meta.update(pair_capture_id=capture_id,other_device_id=3-d,other_gesture=config[3-d]['gesture'])
+            if 'recording_variant' in config[d]:
+                meta['recording_variant']=config[d]['recording_variant']
             if 'acquisition_transport' in config[d]:
                 meta['acquisition_transport']=config[d]['acquisition_transport']
             path.with_suffix('.json').write_text(json.dumps(meta,indent=2)+'\n')
@@ -118,8 +121,8 @@ class BothWorker(Worker):
                 self.trials[d]=NotificationQueue(d,0,health,trial_mode=True)
             async def receive(d):
                 incoming,health=self.links[d];trial=self.trials[d]
-                while True:
-                    p,v,received=await asyncio.wait_for(incoming.get(),3)
+                while not self.stop.is_set():
+                    p,v,received=await queue_item(incoming,3)
                     ensure_healthy(health)
                     with self.lock:self.latest[d]=(p,v,received);self.count+=1
                     if trial.accepting and received>=trial.cue:
@@ -128,7 +131,7 @@ class BothWorker(Worker):
             readers=[asyncio.create_task(receive(d)) for d in self.devices]
             self.event('connected')
             try:
-                while True:
+                while not self.stop.is_set():
                     for reader in readers:
                         if reader.done():await reader
                     try:command=self.commands.get_nowait()
@@ -145,6 +148,7 @@ class BothWorker(Worker):
                             await asyncio.sleep(.02)
                         try:await task
                         except asyncio.CancelledError:
+                            if self.stop.is_set():raise
                             if not self.cancel_recording.is_set():raise
                             self.event('cancelled',text='Cancelled; completed pairs retained, current pair discarded.')
                     except SessionConflict as error:
@@ -176,6 +180,7 @@ class BothWorker(Worker):
                     if not task.done():task.cancel()
                 await asyncio.gather(*tasks.values(),return_exceptions=True)
             for d in self.devices:ensure_healthy(self.links[d][1])
+            if self.stop.is_set() or self.cancel_recording.is_set():raise asyncio.CancelledError()
             self.validate_rows(dict(zip(self.devices,values)))
             pair=save_pair(config,{d:numbers[d][i] for d in self.devices},dict(zip(self.devices,values)))
             self.event('saved',text='Saved: '+ ' / '.join(f'{d}: #{numbers[d][i]}' for d in self.devices)+f' | capture={pair}')
@@ -193,7 +198,7 @@ class App:
         root.title('One or Both Gloves — Three-Flex BLE Recorder');root.geometry('1080x750')
         self.phase=tk.StringVar(value='READY — select LEFT only, RIGHT only or BOTH')
         ttk.Label(root,textvariable=self.phase,font=('Segoe UI',20)).pack(pady=15)
-        ttk.Label(root,text='Raw 12 channels retained. RIGHT index may be faulty; model exclusion is a separate explicit training option.').pack()
+        ttk.Label(root,text='Raw 12 channels retained. Repaired-sensor training uses all 12 features by default; legacy exclusion is explicit.').pack()
         self.vars={k:tk.StringVar(value=v) for k,v in dict(mode='BOTH',person='P01',session='P01_dual_pilot1',split='train',
                    left='PICKUP',right='PICKUP',count='3',output='data/hand_flex3_checks/dual_pilot').items()}
         form=ttk.Frame(root);form.pack(pady=10);self.inputs=[];self.field_widgets={}
@@ -255,8 +260,24 @@ class App:
     def disconnect(self):
         if self.worker:self.worker.stop.set()
         self.connected=False;self.phase.set('DISCONNECTING');self.controls()
-    def close(self):self.closing=True;self.disconnect()
+    def close(self):
+        if self.closing:return
+        self.closing=True
+        if self.worker:self.worker.cancel_recording.set()
+        self.disconnect()
+        self.finish_close()
+
+    def finish_close(self):
+        # Keep the worker referenced until its asyncio/BLE cleanup really finishes.
+        # Do not destroy Tcl while worker callbacks or queued shutdown events remain.
+        if self.worker and self.worker.thread.is_alive():
+            self.root.after(100,self.finish_close)
+        else:
+            if self.worker:self.worker.thread.join()
+            self.worker=None
+            self.root.destroy()
     def poll(self):
+        if self.closing:return
         if self.worker:
             events,latest,_=self.worker.snapshot()
             for event in events:

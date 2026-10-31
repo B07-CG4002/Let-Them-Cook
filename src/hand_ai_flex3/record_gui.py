@@ -3,6 +3,7 @@
 Run from the repository root: python -m src.hand_ai_flex3.record_gui
 Sensor transport is BLE. USB may provide power and diagnostic logs.
 """
+from src.hand_ai_flex3.async_queue import queue_item
 import asyncio
 from collections import deque
 import csv
@@ -112,8 +113,8 @@ class Worker:
             trial_queue=NotificationQueue(self.device,0,health,trial_mode=True)
             # Trial queue receives already-validated decoded packets, not raw bytes.
             async def receive():
-                while True:
-                    p,v,received=await asyncio.wait_for(incoming.get(),3)
+                while not self.stop.is_set():
+                    p,v,received=await queue_item(incoming,3)
                     ensure_healthy(health)
                     with self.lock:
                         self.latest=(p,v,received);self.count+=1

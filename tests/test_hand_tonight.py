@@ -103,7 +103,7 @@ class DataTests(unittest.TestCase):
         from tools import precision_sweep as q
         with tempfile.TemporaryDirectory() as temp:
             folder=Path(temp);prepared=folder/'prepared';w.prepare(self.root,prepared)
-            r=w.train(prepared,folder/'trained',epochs=1,seeds=(42,))
+            r=w.train(prepared,folder/'trained',epochs=1,seeds=(42,),exclude_right_index=True)
             self.assertFalse(r['test_evaluated']);selected=folder/'trained/selected'
             right=w.Predictor(selected/'right');x,_,records,_=w.load_data(prepared/'right')
             before=right.probabilities(x[:3]);probe=x[:3].copy();probe[:,:,9]=np.array([0,.5,1])[:,None]
@@ -112,6 +112,13 @@ class DataTests(unittest.TestCase):
             active=[i for i in range(12) if i!=9]
             np.testing.assert_allclose(right.mean[active],mean[active],rtol=1e-5,atol=1e-6)
             self.assertEqual(right.mean[9],0);self.assertEqual(right.std[9],1)
+            # Repaired sensors: fresh training uses the index channel by default.
+            w.train(prepared,folder/'all12',epochs=1,seeds=(42,))
+            repaired=w.Predictor(folder/'all12/selected/right')
+            self.assertFalse(repaired.training['right_index_excluded'])
+            np.testing.assert_allclose(repaired.mean,mean,rtol=1e-5,atol=1e-6)
+            self.assertGreater(int(repaired.torch.count_nonzero(repaired.model.state_dict()['features.0.weight'][:,9,:])),0)
+
             for hand in ('left','right'):
                 source=q.load_source(run=selected/hand)
                 val,y,calibration,info=q.load_data(prepared/hand,source,'validation')

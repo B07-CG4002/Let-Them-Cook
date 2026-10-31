@@ -1,4 +1,5 @@
 """BLE transport shared by the recorder and laptop live inference."""
+from src.hand_ai_flex3.async_queue import queue_item
 import asyncio
 import time
 from contextlib import asynccontextmanager
@@ -120,7 +121,7 @@ async def _collect(queue, health, cue):
     previous = None
     while elapsed < 2000:
         ensure_healthy(health)
-        packet, values, received = await asyncio.wait_for(queue.get(), timeout=3)
+        packet, values, received = await queue_item(queue, timeout=3)
         if received < cue:
             continue
         if time.monotonic() - received > .5:

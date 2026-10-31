@@ -39,14 +39,16 @@ constexpr float ACCEL_SCALE = 16384.0f;  // MPU-6500 ±2 g
 #define COMMS_WIDE_GYRO 0
 #endif
 static_assert(GLOVE_GYRO_RANGE_DPS == 250 || GLOVE_GYRO_RANGE_DPS == 500 ||
-              (COMMS_WIDE_GYRO && GLOVE_GYRO_RANGE_DPS == 1000),
-              "Only reviewed 250/500 deg/s or explicit v5 1000 deg/s settings are supported");
-static_assert(!COMMS_WIDE_GYRO || GLOVE_GYRO_RANGE_DPS == 1000,
-              "v5 real-glove diagnostic requires the reviewed 1000 deg/s sensor setting");
-constexpr uint8_t GYRO_CONFIG_VALUE = GLOVE_GYRO_RANGE_DPS == 1000 ? 0x10 :
-    (GLOVE_GYRO_RANGE_DPS == 500 ? 0x08 : 0x00);
-constexpr float GYRO_SCALE = GLOVE_GYRO_RANGE_DPS == 1000 ? 32.8f :
-    (GLOVE_GYRO_RANGE_DPS == 500 ? 65.5f : 131.0f);
+              (COMMS_WIDE_GYRO && (GLOVE_GYRO_RANGE_DPS == 1000 || GLOVE_GYRO_RANGE_DPS == 2000)),
+              "Only reviewed 250/500 deg/s or explicit v5 1000/2000 deg/s settings are supported");
+static_assert(!COMMS_WIDE_GYRO || GLOVE_GYRO_RANGE_DPS == 1000 || GLOVE_GYRO_RANGE_DPS == 2000,
+              "v5 real-glove acquisition requires an explicit 1000 or 2000 deg/s setting");
+constexpr uint8_t GYRO_CONFIG_VALUE = GLOVE_GYRO_RANGE_DPS == 2000 ? 0x18 :
+    (GLOVE_GYRO_RANGE_DPS == 1000 ? 0x10 :
+    (GLOVE_GYRO_RANGE_DPS == 500 ? 0x08 : 0x00));
+constexpr float GYRO_SCALE = GLOVE_GYRO_RANGE_DPS == 2000 ? 16.4f :
+    (GLOVE_GYRO_RANGE_DPS == 1000 ? 32.8f :
+    (GLOVE_GYRO_RANGE_DPS == 500 ? 65.5f : 131.0f));
 
 constexpr float MAHONY_KP = 3.0f;
 constexpr float MAHONY_KI = 0.0f;
