@@ -447,4 +447,7 @@ def test_the_wide_gyro_option_reaches_the_flash_step(monkeypatch):
     calls = []
     monkeypatch.setattr(flash, "_flash", lambda **options: calls.append(options))
     assert flash.main(["--glove", "--wide-gyro"]) == 0
-    assert calls == [dict(glove=True, flex3=False, wide_gyro=True)]
+    assert flash.main(["--glove", "--wide-gyro", "--gyro-dps", "2000"]) == 0
+    # Team PR #42 added --gyro-dps; +/-1000 stays the default.
+    assert calls == [dict(glove=True, flex3=False, wide_gyro=True, gyro_dps=1000),
+                     dict(glove=True, flex3=False, wide_gyro=True, gyro_dps=2000)]
