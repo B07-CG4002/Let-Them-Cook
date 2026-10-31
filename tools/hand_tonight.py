@@ -1,4 +1,5 @@
 """Explicit v5 preparation, two-hand provisional training, evaluation and live CPU check."""
+from src.hand_ai_flex3.async_queue import queue_item
 import argparse
 import asyncio
 from contextlib import AsyncExitStack
@@ -69,7 +70,7 @@ async def live(a):
         status='finished'
         async def receive(d,queue,health):
             while True:
-                p,values,received=await asyncio.wait_for(queue.get(),3);ensure_healthy(health)
+                p,values,received=await queue_item(queue,3);ensure_healthy(health)
                 row=dict(type='sample',elapsed_s=received-started,device_id=d,boot_id=p.boot_id,
                          seq=p.seq,uptime_ms=p.uptime_ms,values=list(values))
                 capture.write(json.dumps(row,allow_nan=False)+'\n');capture.flush();counts[d]+=1
@@ -118,6 +119,7 @@ def main(argv=None):
     prep=sub.add_parser('prepare');prep.add_argument('--input',required=True);prep.add_argument('--out',required=True)
     tr=sub.add_parser('train');tr.add_argument('--data',required=True);tr.add_argument('--out',required=True)
     tr.add_argument('--epochs',type=int,default=30);tr.add_argument('--seeds',type=int,nargs='+',default=[42,73,101])
+    tr.add_argument('--exclude-right-index',action='store_true',help='legacy faulty-index fallback; default uses all 12 repaired channels')
     ev=sub.add_parser('evaluate');ev.add_argument('--runs',required=True);ev.add_argument('--data',required=True)
     ev.add_argument('--split',choices=['validation','test'],required=True);ev.add_argument('--out',required=True);ev.add_argument('--allow-test-use',action='store_true')
     ex=sub.add_parser('export-fpga');ex.add_argument('--runs',required=True);ex.add_argument('--data',required=True);ex.add_argument('--out',required=True)
@@ -128,7 +130,7 @@ def main(argv=None):
     a=p.parse_args(argv)
     if a.command=='progress':result=training.progress(a.input)
     elif a.command=='prepare':result=training.prepare(a.input,a.out)
-    elif a.command=='train':result=training.train(a.data,a.out,a.epochs,a.seeds)
+    elif a.command=='train':result=training.train(a.data,a.out,a.epochs,a.seeds,exclude_right_index=a.exclude_right_index)
     elif a.command=='evaluate':
         r=training.evaluate(a.runs,a.data,a.split,a.out,a.allow_test_use)
         result=dict(split=r['split'],test_use_recorded=r['test_use_recorded'],metrics={h:v['metrics'] for h,v in r['models'].items()})

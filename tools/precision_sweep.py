@@ -51,8 +51,8 @@ def load_source(weights=None,run=None):
                     provenance={str(weights.resolve()):digest(weights)},mode='legacy_paired_regression')
     run=Path(run);cfg=read_json(run/'config.json');training=read_json(run/'training.json')
     accepted_source=((cfg.get('version')=='independent_hand_flex3_v1' and cfg.get('sensor_packet_version')==4) or
-        (cfg.get('version')=='independent_hand_flex3_gyro_v5_v1' and cfg.get('sensor_packet_version')==5 and
-         cfg.get('gyro_transport_scale')==10 and cfg.get('gyro_sensor_full_scale_dps')==1000))
+        (cfg.get('version') in ('independent_hand_flex3_gyro_v5_v1','independent_hand_flex3_gyro_v5_2000_v1') and cfg.get('sensor_packet_version')==5 and
+         cfg.get('gyro_transport_scale')==10 and cfg.get('gyro_sensor_full_scale_dps')==(2000 if cfg.get('version')=='independent_hand_flex3_gyro_v5_2000_v1' else 1000)))
     if (not accepted_source or cfg.get('feature_columns')!=HAND_CHANNELS or
         cfg.get('class_names')!=HAND_CLASSES or cfg.get('normalization')!='training-only per-feature mean/std after resampling' or
         cfg.get('time_positions')!=50 or cfg.get('window_seconds')!=2.0 or

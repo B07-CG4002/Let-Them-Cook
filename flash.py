@@ -100,13 +100,15 @@ def _read_board_address(port):
     return _bluetooth_address(result.stdout)
 
 
-def environments(glove=False, flex3=False, wide_gyro=False):
+def environments(glove=False, flex3=False, wide_gyro=False, gyro_dps=1000):
+    if gyro_dps not in (1000,2000) or (gyro_dps==2000 and not (glove and wide_gyro)):
+        raise ValueError("2000 dps requires --glove --wide-gyro")
     """The LEFT and RIGHT PlatformIO environments, e.g. firebeetle32-left-glove-flex3.
 
     wide_gyro (version 5) is a three-flex format, so it implies flex3:
     firebeetle32-left-flex3-wide, firebeetle32-left-glove-flex3-wide."""
     flex3 = flex3 or wide_gyro
-    suffix = ("-glove" if glove else "") + ("-flex3" if flex3 else "") + ("-wide" if wide_gyro else "")
+    suffix = ("-glove" if glove else "") + ("-flex3" if flex3 else "") + (("-wide2000" if gyro_dps==2000 else "-wide") if wide_gyro else "")
     return tuple("firebeetle32-" + label + suffix for label in ROLES)
 
 
@@ -115,8 +117,8 @@ def sensor_version(flex3=False, wide_gyro=False):
     return 5 if wide_gyro else (4 if flex3 else 3)
 
 
-def _flash(glove=False, flex3=False, wide_gyro=False):
-    targets = dict(zip(ROLES, environments(glove, flex3, wide_gyro)))
+def _flash(glove=False, flex3=False, wide_gyro=False, gyro_dps=1000):
+    targets = dict(zip(ROLES, environments(glove, flex3, wide_gyro, gyro_dps)))
     _run([sys.executable, "-m", "tools.generate_dummy_fixtures"])
     # The real gloves (two- or three-flex) build the glove owner's module from copies;
     # refuse stale ones.
@@ -187,13 +189,17 @@ def main(argv=None):
                              "50 Hz from boot): firebeetle32-left/right-flex3 (dummy module, bare "
                              "boards) or, with --glove, firebeetle32-left/right-glove-flex3 (the "
                              "real three-flex gloves)")
+    parser.add_argument("--gyro-dps", type=int, choices=(1000,2000), default=1000,
+                        help="2000 requires --glove --wide-gyro; changes physical sensor range, not v5 gyro x10")
     parser.add_argument("--wide-gyro", action="store_true",
                         help="the three-flex format with the wide gyro range (sensor version 5: "
                              "40-byte packets, 12 values, gyro x10, LCS5; implies --flex3): "
                              "firebeetle32-left/right-flex3-wide (dummy module, bare boards) or, "
                              "with --glove, firebeetle32-left/right-glove-flex3-wide (the real "
-                             "gloves, sensor at ±1000 deg/s)")
+                             "gloves, sensor at ±1000 deg/s by default; --gyro-dps 2000 selects ±2000)")
     args = parser.parse_args(argv)  # --help exits before any hardware operation.
+    if args.gyro_dps==2000 and not (args.glove and args.wide_gyro):
+        parser.error('--gyro-dps 2000 requires --glove --wide-gyro')
     try:
         if args.ports:
             _ports()
@@ -213,7 +219,7 @@ def main(argv=None):
             print("Private serial monitor: keep passkeys off camera. No log is saved; Ctrl+C exits.")
             _run(_pio() + ["device", "monitor", "--port", port, "--baud", "115200", "--no-reconnect"])
         else:
-            _flash(glove=args.glove, flex3=args.flex3, wide_gyro=args.wide_gyro)
+            _flash(glove=args.glove, flex3=args.flex3, wide_gyro=args.wide_gyro, gyro_dps=args.gyro_dps)
         return 0
     except KeyboardInterrupt:
         print("\nCancelled; remaining operations were not run.")

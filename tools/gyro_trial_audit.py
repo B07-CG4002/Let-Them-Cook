@@ -23,7 +23,7 @@ def uint(value, name):
     return n
 
 
-def audit_trial(path, device, session, *, sensor_version=4):
+def audit_trial(path, device, session, *, sensor_version=4,gyro_dps=1000):
     path = Path(path)
     metadata = json.loads(path.with_suffix('.json').read_text(encoding='utf-8'))
     if not isinstance(metadata,dict):raise ValueError('Trial metadata must be an object')
@@ -34,7 +34,7 @@ def audit_trial(path, device, session, *, sensor_version=4):
         raise ValueError('Wrong hand identity')
     if metadata.get('session') != session or metadata.get('gesture') not in LABELS:
         raise ValueError('Wrong session/gesture')
-    contract='independent_hand_flex3_v1' if sensor_version==4 else 'independent_hand_flex3_gyro_v5_v1'
+    contract='independent_hand_flex3_v1' if sensor_version==4 else ('independent_hand_flex3_gyro_v5_v1' if gyro_dps==1000 else 'independent_hand_flex3_gyro_v5_2000_v1')
     gyro_scale=100 if sensor_version==4 else 10
     if metadata.get('recording_contract') != contract:
         raise ValueError('Unreviewed recording contract')
@@ -42,7 +42,8 @@ def audit_trial(path, device, session, *, sensor_version=4):
         source=metadata.get('acquisition_transport',{})
         if not isinstance(source,dict):raise ValueError('Acquisition metadata must be an object')
         if (source.get('sensor_packet_version')!=5 or source.get('gyro_scale')!=10 or
-                source.get('imu_range_dps')!=1000 or source.get('source_stats_magic')!='LCS5'):
+                gyro_dps not in (1000,2000) or source.get('imu_range_dps')!=gyro_dps or
+                source.get('imu_sensitivity_lsb_per_dps')!=(32.8 if gyro_dps==1000 else 16.4) or source.get('source_stats_magic')!='LCS5'):
             raise ValueError('Missing or incompatible v5 acquisition provenance')
     if metadata.get('split') not in ('train','validation','test'):
         raise ValueError('Invalid split')
@@ -90,7 +91,7 @@ def audit_trial(path, device, session, *, sensor_version=4):
         rails = sum(round(v*gyro_scale) in (-32768,32767) for v in values)
         axes[c] = dict(min=min(values), max=max(values),
                        peak_abs=max(map(abs,values)), wire_rail_samples=rails,
-                       near_wire_limit_samples=sum(abs(v)>=(300 if sensor_version==4 else 900) for v in values))
+                       near_wire_limit_samples=sum(abs(v)>=(300 if sensor_version==4 else .9*gyro_dps) for v in values))
     return dict(file=str(path),sha256=digest,gesture=metadata['gesture'],
                 device_id=device,boot_id=boot,samples=len(rows),duration_s=elapsed,
                 gyro=axes,
@@ -99,9 +100,9 @@ def audit_trial(path, device, session, *, sensor_version=4):
 
 
 def audit(root, session, hands=('LEFT','RIGHT'), gestures=('WASH',), minimum=3, gyro_dps=500,sensor_version=4):
-    if minimum < 1 or (sensor_version==4 and gyro_dps not in (250,500)) or (sensor_version==5 and gyro_dps!=1000) or sensor_version not in (4,5):
+    if minimum < 1 or (sensor_version==4 and gyro_dps not in (250,500)) or (sensor_version==5 and gyro_dps not in (1000,2000)) or sensor_version not in (4,5):
         raise ValueError('Invalid minimum/range')
-    contract='independent_hand_flex3_v1' if sensor_version==4 else 'independent_hand_flex3_gyro_v5_v1'
+    contract='independent_hand_flex3_v1' if sensor_version==4 else ('independent_hand_flex3_gyro_v5_v1' if gyro_dps==1000 else 'independent_hand_flex3_gyro_v5_2000_v1')
     gyro_scale=100 if sensor_version==4 else 10
     if not session or any(c not in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-' for c in session):
         raise ValueError('Use a session name, not a path')
@@ -128,7 +129,7 @@ def audit(root, session, hands=('LEFT','RIGHT'), gestures=('WASH',), minimum=3, 
                 errors.append(f'Orphan sidecar: {sidecar}')
         for path in sorted(folder.glob('*.csv')):
             try:
-                trial = audit_trial(path,expected_device,session,sensor_version=sensor_version)
+                trial = audit_trial(path,expected_device,session,sensor_version=sensor_version,gyro_dps=gyro_dps)
                 meta = json.loads(path.with_suffix('.json').read_text(encoding='utf-8'))
                 if any(meta.get(k) != marker.get(k) for k in ('person','session','split','device_id','recording_contract')):
                     raise ValueError('Trial identity differs from session marker')
@@ -142,12 +143,13 @@ def audit(root, session, hands=('LEFT','RIGHT'), gestures=('WASH',), minimum=3, 
             if count < minimum:errors.append(f'{hand} {gesture}: {count}/{minimum} required valid trials')
     rails = sum(a['wire_rail_samples'] for t in trials for a in t['gyro'].values())
     near = sum(a['near_wire_limit_samples'] for t in trials for a in t['gyro'].values())
+    peaks={h:{axis:max((t['gyro'][axis]['peak_abs'] for t in trials if t['device_id']==(1 if h=='LEFT' else 2)),default=0) for axis in ('gx','gy','gz')} for h in hands}
     status = 'blocked' if errors or rails else ('review_headroom' if near else 'headroom_observed')
     return dict(status=status, scope='Diagnostic sample integrity and gyro headroom only; not model accuracy or final collection readiness',
-                declared_sensor_range_dps=gyro_dps,firmware_range_verification='operator declared; v4 does not report IMU configuration',
+                declared_sensor_range_dps=gyro_dps,gyro_peak_abs_dps=peaks,firmware_range_verification='operator declared; v4/v5 BLE statistics do not report IMU range; verify firmware serial readback',
                 sensor_packet_version=sensor_version,
                 wire_gyro_range_dps=[-32768/gyro_scale,32767/gyro_scale],
-                near_limit_threshold_dps=300 if sensor_version==4 else 900,
+                near_limit_threshold_dps=300 if sensor_version==4 else .9*gyro_dps,
                 near_limit_scope='v4 wire headroom' if sensor_version==4 else 'v5 sensor headroom (wire is wider)',
                 required_gestures=list(gestures),counts=counts,errors=errors,
                 gyro_wire_rail_samples=rails,gyro_near_limit_samples=near,trials=trials,
@@ -163,7 +165,7 @@ def main():
     p.add_argument('--hands',nargs='+',choices=['LEFT','RIGHT'],default=['LEFT','RIGHT'])
     p.add_argument('--gestures',nargs='+',choices=LABELS,default=['WASH'])
     p.add_argument('--minimum',type=int,default=3)
-    p.add_argument('--gyro-dps',type=int,choices=[250,500,1000],default=500)
+    p.add_argument('--gyro-dps',type=int,choices=[250,500,1000,2000],default=500)
     p.add_argument('--sensor-version',type=int,choices=[4,5],default=4)
     p.add_argument('--out',required=True)
     a=p.parse_args()
@@ -172,7 +174,7 @@ def main():
     out=Path(a.out)
     out.parent.mkdir(parents=True,exist_ok=True)
     with out.open('x',encoding='utf-8') as stream:json.dump(report,stream,indent=2,allow_nan=False)
-    print(json.dumps({k:report[k] for k in ('status','counts','errors','gyro_wire_rail_samples','gyro_near_limit_samples','next_step')},indent=2))
+    print(json.dumps({k:report[k] for k in ('status','counts','errors','gyro_peak_abs_dps','gyro_wire_rail_samples','gyro_near_limit_samples','next_step')},indent=2))
     print('Report:',out.resolve())
     return 0 if report['status']=='headroom_observed' else 2
 

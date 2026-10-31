@@ -2,6 +2,7 @@
 import asyncio
 from contextlib import asynccontextmanager
 import struct
+import sys
 import time
 
 from common import sensor_v5 as codec
@@ -15,6 +16,15 @@ TRANSPORT=dict(sensor_packet_version=5,sensor_packet_bytes=40,source_stats_magic
                gyro_scale=10,gyro_units='deg/s',imu_range_dps=1000,
                imu_sensitivity_lsb_per_dps=32.8,
                scope='explicit v5 acquisition; use the reviewed wide_training importer')
+
+
+def transport_for(gyro_dps):
+    if type(gyro_dps) is not int or gyro_dps not in (1000,2000):raise ValueError('Expected gyro range 1000 or 2000')
+    return dict(TRANSPORT,imu_range_dps=gyro_dps,imu_sensitivity_lsb_per_dps=32.8 if gyro_dps==1000 else 16.4)
+
+def contract_for(gyro_dps):
+    transport_for(gyro_dps)
+    return RECORDING_CONTRACT if gyro_dps==1000 else 'independent_hand_flex3_gyro_v5_2000_v1'
 
 
 def parse_stats(data,device):
@@ -41,15 +51,53 @@ class WideQueue(NotificationQueue):
         except (ValueError,TypeError):self.health['malformed']+=1
 
 
+def make_windows_request(native):
+    from winrt.windows.devices.bluetooth import BluetoothLEPreferredConnectionParameters
+    return native.request_preferred_connection_parameters(
+        BluetoothLEPreferredConnectionParameters.throughput_optimized)
+
+
+async def windows_throughput(client,device,*,_platform=None):
+    """Hold the demonstrated Windows preference; verify it before subscribing.
+
+    Bleak 3.0.1 exposes the native Windows device through _requester. Unsupported
+    backends/APIs fail explicitly; a slow default link is not accepted silently.
+    """
+    if (_platform or sys.platform)!='win32':return None
+    request=None
+    interval=latency=None
+    try:
+        native=client._backend._requester
+        request=make_windows_request(native)
+        deadline=time.monotonic()+5
+        while True:
+            params=native.get_connection_parameters()
+            interval=int(params.connection_interval)
+            latency=int(params.connection_latency)
+            if 6<=interval<=12 and latency==0:
+                print(f'Windows BLE device={device}: interval={interval*1.25:g} ms latency=0; throughput preference held',flush=True)
+                return request
+            if time.monotonic()>=deadline:break
+            await asyncio.sleep(.1)
+        raise RuntimeError(f'Windows link remains interval={interval*1.25:g} ms latency={latency}; expected <=15 ms and latency=0')
+    except BaseException as error:
+        if request is not None:
+            try:request.close()
+            except Exception:pass
+        if isinstance(error,(asyncio.CancelledError,KeyboardInterrupt)):raise
+        raise RuntimeError(f'Cannot establish the reviewed Windows BLE link for device {device}: {error}. No sensor subscription started.') from error
+
+
 @asynccontextmanager
 async def connection(device):
     from bleak import BleakClient
     loop=asyncio.get_running_loop();health=dict(dropped=0,malformed=0)
     client=BleakClient(ADDRESSES[device],timeout=20)
-    control=None;closing=False
+    control=None;closing=False;profile_request=None
     try:
         await client.connect()
         stats=parse_stats(await client.read_gatt_char(SOURCE_STATS_UUID,use_cached=False),device)
+        profile_request=await windows_throughput(client,device)
         queue=WideQueue(device,stats.boot_id,health)
         # Control protocol v1 SET_RATE has no sensor payload and is identical
         # across formats. Only SET_RATE is used here; no sensor echo command.
@@ -66,4 +114,7 @@ async def connection(device):
     finally:
         closing=True
         if control is not None:control.detach()
-        await close_client(client)
+        try:
+            if profile_request is not None:profile_request.close()
+        finally:
+            await close_client(client)

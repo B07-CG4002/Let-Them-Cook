@@ -9,13 +9,37 @@ import shutil
 
 import numpy as np
 
-from src.hand_ai_flex3.core import CONFIG, CHANNELS, LABELS, SPLITS, resample, validate_ratios, fit_normalizer
-from src.hand_ai_flex3.wide_ble import RECORDING_CONTRACT, TRANSPORT
+from src.hand_ai_flex3.core import CONFIG, CHANNELS, LABELS, SPLITS, resample, validate_ratios as _validate_ratios, fit_normalizer
+from src.hand_ai_flex3.wide_ble import RECORDING_CONTRACT, TRANSPORT, transport_for, contract_for
 from tools.gyro_trial_audit import audit_trial
+
+def validate_ratios(rows):
+    """Validate each wearer's assigned sessions before aggregating counts.
+
+    Largest-remainder rounding is not additive across people. Never reshuffle
+    or reassign recordings merely to make combined totals fit a ratio.
+    """
+    rows=list(rows)
+    if not rows: return _validate_ratios(rows)
+    counts={g:{s:0 for s in SPLITS} for g in LABELS}
+    for person in sorted({r['person'] for r in rows}):
+        checked=_validate_ratios([r for r in rows if r['person']==person])
+        for g in LABELS:
+            for split in SPLITS: counts[g][split]+=checked[g][split]
+    return counts
+
 
 WIDE_CONFIG=dict(CONFIG,version='independent_hand_flex3_gyro_v5_v1',sensor_packet_version=5,
                  gyro_transport_scale=10,gyro_sensor_full_scale_dps=1000)
-DATA_FILES=('X.npy','y.npy','metadata.csv','config.json')
+def config_for(gyro_dps):
+    return dict(WIDE_CONFIG,version=contract_for(gyro_dps),gyro_sensor_full_scale_dps=gyro_dps)
+
+def checked_config(config):
+    gyro_dps=config.get('gyro_sensor_full_scale_dps')
+    if config!=config_for(gyro_dps):raise ValueError('Wrong v5 acquisition/model profile')
+    return gyro_dps
+
+DATA_FILES=('X.npy' ,'y.npy','metadata.csv','config.json')
 
 
 def sha(path):return hashlib.sha256(Path(path).read_bytes()).hexdigest()
@@ -30,7 +54,7 @@ def read_hand(root,device):
     """Read only that hand; validate raw bytes and explicit acquisition metadata."""
     root=Path(root)/('left' if device==1 else 'right')
     if device not in (1,2) or not root.is_dir():raise ValueError('Selected hand folder missing')
-    records=[];windows=[];labels=[];identities=set();fingerprints=set();raw_hashes=set()
+    records=[];windows=[];labels=[];identities=set();fingerprints=set();raw_hashes=set();profiles=set()
     for sidecar in root.rglob('*.json'):
         if sidecar.name!='session.json' and not sidecar.with_suffix('.csv').is_file():
             raise ValueError('Orphan/unknown recording sidecar: '+str(sidecar))
@@ -40,9 +64,13 @@ def read_hand(root,device):
         if not isinstance(meta,dict) or not isinstance(marker,dict):raise ValueError('Recording metadata must be objects')
         if any(meta.get(k)!=marker.get(k) for k in ('person','session','split','device_id','recording_contract')):
             raise ValueError('Session/trial identity mismatch: '+str(path))
-        if meta.get('recording_contract')!=RECORDING_CONTRACT:
+        gyro_dps=meta.get('acquisition_transport',{}).get('imu_range_dps')
+        profiles.add(gyro_dps)
+        if len(profiles)>1:raise ValueError('Mixed gyro acquisition profiles in one dataset')
+        if meta.get('acquisition_transport')!=transport_for(gyro_dps):raise ValueError('Acquisition transport differs')
+        if meta.get('recording_contract')!=contract_for(gyro_dps):
             raise ValueError('Explicit v5 acquisition contract required: '+str(path))
-        check=audit_trial(path,device,meta['session'],sensor_version=5)
+        check=audit_trial(path,device,meta['session'],sensor_version=5,gyro_dps=gyro_dps)
         if (any(a['wire_rail_samples'] or a['near_wire_limit_samples'] for a in check['gyro'].values()) or
                 any(check['other_channel_wire_rail_samples'].values())):
             raise ValueError('Gyro lacks reviewed sensor/wire headroom: '+str(path))
@@ -85,13 +113,16 @@ def prepare(root,out):
     # Validate both hands fully before creating the prepared output.
     hands={d:read_hand(root,d) for d in (1,2)}
     for x,y,records in hands.values():validate_ratios(records)
+    profiles={json.loads(records[0]['acquisition_transport_json'])['imu_range_dps'] for x,y,records in hands.values()}
+    if len(profiles)!=1:raise ValueError('Both hands must use the same reviewed gyro profile')
+    config=config_for(profiles.pop())
     out.mkdir(parents=True)
     for device,(x,y,records) in hands.items():
         folder=out/('left' if device==1 else 'right');folder.mkdir()
         np.save(folder/'X.npy',x);np.save(folder/'y.npy',y)
         with (folder/'metadata.csv').open('x',newline='',encoding='utf-8') as stream:
             writer=csv.DictWriter(stream,fieldnames=list(records[0]));writer.writeheader();writer.writerows(records)
-        write(folder/'config.json',WIDE_CONFIG)
+        write(folder/'config.json',config)
         write(folder/'dataset_manifest.json',dict(version=1,device_id=device,
               raw_root=str(Path(root).resolve()),sha256={n:sha(folder/n) for n in DATA_FILES},
               scope='v5 physical-unit trials; explicit split sessions; no normalization applied'))
@@ -102,7 +133,7 @@ def load_data(folder):
     folder=Path(folder);manifest=json.loads((folder/'dataset_manifest.json').read_text())
     if manifest.get('version')!=1 or manifest.get('device_id') not in (1,2):raise ValueError('Invalid prepared manifest')
     if manifest.get('sha256')!={n:sha(folder/n) for n in DATA_FILES}:raise ValueError('Prepared dataset hash changed')
-    if json.loads((folder/'config.json').read_text())!=WIDE_CONFIG:raise ValueError('Wrong v5 model contract')
+    config=json.loads((folder/'config.json').read_text());gyro_dps=checked_config(config)
     x=np.load(folder/'X.npy',allow_pickle=False);y=np.load(folder/'y.npy',allow_pickle=False)
     with (folder/'metadata.csv').open(newline='',encoding='utf-8') as stream:records=list(csv.DictReader(stream))
     if x.shape!=(len(y),50,12) or not len(y) or len(records)!=len(y) or x.dtype!=np.float32 or y.dtype.kind not in 'iu' or not np.isfinite(x).all():
@@ -117,7 +148,7 @@ def load_data(folder):
         identity=tuple(row[k] for k in ('person','session','gesture','trial'))
         if identity in identities:raise ValueError('Prepared duplicate identity')
         identities.add(identity)
-        if json.loads(row['acquisition_transport_json'])!=TRANSPORT:raise ValueError('Prepared acquisition contract changed')
+        if json.loads(row['acquisition_transport_json'])!=transport_for(gyro_dps):raise ValueError('Prepared acquisition contract changed')
     validate_ratios(records)
     return x,y,records,manifest
 
@@ -137,7 +168,8 @@ class Predictor:
         import torch
         from src.model import GestureCNN
         self.torch=torch;run=Path(run)
-        if json.loads((run/'config.json').read_text())!=WIDE_CONFIG or json.loads((run/'class_names.json').read_text())!=LABELS:
+        checked_config(json.loads((run/'config.json').read_text()))
+        if json.loads((run/'class_names.json').read_text())!=LABELS:
             raise ValueError('Not a reviewed v5 hand model')
         self.training=json.loads((run/'training.json').read_text());self.device_id=self.training['device_id']
         if self.device_id not in (1,2):raise ValueError('Invalid model hand')
@@ -163,7 +195,7 @@ class Predictor:
         with self.torch.inference_mode():return self.torch.softmax(self.model(tensor),dim=1).numpy()
 
 
-def train(data,out,epochs=30,seeds=(42,73,101)):
+def train(data,out,epochs=30,seeds=(42,73,101),exclude_right_index=False):
     import torch
     from src.model import GestureCNN
     if epochs<1 or not seeds or len(set(seeds))!=len(seeds) or any(type(s) is not int or not 0<=s<2**32 for s in seeds):
@@ -171,6 +203,7 @@ def train(data,out,epochs=30,seeds=(42,73,101)):
     data=Path(data);out=Path(out)
     if out.exists():raise FileExistsError(out)
     datasets={d:load_data(data/h) for d,h in ((1,'left'),(2,'right'))}
+    if json.loads((data/'left/config.json').read_text())!=json.loads((data/'right/config.json').read_text()):raise ValueError('Mixed prepared hand profiles')
     out.mkdir(parents=True);write(out/'status.json',dict(status='started',test_evaluated=False))
     selection={}
     try:
@@ -178,13 +211,14 @@ def train(data,out,epochs=30,seeds=(42,73,101)):
             x,y,records,manifest=datasets[device]
             if manifest['device_id']!=device:raise ValueError('Dataset hand mismatch')
             ids={s:np.array([i for i,r in enumerate(records) if r['split']==s],dtype=np.int64) for s in SPLITS}
+            exclude = device==2 and exclude_right_index
             mean,std=fit_normalizer(x[ids['train']])
             # This excluded feature has no learned contribution. Identity scaling
             # also prevents a nearly constant faulty index from overflowing the
             # FPGA input encoder if its raw value later jumps across 0..1.
-            if device==2:mean[9]=0.;std[9]=1.
+            if exclude:mean[9]=0.;std[9]=1.
             normalized=((x-mean)/std).astype(np.float32)
-            if device==2:normalized[:,:,9]=0
+            if exclude:normalized[:,:,9]=0
             tx=torch.from_numpy(normalized).permute(0,2,1);ty=torch.from_numpy(y.astype(np.int64))
             candidates=[]
             for seed in seeds:
@@ -209,23 +243,23 @@ def train(data,out,epochs=30,seeds=(42,73,101)):
                     if (met['macro_f1'],-vl)>score:
                         score=(met['macro_f1'],-vl);best={k:v.detach().cpu().clone() for k,v in model.state_dict().items()};best_epoch=epoch+1
                 # Fold the RIGHT mask into weights for every downstream runtime.
-                if device==2:best['features.0.weight'][:,9,:]=0
+                if exclude:best['features.0.weight'][:,9,:]=0
                 run=out/'runs'/hand/f'seed_{seed}';run.mkdir(parents=True)
                 torch.save(best,run/'model.pth');np.savez(run/'normalization.npz',mean=mean,std=std)
-                write(run/'config.json',WIDE_CONFIG);write(run/'class_names.json',LABELS)
+                write(run/'config.json',json.loads((data/hand/'config.json').read_text()));write(run/'class_names.json',LABELS)
                 shutil.copyfile(data/hand/'metadata.csv',run/'split_manifest.csv')
                 write(run/'training.json',dict(seed=seed,epochs=epochs,best_epoch=best_epoch,history=history,
                     optimizer='Adam',learning_rate=.001,device_id=device,data_dir=str((data/hand).resolve()),
                     dataset_sha256={n:sha(data/hand/n) for n in DATA_FILES},selection='validation macro F1, then loss',
-                    right_index_excluded=device==2,excluded_channel='flex1/GPIO34' if device==2 else None,
-                    excluded_feature_normalization='identity (mean=0,std=1)' if device==2 else None,
+                    right_index_excluded=exclude,excluded_channel='flex1/GPIO34' if exclude else None,
+                    excluded_feature_normalization='identity (mean=0,std=1)' if exclude else None,
                     model_payload_sha256={n:sha(run/n) for n in ('model.pth','normalization.npz','config.json','class_names.json')},
                     model_source_sha256=sha(Path(__import__('src.model',fromlist=['__file__']).__file__)),
                     provisional=True,test_evaluated=False,hardware_validated=False,created_utc=datetime.now(timezone.utc).isoformat()))
                 predictor=Predictor(run);prob=predictor.probabilities(x[ids['validation']])
                 folded=metrics(y[ids['validation']],prob.argmax(1))
                 if abs(folded['macro_f1']-score[0])>1e-9:raise ValueError('Folded-model validation differs')
-                if device==2:
+                if exclude:
                     probe=x[ids['validation']].copy();probe[:,:,9]=np.linspace(0,1,len(probe))[:,None]
                     if not np.allclose(prob,predictor.probabilities(probe),rtol=1e-6,atol=1e-7):raise ValueError('RIGHT index still affects predictions')
                 write(run/'validation.json',folded)
