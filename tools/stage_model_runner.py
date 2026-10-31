@@ -364,6 +364,15 @@ def check_runtime_version(files, sensor_version, ref):
                          "was uploaded".format(marker[0], ref, marker[1], sensor_version))
 
 
+def check_runtime_profile(files, uploads):
+    """The selected acquisition profile needs a matching committed board runtime."""
+    if not uploads:return
+    configs=[json.loads(uploads[BUNDLE+'/'+h+'/config.json'].decode('utf-8')) for h in ('left','right')]
+    if any(c.get('gyro_sensor_full_scale_dps')==2000 for c in configs):
+        if b'independent_hand_flex3_gyro_v5_2000_v1' not in files['src/hand_runtime.py']:
+            raise ValueError('Staged runtime does not support the explicit 2000 dps bundle; commit the patched runtime first')
+
+
 def bundle_files(folder, allow_synthetic=False):
     """({BUNDLE/name: bytes}, synthetic, sensor version) of a local hand model bundle, checked
     as the runner checks it.
@@ -521,6 +530,7 @@ def stage(args):
         check_code(runner, files, git_ref)
         if reads_bundle:
             check_runtime_version(files, sensor_version, git_ref)
+            check_runtime_profile(files, uploads)
         check_overlay(runner, files)
         files.update(uploads)
         print("Upload from {} of this checkout -> {}".format(git_ref, dest))
