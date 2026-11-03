@@ -373,6 +373,20 @@ def check_runtime_profile(files, uploads):
             raise ValueError('Staged runtime does not support the explicit 2000 dps bundle; commit the patched runtime first')
 
 
+def bundle_gyro_range(files):
+    """The gyro full scale in deg/s both hands of a checked bundle were recorded at, or None.
+
+    Version 5 carries gyro at 10 counts per deg/s whatever the range, so neither the laptop nor
+    the board can tell a +/-1000 glove from a +/-2000 one: the flash command printed here is the
+    only link. flash.py sets one range on both gloves, so the two hands must agree."""
+    named = [json.loads(files[BUNDLE + "/" + hand + "/config.json"].decode("utf-8"))
+             .get("gyro_sensor_full_scale_dps") for hand in ("left", "right")]
+    if named[0] != named[1]:
+        raise ValueError("the bundle's hands were recorded at different gyro ranges: LEFT {!r}, "
+                         "RIGHT {!r} deg/s; flash.py sets one range on both gloves".format(*named))
+    return named[0]
+
+
 def bundle_files(folder, allow_synthetic=False):
     """({BUNDLE/name: bytes}, synthetic, sensor version) of a local hand model bundle, checked
     as the runner checks it.
@@ -513,11 +527,12 @@ def stage(args):
         raise ValueError("--source must be an absolute path on the board" + _git_bash_hint([source]))
     dest = destination(args.name or runner.name)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    bundle = synthetic = named = sensor_version = None
+    bundle = synthetic = named = sensor_version = gyro_dps = None
     uploads = {}
     if reads_bundle:
         bundle, uploads, synthetic, named = hand_bundle(args.bundle, args.allow_synthetic)
         sensor_version = hand_sensor_version(named, getattr(args, "sensor_version", None))
+        gyro_dps = bundle_gyro_range(uploads) if uploads else None
         # A checked local bundle needs the flag only when it is synthetic.
         command = deploy_command(dest, args.runner, bundle=bundle,
                                  allow_synthetic=args.allow_synthetic if synthetic is None else synthetic,
@@ -548,11 +563,17 @@ def stage(args):
               "here; the runner checks it when it starts)".format(bundle))
     if reads_bundle:
         flag = "--wide-gyro" if sensor_version == 5 else "--flex3"
+        # flash.py builds +/-2000 only for the real gloves (--glove --wide-gyro --gyro-dps 2000).
+        glove_flag = flag + (" --gyro-dps 2000" if gyro_dps == 2000 else "")
         print("Sensor version: {}, {}; the gloves must send it (real gloves: python flash.py --glove {}; "
               "bare test boards, dummy data: python flash.py {}) and the service runs it".format(
                   sensor_versions.describe(sensor_version),
                   "named by the bundle" if named is not None else "given with --sensor-version",
-                  flag, flag))
+                  glove_flag, flag))
+        if gyro_dps is not None:
+            print("Gyro range: the bundle was recorded at +/-{0} deg/s. Version 5 packets do not say "
+                  "which range a glove runs, so a glove flashed at another range is not refused "
+                  "anywhere: flash both gloves at +/-{0} deg/s.".format(gyro_dps))
     for name in runner.folders:
         print("The copy gets an empty folder {}/{}; the runner writes its records there".format(dest, name))
     if synthetic:
@@ -598,7 +619,7 @@ def stage(args):
         record["git_ref"] = git_ref
     if reads_bundle:
         record.update(bundle=bundle, bundle_source=args.bundle, bundle_synthetic=synthetic,
-                      sensor_version=sensor_version)
+                      sensor_version=sensor_version, bundle_gyro_dps=gyro_dps)
     RECORDS.mkdir(parents=True, exist_ok=True)
     path = RECORDS / "model-runner-stage-{}.json".format(stamp)
     path.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")

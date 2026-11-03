@@ -743,3 +743,44 @@ def test_the_staged_hand12_code_imports_on_its_own(tmp_path):
     loaded = [Path(path).resolve() for path in json.loads(done.stdout.strip().splitlines()[-1])]
     assert loaded and all(copy.resolve() in path.parents for path in loaded), loaded
     assert {path.relative_to(copy.resolve()).as_posix() for path in loaded} <= set(HAND12.code)
+
+
+def _gyro_bundle(folder, left_dps, right_dps):
+    """Wen Ree's v5 bundle with each hand's config.json at a recorded gyro range."""
+    from src.hand_ai_flex3 import wide_training
+    shutil.copytree(V5_BUNDLE, folder)
+    manifest = json.loads((folder / "manifest.json").read_text())
+    for hand, dps in (("left", left_dps), ("right", right_dps)):
+        path = folder / hand / "config.json"
+        path.write_text(json.dumps(wide_training.config_for(dps)))
+        manifest["generated_sha256"][hand + "/config.json"] = hashlib.sha256(
+            path.read_bytes()).hexdigest()
+    (folder / "manifest.json").write_text(json.dumps(manifest))
+    return folder
+
+
+@pytest.mark.skipif(not (V5_BUNDLE / "manifest.json").is_file(), reason="Wen Ree's v5 bundle")
+def test_a_2000_bundle_prints_the_2000_flash_command(overlay, monkeypatch, capsys, tmp_path):
+    # The v5 packet does not carry the gyro range: the printed flash command is the only link.
+    monkeypatch.setattr(stage, "_connect", no_connect)
+    runtime = {"src/hand_runtime.py": b"('independent_hand_flex3_gyro_v5_v1',"
+                                      b"'independent_hand_flex3_gyro_v5_2000_v1')\n"}
+    monkeypatch.setattr(stage, "git_files", hand12_commit(overlay, runtime))
+    bundle = _gyro_bundle(tmp_path / "g2000", 2000, 2000)
+    capsys.readouterr()
+    assert stage.main(["--runner", "hand12", "--bundle", str(bundle), "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert ("the gloves must send it (real gloves: python flash.py --glove --wide-gyro --gyro-dps "
+            "2000; bare test boards, dummy data: python flash.py --wide-gyro)") in out
+    assert "flash both gloves at +/-2000 deg/s" in out
+
+
+@pytest.mark.skipif(not (V5_BUNDLE / "manifest.json").is_file(), reason="Wen Ree's v5 bundle")
+def test_a_bundle_with_two_gyro_ranges_is_refused(overlay, monkeypatch, capsys, tmp_path):
+    monkeypatch.setattr(stage, "_connect", no_connect)
+    monkeypatch.setattr(stage, "git_files", hand12_commit(overlay))
+    bundle = _gyro_bundle(tmp_path / "mixed", 1000, 2000)
+    capsys.readouterr()
+    assert stage.main(["--runner", "hand12", "--bundle", str(bundle), "--dry-run"]) == 2
+    err = capsys.readouterr().err
+    assert "different gyro ranges" in err and "LEFT 1000, RIGHT 2000" in err
