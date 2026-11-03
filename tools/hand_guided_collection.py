@@ -46,8 +46,12 @@ def allocation(weights, total):
 
 def plan(train_target):
     if train_target not in (20,30): raise ValueError('Choose 20 (20/3/4) or 30 (30/4/6); other budgets need a reviewed split plan')
-    rows=[]
+    # Build allocations first, then interleave each variant as
+    # train -> validation -> test.  This keeps the movement description
+    # constant while the operator changes only the split.
+    allocations={}
     for split in ('train','validation','test'):
+        allocations[split]={}
         for gesture in dict.fromkeys(v[0] for v in VARIANTS):
             variants=[v for v in VARIANTS if v[0]==gesture]
             if split=='train':
@@ -58,12 +62,21 @@ def plan(train_target):
                 counts=([1,1,0,0,0,1,0,0] if gesture=='IDLE' else [1,1,1,0])
             if train_target==20 and split=='test':
                 counts=([1,1,0,1,0,1,0,0] if gesture=='IDLE' else [1,1,1,1])
-            rows.extend(dict(split=split,gesture=g,note=g+'; '+n,target=c) for (g,w,n),c in zip(variants,counts) if c)
+            allocations[split][gesture]=counts
+    rows=[]
+    for gesture in dict.fromkeys(v[0] for v in VARIANTS):
+        variants=[v for v in VARIANTS if v[0]==gesture]
+        for variant_index,(g,w,note) in enumerate(variants):
+            for split in ('train','validation','test'):
+                target=allocations[split][gesture][variant_index]
+                if target:
+                    rows.append(dict(split=split,gesture=g,note=g+'; '+note,target=target))
     return rows
 
 def counts_for(rows, row, person, session):
     return {d:sum(1 for r in rows if r['meta']['person']==person and r['meta']['session']==session and
-                  r['meta']['device_id']==d and r['meta']['gesture']==row['gesture'] and
+                  r['meta'].get('split')==row['split'] and r['meta']['device_id']==d and
+                  r['meta']['gesture']==row['gesture'] and
                   r['meta'].get('recording_variant','').strip()==row['note']) for d in (1,2)}
 
 def launch(a):
@@ -73,8 +86,8 @@ def launch(a):
     from src.hand_ai_flex3.record_both_gui import pair_settings,validate_session_settings
     rows=plan(a.train_target)
     rootpath=Path('data/hand_raw_flex3')/a.campaign
-    identity=dict(version=1,person=a.person,date=a.date,campaign=a.campaign,train_target=a.train_target,
-                  gyro_dps=2000,rows=rows)
+    identity=dict(version=2,person=a.person,date=a.date,campaign=a.campaign,train_target=a.train_target,
+                  combined_session=True,gyro_dps=2000,rows=rows)
     marker=Path('.comms-local/guided_plans')/a.campaign/(a.person+'_'+a.date+'.json')
     if marker.exists():
         if json.loads(marker.read_text())!=identity: raise ValueError('Plan identity changed. Use original arguments or a new campaign.')
@@ -96,11 +109,17 @@ def launch(a):
             ttk.Label(form,text='Automatic batch description').grid(row=row,column=0)
             ttk.Entry(form,textvariable=self.note,state='readonly',width=100).grid(row=row,column=1)
             ttk.Label(form,textvariable=self.progress).grid(row=row+1,column=0,columnspan=2)
-            ttk.Label(form,text='Palm horizontal = flat, palm facing floor/ceiling. Vertical = edge-on, palm facing sideways.\nKeep that agreed meaning consistent; confirm with a reference photo. Charge gloves during breaks.\nDROP: hold arm approximately still and open. THROW: propel forward then release.').grid(row=row+2,column=0,columnspan=2)
-            bar=ttk.Frame(form);bar.grid(row=row+3,column=0,columnspan=2)
+            ttk.Label(form,text='REMINDER: Charge gloves during breaks').grid(row=row+2,column=0,columnspan=2)
             self.nav=[]
-            for label,fn in [('Previous',lambda:self.select(-1)),('Next',lambda:self.select(1)),('Next split',self.next_split),('Review / redo capture',self.review)]:
-                w=ttk.Button(bar,text=label,command=fn);w.pack(side='left',padx=6);self.nav.append(w)
+            variant_bar=ttk.Frame(form);variant_bar.grid(row=row+3,column=0,columnspan=2,pady=(4,0))
+            for label,fn in [('Previous variant',lambda:self.move_variant(-1)),('Next variant',lambda:self.move_variant(1))]:
+                w=ttk.Button(variant_bar,text=label,command=fn);w.pack(side='left',padx=5);self.nav.append(w)
+            split_bar=ttk.Frame(form);split_bar.grid(row=row+4,column=0,columnspan=2)
+            for label,fn in [('Previous split',lambda:self.move_split(-1)),('Next split',lambda:self.move_split(1))]:
+                w=ttk.Button(split_bar,text=label,command=fn);w.pack(side='left',padx=5);self.nav.append(w)
+            action_bar=ttk.Frame(form);action_bar.grid(row=row+5,column=0,columnspan=2)
+            for label,fn in [('Delete last paired capture',self.undo_last),('Review / redo capture',self.review)]:
+                w=ttk.Button(action_bar,text=label,command=fn);w.pack(side='left',padx=5);self.nav.append(w)
             self.logbox.configure(height=4)
             # One action selector is shown as a read-only mirror; both are filled from plan.
             self.field_widgets['right'].grid_remove()
@@ -113,7 +132,7 @@ def launch(a):
             for w in self.nav:w.configure(state='disabled' if self.busy else 'normal')
         def reload(self):
             self.records=inventory(rootpath) if rootpath.exists() else []
-        def session(self,row):return session_name(a.person,a.date,a.campaign,row['split'])
+        def session(self,row):return session_name(a.person,a.date,a.campaign)
         def counts(self,row):return counts_for(self.records,row,a.person,self.session(row))
         def first_incomplete(self,split):
             candidates=[i for i,r in enumerate(rows) if r['split']==split and min(self.counts(r).values())<r['target']]
@@ -128,18 +147,36 @@ def launch(a):
             if self.busy:return
             j=max(0,min(len(rows)-1,self.index+delta))
             if rows[j]['split']!=rows[self.index]['split']:
-                if not messagebox.askokcancel('Separate capture session','Take a break, refit gloves and confirm palm/grip references.\nContinue to the selected split?'):return
+                if not messagebox.askokcancel('Change split','This changes between train, validation and test.\nPause and refit/check the gloves before continuing?'):return
             self.index=j;self.show()
-        def next_split(self):
+        def move_variant(self,direction):
             if self.busy:return
-            self.reload();split=rows[self.index]['split']
-            if any(min(self.counts(r).values())<r['target'] for r in rows if r['split']==split):
-                messagebox.showerror('Incomplete split','Finish or correct the remaining variants in this split first.');return
-            splits=('train','validation','test');n=splits.index(split)+1
-            if n==len(splits):
-                messagebox.showinfo('Collection complete','All three splits complete. Close and run Audit. Edge recordings are optional and separate.');return
-            if messagebox.askokcancel('Break and refit','Take a break, refit the gloves and check grip/palm references before the next session.'):
-                self.first_incomplete(splits[n]);self.show()
+            current=rows[self.index]
+            key=(current['gesture'],current['note'])
+            candidates=[i for i,r in enumerate(rows)
+                        if r['split']==current['split'] and (r['gesture'],r['note'])!=key]
+            candidates=sorted(candidates)
+            if direction<0:candidates=[i for i in reversed(candidates) if i<self.index]
+            else:candidates=[i for i in candidates if i>self.index]
+            if not candidates:
+                messagebox.showinfo('No variant','There is no earlier/later variant in this split.');return
+            target=candidates[0]
+            if messagebox.askokcancel('Change variant','This changes the planned gesture variant.\nPause and check the grip/hand position before continuing?'):
+                self.index=target;self.show()
+        def move_split(self,direction):
+            if self.busy:return
+            current=rows[self.index];splits=('train','validation','test')
+            target_split_index=splits.index(current['split'])+direction
+            if not 0<=target_split_index<len(splits):
+                messagebox.showinfo('No split','There is no earlier/later split for this variant.');return
+            target_split=splits[target_split_index]
+            target=next((i for i,r in enumerate(rows)
+                         if r['gesture']==current['gesture'] and r['note']==current['note']
+                         and r['split']==target_split),None)
+            if target is None:
+                messagebox.showinfo('No planned recording','This variant has no recording target in that split.');return
+            if messagebox.askokcancel('Change split','This changes between train, validation and test.\nPause and refit/check the gloves before continuing?'):
+                self.index=target;self.show()
         def start(self):
             if not self.worker or not self.connected:return
             try:
@@ -150,8 +187,10 @@ def launch(a):
                 if n<=0:raise ValueError('This variant is complete. Use Next or Review / redo capture.')
                 v={k:x.get() for k,x in self.vars.items()}
                 config=pair_settings(a.person,self.session(r),r['split'],r['gesture'],r['gesture'],str(n),str(rootpath))
+                for x in config.values():
+                    x['recording_variant']=r['note']
+                    x['session_scope']='combined'
                 config=self.worker.prepare_config(config);validate_session_settings(config)
-                for x in config.values():x['recording_variant']=r['note']
                 self.worker.cancel_recording.clear();self.busy=True
                 self.worker.commands.put(dict(settings=config));self.controls()
             except (ValueError,OSError) as e:messagebox.showerror('Recording settings',str(e))
@@ -163,10 +202,11 @@ def launch(a):
                 try:
                     self.reload();r=rows[self.index]
                     # Advance only within the split. No automatic recording starts.
-                    if min(self.counts(r).values())>getattr(self,'before_count',-1):
-                        same=[i for i,x in enumerate(rows) if x['split']==r['split'] and min(self.counts(x).values())<x['target']]
+                    current_count=min(self.counts(r).values())
+                    if current_count>getattr(self,'before_count',-1) and current_count>=r['target']:
+                        same=[i for i,x in enumerate(rows) if min(self.counts(x).values())<x['target']]
                         if same:self.index=next((i for i in same if i>self.index),same[0])
-                        else:messagebox.showinfo('Split complete','This split is complete. Use Next for the next split after a break, or close. Edge recordings are optional and launched separately.')
+                        else:messagebox.showinfo('Collection complete','All planned train, validation and test recordings are complete. Close and run Audit.')
                     self.show()
                 except (ValueError,OSError) as e:messagebox.showerror('Review required',str(e))
         def review(self):
@@ -179,7 +219,8 @@ def launch(a):
             tree.pack(fill='both',expand=True);seen=set()
             for x in sorted(self.records,key=lambda x:x['meta'].get('created_utc',''),reverse=True):
                 m=x['meta'];cap=m['capture_id']
-                if m['person']!=a.person or m['session'] not in {self.session(r) for r in rows} or cap in seen:continue
+                if (m['person']!=a.person or m['session'] not in {self.session(r) for r in rows}
+                        or m.get('split')!=rows[self.index]['split'] or cap in seen):continue
                 seen.add(cap);tree.insert('', 'end',iid=cap,values=(m.get('created_utc',''),m['split'],m['gesture'],m.get('recording_variant','')))
             def redo():
                 sel=tree.selection()
@@ -192,6 +233,33 @@ def launch(a):
                     self.reload();self.show();tree.delete(sel[0]);messagebox.showinfo('Preserved',str(dest),parent=win)
                 except (ValueError,OSError) as e:messagebox.showerror('Review',str(e),parent=win)
             ttk.Button(win,text='Preserve selected capture for redo',command=redo).pack(pady=8)
+        def undo_last(self,event=None):
+            """Delete the newest paired capture after explicit confirmation."""
+            if self.busy:
+                return 'break'
+            try:
+                self.reload(); current_split=rows[self.index]['split']; session=self.session(rows[self.index])
+                candidates=[];seen=set()
+                for item in self.records:
+                    meta=item['meta'];capture=meta.get('capture_id')
+                    if (meta.get('person')==a.person and meta.get('session')==session
+                            and meta.get('split')==current_split and capture and capture not in seen):
+                        seen.add(capture);candidates.append(item)
+                if not candidates:
+                    messagebox.showinfo('Undo','There is no completed paired capture to undo.',parent=self.root)
+                    return 'break'
+                latest=max(candidates,key=lambda x:x['meta'].get('created_utc',''))
+                capture=latest['meta']['capture_id']
+                if not messagebox.askyesno('Undo last capture',
+                        'Preserve BOTH hands of the newest capture outside the dataset and redo it?',
+                        parent=self.root):
+                    return 'break'
+                dest=quarantine(rootpath,capture,'Deleted by paired-capture button', '.comms-local/backups/capture_review', True)
+                self.reload();self.show()
+                messagebox.showinfo('Capture undone',f'Preserved outside dataset:\n{dest}',parent=self.root)
+            except (ValueError,OSError) as error:
+                messagebox.showerror('Undo failed',str(error),parent=self.root)
+            return 'break'
     root=tk.Tk();App(root);root.mainloop()
 
 def main():

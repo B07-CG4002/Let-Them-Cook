@@ -3,9 +3,21 @@ from pathlib import Path
 import tempfile
 import unittest
 from tools.hand_guided_collection import plan, counts_for
+from tools.hand_collection import session_name, completed
+from src.hand_ai_flex3.record_gui import prepare_session
 from tools.hand_capture_review import inventory, quarantine, sha, LABELS
 
 class GuidedTests(unittest.TestCase):
+    def test_combined_guided_session_name_and_marker_accept_split_change(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)/'raw'/'left'/'P01_campaign_20261103'
+            base=dict(person='P01',session='P01_campaign_20261103',split='train',device_id=1,
+                      gesture='CHOP',count=1,root=root,session_scope='combined')
+            self.assertEqual(session_name('P01','20261103','campaign'),'P01_campaign_20261103')
+            self.assertEqual(prepare_session(base),[1])
+            changed=dict(base,split='validation')
+            self.assertEqual(prepare_session(changed),[1])
+
     def test_budgets_and_corrected_throw(self):
         for train,validation,test in ((30,4,6),(20,3,4)):
             rows=plan(train)
@@ -16,9 +28,21 @@ class GuidedTests(unittest.TestCase):
         throw=[r for r in plan(30) if r['split']=='train' and r['gesture']=='THROW']
         self.assertEqual([r['target'] for r in throw],[8,7,7,8])
         self.assertIn('thumb straight; finish palm vertical',throw[0]['note'])
+    def test_plan_interleaves_each_variant_train_validation_test(self):
+        rows=plan(30)
+        self.assertEqual([(r['split'],r['note']) for r in rows[:3]], [
+            ('train','PICKUP; underhand supporting lift; thumb straight'),
+            ('validation','PICKUP; underhand supporting lift; thumb straight'),
+            ('test','PICKUP; underhand supporting lift; thumb straight'),
+        ])
+        self.assertEqual([(r['split'],r['note']) for r in rows[3:6]], [
+            ('train','PICKUP; underhand supporting lift; thumb bent'),
+            ('validation','PICKUP; underhand supporting lift; thumb bent'),
+            ('test','PICKUP; underhand supporting lift; thumb bent'),
+        ])
     def test_counts_ignore_other_sessions_and_trim_notes(self):
         row=plan(30)[0]
-        records=[dict(meta=dict(person='P01',session='s',device_id=1,gesture=row['gesture'],recording_variant=' '+row['note']+' '))]
+        records=[dict(meta=dict(person='P01',session='s',split=row['split'],device_id=1,gesture=row['gesture'],recording_variant=' '+row['note']+' '))]
         self.assertEqual(counts_for(records,row,'P01','s'),{1:1,2:0})
         self.assertEqual(counts_for(records,row,'P01','other'),{1:0,2:0})
     def fixture(self,root):

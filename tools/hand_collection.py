@@ -27,10 +27,17 @@ def token(value):
     if not re.fullmatch(r'[A-Za-z0-9_-]+',value):raise ValueError('Use letters, digits, underscore or hyphen')
     return value
 
-def session_name(person,day,campaign,split):
-    return '_'.join(token(x) for x in (person,campaign,day,split))
+def session_name(person,day,campaign,split=None):
+    """Build a session name.
 
-def completed(root,person,session,gesture):
+    Passing a split preserves the legacy split-specific naming used by the
+    edge recorder.  The guided collector omits it so all three dataset splits
+    share one session identity while each trial keeps its own split metadata.
+    """
+    parts=(person,campaign,day) if split is None else (person,campaign,day,split)
+    return '_'.join(token(x) for x in parts)
+
+def completed(root,person,session,gesture,split=None):
     """Count only verified CSV/sidecar pairs; never silently accept orphans/tampering."""
     root=Path(root);n=0
     for p in root.glob(f'{person}_{session}_{gesture}_*'):
@@ -39,7 +46,9 @@ def completed(root,person,session,gesture):
         if not other.is_file():raise ValueError(f'Orphan recording: {p}; review before resuming')
         if p.suffix=='.json':
             m=json.loads(p.read_text())
-            if any(m.get(k)!=v for k,v in dict(person=person,session=session,gesture=gesture).items()):
+            expected=dict(person=person,session=session,gesture=gesture)
+            if split is not None: expected['split']=split
+            if any(m.get(k)!=v for k,v in expected.items()):
                 raise ValueError(f'Recording identity differs: {p}')
             if hashlib.sha256(other.read_bytes()).hexdigest()!=m['csv_sha256']:raise ValueError(f'Changed recording: {other}')
             n+=1

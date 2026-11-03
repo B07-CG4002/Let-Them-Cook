@@ -23,7 +23,11 @@ def inventory(root):
         if m.get('device_id') not in (1,2) or not m.get('capture_id'):
             raise ValueError(f'Missing hand/capture identity: {side}')
         marker=json.loads((p.parent/'session.json').read_text(encoding='utf-8'))
-        if any(m.get(k)!=marker.get(k) for k in ('person','session','split','device_id','recording_contract')):
+        base_keys=('person','session','device_id','recording_contract')
+        same_base=all(m.get(k)==marker.get(k) for k in base_keys)
+        same_split=(m.get('split')==marker.get('split'))
+        combined=(marker.get('session_scope')=='combined')
+        if not (same_base and (same_split or combined)):
             raise ValueError(f'Session identity differs: {p}')
         rows.append(dict(meta=m,csv=p,sidecar=side))
     for p in root.rglob('*.json'):
