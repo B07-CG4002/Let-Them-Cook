@@ -70,6 +70,11 @@ class RangeTests(unittest.TestCase):
             (folder/'manifest.json').write_text(json.dumps(m));self.assertEqual(ModelBundle(folder).encode(1,np.zeros((50,12))).shape,(600,))
             p=folder/'right/config.json';cfg=json.loads(p.read_text());cfg['gyro_transport_scale']=100;p.write_text(json.dumps(cfg));m['generated_sha256']['right/config.json']=w.sha(p);(folder/'manifest.json').write_text(json.dumps(m))
             with self.assertRaises(ValueError):ModelBundle(folder)
+    def test_stale_staged_runtime_is_refused(self):
+        from tools.stage_model_runner import check_runtime_profile
+        uploads={'bundle/'+h+'/config.json':json.dumps(w.config_for(2000)).encode() for h in ('left','right')}
+        with self.assertRaisesRegex(ValueError,'2000 dps'):check_runtime_profile({'src/hand_runtime.py':b'independent_hand_flex3_gyro_v5_v1'},uploads)
+        check_runtime_profile({'src/hand_runtime.py':b'independent_hand_flex3_gyro_v5_2000_v1'},uploads)
     def test_guard_preserves_rejected_trial_and_1700_passes(self):
         from common.sensor_v5 import SensorPacket
         def rows(v):return {d:[(i*.02,SensorPacket(d,1,i,i*20,(0,0,0,int(v*10),0,0,0,0,0,0,0,0)),(0,0,0,v,0,0,0,0,0,0,0,0)) for i in range(101)] for d in (1,2)}

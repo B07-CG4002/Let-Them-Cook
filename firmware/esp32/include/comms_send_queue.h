@@ -12,7 +12,14 @@ namespace comms {
 // packets back to back, oldest first. Six packets (228 bytes in v3, 240 in v4) plus
 // the ATT (3) and L2CAP (4) headers fit one 251-byte link-layer packet when the
 // link uses the LE data length extension.
+#ifndef COMMS_SENSOR_BATCH_LIMIT
 constexpr size_t kMaxPacketsPerNotification = 6;
+#else
+// Opt-in diagnostic only. Preserve default environments and wire packet shape.
+static_assert(COMMS_SENSOR_BATCH_LIMIT >= 1 && COMMS_SENSOR_BATCH_LIMIT <= 6,
+              "Sensor batch limit must be 1..6");
+constexpr size_t kMaxPacketsPerNotification = COMMS_SENSOR_BATCH_LIMIT;
+#endif
 constexpr size_t kMaxSensorNotificationSize = kMaxPacketsPerNotification * kPacketSize;
 static_assert(kMaxSensorNotificationSize + 3 + 4 <= 251,
               "a full sensor notification must fit one 251-byte link-layer packet");
