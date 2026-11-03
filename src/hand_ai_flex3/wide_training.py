@@ -62,7 +62,11 @@ def read_hand(root,device):
         meta=json.loads(path.with_suffix('.json').read_text())
         marker_path=path.parent/'session.json';marker=json.loads(marker_path.read_text())
         if not isinstance(meta,dict) or not isinstance(marker,dict):raise ValueError('Recording metadata must be objects')
-        if any(meta.get(k)!=marker.get(k) for k in ('person','session','split','device_id','recording_contract')):
+        base_keys=('person','session','device_id','recording_contract')
+        same_base=all(meta.get(k)==marker.get(k) for k in base_keys)
+        same_split=(meta.get('split')==marker.get('split'))
+        combined=(marker.get('session_scope')=='combined')
+        if not (same_base and (same_split or combined)):
             raise ValueError('Session/trial identity mismatch: '+str(path))
         gyro_dps=meta.get('acquisition_transport',{}).get('imu_range_dps')
         profiles.add(gyro_dps)

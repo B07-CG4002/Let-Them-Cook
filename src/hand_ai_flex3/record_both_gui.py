@@ -32,11 +32,17 @@ def validate_session_settings(config):
         identity = {k: a[k] for k in ('person', 'session', 'split', 'device_id')}
         from src.hand_ai_flex3.core import CONFIG
         identity['recording_contract'] = a.get('recording_contract', CONFIG['version'])
+        if a.get('session_scope'):
+            identity['session_scope'] = a['session_scope']
         try:
             existing = json.loads(marker.read_text(encoding='utf-8'))
         except (OSError, ValueError) as error:
             raise SessionConflict(f'Cannot read session marker {marker}: {error}. Existing recordings were kept.') from error
-        if existing != identity:
+        same_base = all(existing.get(k) == identity.get(k)
+                        for k in ('person','session','device_id','recording_contract'))
+        combined = (identity.get('session_scope') == 'combined' and
+                    existing.get('session_scope') == 'combined')
+        if existing != identity and not (combined and same_base):
             saved_split = existing.get('split', 'unknown') if isinstance(existing, dict) else 'unknown'
             raise SessionConflict(
                 f'Hand {device}: session "{a["session"]}" already belongs to split "{saved_split}". '
@@ -184,7 +190,7 @@ class BothWorker(Worker):
             self.validate_rows(dict(zip(self.devices,values)))
             pair=save_pair(config,{d:numbers[d][i] for d in self.devices},dict(zip(self.devices,values)))
             self.event('saved',text='Saved: '+ ' / '.join(f'{d}: #{numbers[d][i]}' for d in self.devices)+f' | capture={pair}')
-        self.event('complete',text='Batch complete. Files remain separate for independent-hand training.')
+        self.event('complete',text='Batch complete.')
 
     def validate_rows(self,rows):
         """An opt-in transport may apply additional acquisition checks."""
@@ -198,7 +204,6 @@ class App:
         root.title('One or Both Gloves — Three-Flex BLE Recorder');root.geometry('1080x750')
         self.phase=tk.StringVar(value='READY — select LEFT only, RIGHT only or BOTH')
         ttk.Label(root,textvariable=self.phase,font=('Segoe UI',20)).pack(pady=15)
-        ttk.Label(root,text='Raw 12 channels retained. Repaired-sensor training uses all 12 features by default; legacy exclusion is explicit.').pack()
         self.vars={k:tk.StringVar(value=v) for k,v in dict(mode='BOTH',person='P01',session='P01_dual_pilot1',split='train',
                    left='PICKUP',right='PICKUP',count='3',output='data/hand_flex3_checks/dual_pilot').items()}
         form=ttk.Frame(root);form.pack(pady=10);self.inputs=[];self.field_widgets={}
@@ -209,12 +214,18 @@ class App:
             w.grid(row=i,column=1,pady=3);self.inputs.append((w,choices))
             self.field_widgets[k]=w
             if k=='mode':self.mode_widget=w
-        ttk.Label(root,text='Use a separate session name for train, validation and test. Changing Split alone does not create a new session.').pack(pady=3)
+        # Keep a small, field-local history so Ctrl+Z restores accidental
+        # edits to text fields without ever touching recorded files.
+        self._edit_history={k:[] for k in ('person','session','output')}
+        self._edit_last={k:self.vars[k].get() for k in self._edit_history}
+        self._edit_guard=False
+        for k in self._edit_history:
+            self.vars[k].trace_add('write',lambda *_args,key=k:self._remember_edit(key))
+            self.field_widgets[k].bind('<Control-KeyPress-z>',lambda _event,key=k:self._undo_edit(key))
         buttons=ttk.Frame(root);buttons.pack(pady=8)
         self.buttons={}
         for name,command in [('Connect selected',self.connect),('Record selected',self.start),('Cancel batch',self.cancel),('Disconnect',self.disconnect)]:
             b=ttk.Button(buttons,text=name,command=command);b.pack(side='left',padx=6);self.buttons[name]=b
-        ttk.Label(root,text='Preparation: 2 seconds | Capture: 2 seconds | Only selected hands connect and save').pack(pady=4)
         self.live={};self.readings={};self.hand_states={1:'Disconnected',2:'Disconnected'}
         for d,hand in ((1,'LEFT'),(2,'RIGHT')):
             panel=ttk.LabelFrame(root,text=hand,padding=6)
@@ -231,6 +242,24 @@ class App:
                     row=row+1,column=col,sticky='ew',padx=8)
         self.logbox=tk.Text(root,height=10);self.logbox.pack(fill='both',expand=True,padx=12,pady=8)
         root.protocol('WM_DELETE_WINDOW',self.close);self.controls();root.after(100,self.poll)
+
+    def _remember_edit(self,key):
+        if self._edit_guard:return
+        current=self.vars[key].get();previous=self._edit_last[key]
+        if current!=previous:
+            self._edit_history[key].append(previous)
+            self._edit_history[key]=self._edit_history[key][-100:]
+            self._edit_last[key]=current
+
+    def _undo_edit(self,key):
+        history=self._edit_history[key]
+        if not history:return 'break'
+        self._edit_guard=True
+        try:
+            self.vars[key].set(history.pop())
+            self._edit_last[key]=self.vars[key].get()
+        finally:self._edit_guard=False
+        return 'break'
 
     def controls(self):
         states={'Connect selected':not self.worker,'Record selected':self.connected and not self.busy,
