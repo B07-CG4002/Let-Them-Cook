@@ -20,7 +20,7 @@ OBJECT_RULES = {
     "POT": frozenset({"PICKUP", "DROP", "POURING"}),
     "INGREDIENT_WHOLE": frozenset({"PICKUP", "DROP", "THROW"}),
     "INGREDIENT_CHOPPED": frozenset({"PICKUP", "DROP", "THROW"}),
-    "PLATE_CLEAN": frozenset({"PICKUP", "DROP", "POURING"}),
+    "PLATE_CLEAN": frozenset({"PICKUP", "DROP"}),
     "PLATE_WITH_FOOD": frozenset({"PICKUP", "DROP", "POURING"}),
     "DIRTY_PLATE_STACK": frozenset({"PICKUP", "DROP"}),
     "KNIFE": frozenset({"PICKUP", "DROP"}),
@@ -35,6 +35,7 @@ def _object_name(value: Optional[str]) -> Optional[str]:
         "WHOLE_INGREDIENT": "INGREDIENT_WHOLE",
         "CHOPPED_INGREDIENT": "INGREDIENT_CHOPPED",
         "CLEAN_PLATE": "PLATE_CLEAN",
+        "EMPTY_PLATE": "PLATE_CLEAN",
         "PLATE_WITH_FOOD": "PLATE_WITH_FOOD",
         "DIRTY_PLATE": "DIRTY_PLATE_STACK",
     }
@@ -49,6 +50,7 @@ class GateDecision:
     reason: str
     object_name: Optional[str] = None
     confidence: Optional[float] = None
+    target_name: Optional[str] = None
 
 
 class TemporalPostProcessor:
@@ -83,6 +85,7 @@ class TemporalPostProcessor:
         self._active = {1: None, 2: None}
         self._last_pulse = {1: -math.inf, 2: -math.inf}
         self._idle_streak = {1: 0, 2: 0}
+        self._armed = {1: True, 2: True}
 
     def reset(self, device_id: Optional[int] = None):
         devices = (device_id,) if device_id is not None else (1, 2)
@@ -93,6 +96,7 @@ class TemporalPostProcessor:
             self._active[device] = None
             self._last_pulse[device] = -math.inf
             self._idle_streak[device] = 0
+            self._armed[device] = True
 
     def update(self, device_id: int, gesture: str, confidence: float, now: float):
         if device_id not in (1, 2):
@@ -109,8 +113,8 @@ class TemporalPostProcessor:
         history.append((gesture, confidence, float(now)))
         if gesture == "IDLE":
             self._idle_streak[device_id] += 1
-        else:
-            self._idle_streak[device_id] = 0
+            if self._idle_streak[device_id] >= self.idle_votes:
+                self._armed[device_id] = True
 
         count = sum(1 for g, _, _ in history if g == gesture)
         needed = self.pulse_votes if gesture in PULSES else self.ongoing_votes
@@ -129,11 +133,13 @@ class TemporalPostProcessor:
             return events
 
         if gesture in PULSES:
-            if self._idle_streak[device_id] < self.idle_votes and self._last_pulse[device_id] > -math.inf:
+            if not self._armed[device_id] and self._idle_streak[device_id] < self.idle_votes:
                 return events
             if now - self._last_pulse[device_id] < self.pulse_cooldown:
                 return events
             self._last_pulse[device_id] = float(now)
+            self._armed[device_id] = False
+            self._idle_streak[device_id] = 0
             self._active[device_id] = None
             events.append(dict(type="action", device_id=device_id,
                                gesture=gesture, confidence=average,
@@ -158,10 +164,11 @@ class ObjectActionGate:
     event may be dispatched to gameplay.
     """
 
-    def __init__(self, two_hand_window=.50):
+    def __init__(self, two_hand_window=.50, require_two_hand_wash=False):
         if two_hand_window <= 0:
             raise ValueError("two_hand_window must be positive")
         self.two_hand_window = float(two_hand_window)
+        self.require_two_hand_wash = bool(require_two_hand_wash)
         self.held = {1: None, 2: None}
         self.targets = {1: None, 2: None}
         self._wash_seen = {1: -math.inf, 2: -math.inf}
@@ -186,7 +193,8 @@ class ObjectActionGate:
 
     def accept(self, device_id: int, gesture: str, now: float,
                confidence: Optional[float] = None,
-               object_name: Optional[str] = None) -> GateDecision:
+               object_name: Optional[str] = None,
+               target_object: Optional[str] = None) -> GateDecision:
         self._check_device(device_id)
         gesture = str(gesture).upper()
         if gesture not in LABELS:
@@ -196,6 +204,11 @@ class ObjectActionGate:
         if confidence is not None and not math.isfinite(float(confidence)):
             raise ValueError("invalid confidence")
         supplied = _object_name(object_name)
+        target = _object_name(target_object)
+        if supplied is not None and supplied not in OBJECT_RULES:
+            return self._reject(device_id, gesture, confidence, "unknown_object", supplied, target)
+        if target is not None and target not in OBJECT_RULES and target not in {"BIN", "TABLE", "BOARD", "SINK", "STOVE"}:
+            return self._reject(device_id, gesture, confidence, "unknown_target_object", supplied, target)
 
         if gesture == "IDLE":
             return self._ok(device_id, gesture, confidence, "context_free")
@@ -227,12 +240,26 @@ class ObjectActionGate:
         allowed = OBJECT_RULES[obj]
         if gesture == "WASH":
             if obj != "DIRTY_PLATE_STACK":
-                return self._reject(device_id, gesture, confidence, "object_not_washable", obj)
+                return self._reject(device_id, gesture, confidence, "object_not_washable", obj, target)
+            if not self.require_two_hand_wash:
+                return self._ok(device_id, gesture, confidence, "wash_allowed", obj, target)
             self._wash_seen[device_id] = float(now)
             other = 3 - device_id
             if now - self._wash_seen[other] > self.two_hand_window:
-                return self._reject(device_id, gesture, confidence, "waiting_for_second_hand", obj)
-            return self._ok(device_id, gesture, confidence, "two_hand_wash_allowed", obj)
+                return self._reject(device_id, gesture, confidence, "waiting_for_second_hand", obj, target)
+            return self._ok(device_id, gesture, confidence, "two_hand_wash_allowed", obj, target)
+
+        if gesture == "POURING":
+            if obj == "PLATE_CLEAN":
+                return self._reject(device_id, gesture, confidence, "clean_plate_is_pour_target", obj, target)
+            if obj == "POT":
+                if target not in (None, "PLATE_CLEAN"):
+                    return self._reject(device_id, gesture, confidence, "pot_target_not_pourable", obj, target)
+                return self._ok(device_id, gesture, confidence, "pot_pour_allowed", obj, target)
+            if obj == "PLATE_WITH_FOOD":
+                if target not in (None, "BIN"):
+                    return self._reject(device_id, gesture, confidence, "food_plate_target_not_pourable", obj, target)
+                return self._ok(device_id, gesture, confidence, "food_plate_pour_allowed", obj, target)
 
         if gesture not in allowed:
             return self._reject(device_id, gesture, confidence,
@@ -247,9 +274,10 @@ class ObjectActionGate:
             raise ValueError("device_id must be 1 or 2")
 
     @staticmethod
-    def _ok(device_id, gesture, confidence, reason, obj=None):
-        return GateDecision(True, device_id, gesture, reason, obj, confidence)
+    def _ok(device_id, gesture, confidence, reason, obj=None, target=None):
+        return GateDecision(True, device_id, gesture, reason, obj, confidence, target)
 
     @staticmethod
-    def _reject(device_id, gesture, confidence, reason, obj=None):
-        return GateDecision(False, device_id, gesture, reason, obj, confidence)
+    def _reject(device_id, gesture, confidence, reason, obj=None, target=None):
+        return GateDecision(False, device_id, gesture, reason, obj, confidence, target)
+

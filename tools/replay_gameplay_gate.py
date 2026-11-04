@@ -21,11 +21,15 @@ def main():
                    choices=['POT', 'INGREDIENT_WHOLE', 'INGREDIENT_CHOPPED',
                             'PLATE_CLEAN', 'PLATE_WITH_FOOD', 'DIRTY_PLATE_STACK', 'KNIFE'])
     p.add_argument('--initial-state', choices=['target', 'held'], required=True)
-    p.add_argument('--two-hand-wash', action='store_true')
+    p.add_argument('--two-hand-wash', action='store_true',
+                   help='require both hands to hold DIRTY_PLATE_STACK within the wash window')
+    p.add_argument('--threshold', type=float, default=0.70)
+    p.add_argument('--wash-window', type=float, default=0.50)
     a = p.parse_args()
 
-    temporal = TemporalPostProcessor()
-    gate = ObjectActionGate()
+    temporal = TemporalPostProcessor(threshold=a.threshold)
+    gate = ObjectActionGate(two_hand_window=a.wash_window,
+                            require_two_hand_wash=a.two_hand_wash)
     for device in (1, 2):
         if a.initial_state == 'target':
             gate.set_target(device, a.object)
@@ -64,3 +68,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
