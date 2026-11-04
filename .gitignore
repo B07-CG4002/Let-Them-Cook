@@ -62,6 +62,18 @@ htmlcov/
 .pio/
 .week7-local/
 .comms-local/
+
+# Reviewed deployment artifacts and integration handoff files
+#
+# Keep raw training runs, live-test folders, backups and local model-selection
+# outputs under .comms-local ignored. Copy only the final exported FPGA bundle
+# into this tracked directory before committing it.
+!models/hand12_v5_candidate3/
+!models/hand12_v5_candidate3/**
+
+# Small, reviewable integration notes/configuration only
+!docs/integration/
+!docs/integration/**
 ios-visualizer/CommsNative/.build/
 ios-visualizer/CommsNative/.swiftpm/
 ios-visualizer/NativePreview/*.xcodeproj/
