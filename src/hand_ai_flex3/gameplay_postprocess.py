@@ -26,6 +26,10 @@ OBJECT_RULES = {
     "KNIFE": frozenset({"PICKUP", "DROP"}),
 }
 
+TARGET_NAMES = frozenset(set(OBJECT_RULES) | {
+    "BIN", "TABLE", "BOARD", "SINK", "STOVE", "SERVE_WINDOW",
+})
+
 
 def _object_name(value: Optional[str]) -> Optional[str]:
     if value is None:
@@ -115,6 +119,10 @@ class TemporalPostProcessor:
             self._idle_streak[device_id] += 1
             if self._idle_streak[device_id] >= self.idle_votes:
                 self._armed[device_id] = True
+        else:
+            # Only consecutive stable IDLE windows may re-arm a pulse or end
+            # an ongoing gesture.
+            self._idle_streak[device_id] = 0
 
         count = sum(1 for g, _, _ in history if g == gesture)
         needed = self.pulse_votes if gesture in PULSES else self.ongoing_votes
@@ -176,8 +184,8 @@ class ObjectActionGate:
     def set_target(self, device_id: int, object_name: Optional[str]):
         self._check_device(device_id)
         value = _object_name(object_name)
-        if value is not None and value not in OBJECT_RULES:
-            raise ValueError(f"unknown object: {object_name}")
+        if value is not None and value not in TARGET_NAMES:
+            raise ValueError(f"unknown target object: {object_name}")
         self.targets[device_id] = value
 
     def set_held(self, device_id: int, object_name: Optional[str]):
@@ -186,10 +194,12 @@ class ObjectActionGate:
         if value is not None and value not in OBJECT_RULES:
             raise ValueError(f"unknown object: {object_name}")
         self.held[device_id] = value
+        self._wash_active = False
 
     def clear_held(self, device_id: int):
         self._check_device(device_id)
         self.held[device_id] = None
+        self._wash_active = False
 
     def accept(self, device_id: int, gesture: str, now: float,
                confidence: Optional[float] = None,
@@ -207,11 +217,12 @@ class ObjectActionGate:
         target = _object_name(target_object)
         if supplied is not None and supplied not in OBJECT_RULES:
             return self._reject(device_id, gesture, confidence, "unknown_object", supplied, target)
-        if target is not None and target not in OBJECT_RULES and target not in {"BIN", "TABLE", "BOARD", "SINK", "STOVE"}:
+        if target is not None and target not in TARGET_NAMES:
             return self._reject(device_id, gesture, confidence, "unknown_target_object", supplied, target)
 
         if gesture == "IDLE":
-            return self._ok(device_id, gesture, confidence, "context_free")
+            return self._ok(device_id, gesture, confidence, "context_free",
+                            target=target)
 
         if gesture == "CHOP":
             # Chopping is only valid while the hand is holding the knife.
@@ -230,6 +241,8 @@ class ObjectActionGate:
             obj = supplied or self.targets[device_id]
             if obj is None:
                 return self._reject(device_id, gesture, confidence, "no_target_object")
+            if obj not in OBJECT_RULES:
+                return self._reject(device_id, gesture, confidence, "pickup_target_not_object", obj, target)
             self.held[device_id] = obj
             self.targets[device_id] = None
             return self._ok(device_id, gesture, confidence, "pickup_allowed", obj)
@@ -243,10 +256,15 @@ class ObjectActionGate:
                 return self._reject(device_id, gesture, confidence, "object_not_washable", obj, target)
             if not self.require_two_hand_wash:
                 return self._ok(device_id, gesture, confidence, "wash_allowed", obj, target)
-            self._wash_seen[device_id] = float(now)
-            other = 3 - device_id
-            if now - self._wash_seen[other] > self.two_hand_window:
-                return self._reject(device_id, gesture, confidence, "waiting_for_second_hand", obj, target)
+            # The game layer owns two-hand object state. Once both hands are
+            # marked as holding the stack, whichever hand emits WASH first
+            # may start the wash; do not require temporal starts to be within
+            # the replay-only synchronization window.
+            if self.held[1] != "DIRTY_PLATE_STACK" or self.held[2] != "DIRTY_PLATE_STACK":
+                return self._reject(device_id, gesture, confidence, "both_hands_required", obj, target)
+            if getattr(self, "_wash_active", False):
+                return self._reject(device_id, gesture, confidence, "wash_already_active", obj, target)
+            self._wash_active = True
             return self._ok(device_id, gesture, confidence, "two_hand_wash_allowed", obj, target)
 
         if gesture == "POURING":
@@ -266,6 +284,7 @@ class ObjectActionGate:
                                f"{gesture.lower()}_not_allowed_for_{obj.lower()}", obj)
         if gesture in ("DROP", "THROW"):
             self.held[device_id] = None
+            self._wash_active = False
         return self._ok(device_id, gesture, confidence, "object_action_allowed", obj)
 
     @staticmethod
