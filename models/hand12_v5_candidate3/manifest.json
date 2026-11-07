@@ -16,7 +16,7 @@
   "clock_target_ns": 10,
   "parallel_lanes": 2,
   "cache_slots": 2,
-  "regression_samples": 68,
+  "regression_samples": 136,
   "cache_control_cases": 17,
   "full_range_accumulator_absolute_bound": 3175037737297248256,
   "numeric_screen_settings": {
@@ -26,7 +26,7 @@
   },
   "generator_sha256": {
     "hand_hls_prepare.py": "5f7c80463100979e67a669e2d2b1246cbc3c9cf81ddd726661a3595fc5ffa461",
-    "precision_sweep.py": "7d8df34361ad098737eae2d607ca885b8120aa142d3a193286a73690b84743ac",
+    "precision_sweep.py": "4f743991589b77e691651aebac4a2dd1bea82336074adb2b4f21aff30c5038e1",
     "precision_hls_prepare.py": "53ebdb640302d7f55d57e29f2c7f2b39d7ec5c0b3264dbf053437ffc05957c0e",
     "precision_hls_unroll2.py": "4946ff33ec6efd83fc99e4cfa175890091441a3a2db6eb20ff5194144051a1a4",
     "precision_hls_cache.py": "91ef5bcde6a51165558a3fb33247f88bfd86f5f1c62c76a9016b72f82c732839"
@@ -37,14 +37,14 @@
       "device_id": 1,
       "cache_slot": 0,
       "model_id": 100,
-      "validation_samples": 34,
+      "validation_samples": 68,
       "provenance": {
         "source_sha256": {
-          "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\.comms-local\\hand_repaired_drop_g2000_continuous_candidate3\\models\\selected\\left\\model.pth": "d1e70fb062f735af98648a85472a983556978f9ac5543016b950f8589b26d324",
-          "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\.comms-local\\hand_repaired_drop_g2000_continuous_candidate3\\models\\selected\\left\\config.json": "f5da134fcd1a784dd154f5b15802fdf6dfc282a16982c8a67f4b87125ab7b2c8",
-          "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\.comms-local\\hand_repaired_drop_g2000_continuous_candidate3\\models\\selected\\left\\class_names.json": "fe64eeb1219c3cc868bb2eebb06fbf47abfccbd8bb38418da3930991bd10913a",
-          "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\.comms-local\\hand_repaired_drop_g2000_continuous_candidate3\\models\\selected\\left\\normalization.npz": "46d425381e272fe26fef0b02bd3a7c52635feacc59bd3bda53405beec4bd2dc8",
-          "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\.comms-local\\hand_repaired_drop_g2000_continuous_candidate3\\models\\selected\\left\\training.json": "29766f8159a063561028c3ae6239ef6b275dab1ba044e6b42465eb56d7227ec7"
+          "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\.comms-local\\hand_all_people_g2000_sideways_knife_final2_20261107\\models\\selected\\left\\model.pth": "ebddde8f76eb4af8f7306ecf73979475a13524f6195850f12dd8d110841bca8c",
+          "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\.comms-local\\hand_all_people_g2000_sideways_knife_final2_20261107\\models\\selected\\left\\config.json": "f5da134fcd1a784dd154f5b15802fdf6dfc282a16982c8a67f4b87125ab7b2c8",
+          "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\.comms-local\\hand_all_people_g2000_sideways_knife_final2_20261107\\models\\selected\\left\\class_names.json": "fe64eeb1219c3cc868bb2eebb06fbf47abfccbd8bb38418da3930991bd10913a",
+          "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\.comms-local\\hand_all_people_g2000_sideways_knife_final2_20261107\\models\\selected\\left\\normalization.npz": "d2cf7deb6d6f21a5f2b81213242d30a8d44dcb11ea6882ebaffc06c27ae6b733",
+          "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\.comms-local\\hand_all_people_g2000_sideways_knife_final2_20261107\\models\\selected\\left\\training.json": "6a916592ccb05e775606b0bc18e15260a8fcb0606275621c07df36a58e7d700c"
         },
         "data": {
           "evaluation_scope": "recording-level validation",
@@ -52,24 +52,24 @@
           "split": "validation",
           "untouched_test_consumed": false,
           "data_sha256": {
-            "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\.comms-local\\hand_repaired_drop_g2000_continuous_candidate3\\prepared\\left\\X.npy": "5001e886bd5c7376feccc4268f10c39a26019a2cd729f9db3745799ec0333c03",
-            "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\.comms-local\\hand_repaired_drop_g2000_continuous_candidate3\\prepared\\left\\y.npy": "6f7a908e523d9ef7392b9e924dde951e382a9e0d11331218de12fc4d4bd8bb3b",
-            "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\.comms-local\\hand_repaired_drop_g2000_continuous_candidate3\\prepared\\left\\metadata.csv": "9b1dc0db8a2061c1a5fe06e65969b1c04ff1c7e17f7f614797da589a9ea3e887",
-            "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\.comms-local\\hand_repaired_drop_g2000_continuous_candidate3\\prepared\\left\\config.json": "f5da134fcd1a784dd154f5b15802fdf6dfc282a16982c8a67f4b87125ab7b2c8"
+            "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\.comms-local\\hand_all_people_g2000_sideways_knife_final2_20261107\\prepared\\left\\X.npy": "15adb56e86af26677461958a672e8f8952ff3d7ff1aeda74531fb8c58d7fac2d",
+            "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\.comms-local\\hand_all_people_g2000_sideways_knife_final2_20261107\\prepared\\left\\y.npy": "5dc695979529a467e7bf80b1439bdc7d8fc6333685837097abe3605c0c1fb746",
+            "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\.comms-local\\hand_all_people_g2000_sideways_knife_final2_20261107\\prepared\\left\\metadata.csv": "423bc6bb0fd883afe277357b957bee65f91736b7300314d91c9f43582553a31c",
+            "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\.comms-local\\hand_all_people_g2000_sideways_knife_final2_20261107\\prepared\\left\\config.json": "f5da134fcd1a784dd154f5b15802fdf6dfc282a16982c8a67f4b87125ab7b2c8"
           }
         },
-        "calibration_samples": 255
+        "calibration_samples": 508
       },
       "numeric_screen": {
-        "samples": 34,
-        "class_agreement": 34,
+        "samples": 68,
+        "class_agreement": 68,
         "class_changes": 0,
-        "float_correct": 34,
-        "quantized_correct": 34,
+        "float_correct": 68,
+        "quantized_correct": 68,
         "threshold_decision_changes": 0,
         "emitted_label_changes": 0,
-        "max_probability_error": 5.853195612637307e-07,
-        "max_logit_error": 2.5012759955700403e-05,
+        "max_probability_error": 1.0165671482376126e-07,
+        "max_logit_error": 3.581410403885599e-05,
         "changed_class_indices": [],
         "changed_filtered_indices": []
       },
@@ -80,14 +80,14 @@
       "device_id": 2,
       "cache_slot": 1,
       "model_id": 101,
-      "validation_samples": 34,
+      "validation_samples": 68,
       "provenance": {
         "source_sha256": {
-          "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\.comms-local\\hand_repaired_drop_g2000_continuous_candidate3\\models\\selected\\right\\model.pth": "482b636bc433848815ef6ff221890f75fa20d1dc0e56033483f5a2f3383a30b6",
-          "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\.comms-local\\hand_repaired_drop_g2000_continuous_candidate3\\models\\selected\\right\\config.json": "f5da134fcd1a784dd154f5b15802fdf6dfc282a16982c8a67f4b87125ab7b2c8",
-          "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\.comms-local\\hand_repaired_drop_g2000_continuous_candidate3\\models\\selected\\right\\class_names.json": "fe64eeb1219c3cc868bb2eebb06fbf47abfccbd8bb38418da3930991bd10913a",
-          "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\.comms-local\\hand_repaired_drop_g2000_continuous_candidate3\\models\\selected\\right\\normalization.npz": "cac487b8141bba592beb476231e83f4672aa26118d0755719878e6372b541f00",
-          "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\.comms-local\\hand_repaired_drop_g2000_continuous_candidate3\\models\\selected\\right\\training.json": "a10c7d0c2fa09a72344e2a790e6a8907773ebaae6c24ea442941174dc442144c"
+          "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\.comms-local\\hand_all_people_g2000_sideways_knife_final2_20261107\\models\\selected\\right\\model.pth": "962a63f22c92f56af59c7ec42039787950df3ab616175914d9d0eaf63f81ec74",
+          "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\.comms-local\\hand_all_people_g2000_sideways_knife_final2_20261107\\models\\selected\\right\\config.json": "f5da134fcd1a784dd154f5b15802fdf6dfc282a16982c8a67f4b87125ab7b2c8",
+          "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\.comms-local\\hand_all_people_g2000_sideways_knife_final2_20261107\\models\\selected\\right\\class_names.json": "fe64eeb1219c3cc868bb2eebb06fbf47abfccbd8bb38418da3930991bd10913a",
+          "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\.comms-local\\hand_all_people_g2000_sideways_knife_final2_20261107\\models\\selected\\right\\normalization.npz": "f9d56759227cd486433522a2d95e4b8c6c7e93b80a8005e6f802ce97d191e308",
+          "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\.comms-local\\hand_all_people_g2000_sideways_knife_final2_20261107\\models\\selected\\right\\training.json": "a347099465e4a97f46bfffca53e2501ba276c8487e9acfcc9948256062a6a7a6"
         },
         "data": {
           "evaluation_scope": "recording-level validation",
@@ -95,24 +95,24 @@
           "split": "validation",
           "untouched_test_consumed": false,
           "data_sha256": {
-            "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\.comms-local\\hand_repaired_drop_g2000_continuous_candidate3\\prepared\\right\\X.npy": "bd8abade4c40e69f402c9d1acb318125751b5d38ce8ae6924189c9d5304503d0",
-            "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\.comms-local\\hand_repaired_drop_g2000_continuous_candidate3\\prepared\\right\\y.npy": "6f7a908e523d9ef7392b9e924dde951e382a9e0d11331218de12fc4d4bd8bb3b",
-            "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\.comms-local\\hand_repaired_drop_g2000_continuous_candidate3\\prepared\\right\\metadata.csv": "fea604d26f5add5cd5c41316288dd909f6feb573123e4494db72b673300dd1c8",
-            "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\.comms-local\\hand_repaired_drop_g2000_continuous_candidate3\\prepared\\right\\config.json": "f5da134fcd1a784dd154f5b15802fdf6dfc282a16982c8a67f4b87125ab7b2c8"
+            "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\.comms-local\\hand_all_people_g2000_sideways_knife_final2_20261107\\prepared\\right\\X.npy": "7996b662a6345bab7e0779b8d01561899a52285a1424766645b9af21353b5a40",
+            "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\.comms-local\\hand_all_people_g2000_sideways_knife_final2_20261107\\prepared\\right\\y.npy": "5dc695979529a467e7bf80b1439bdc7d8fc6333685837097abe3605c0c1fb746",
+            "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\.comms-local\\hand_all_people_g2000_sideways_knife_final2_20261107\\prepared\\right\\metadata.csv": "ed42d906ba74109936d774190cdc3cbfd53e47d6c0553b28c3e4d0d946e83814",
+            "C:\\Users\\ooiwe\\OneDrive\\Documents\\CG4002\\Let_Them_Cook\\.comms-local\\hand_all_people_g2000_sideways_knife_final2_20261107\\prepared\\right\\config.json": "f5da134fcd1a784dd154f5b15802fdf6dfc282a16982c8a67f4b87125ab7b2c8"
           }
         },
-        "calibration_samples": 255
+        "calibration_samples": 508
       },
       "numeric_screen": {
-        "samples": 34,
-        "class_agreement": 34,
+        "samples": 68,
+        "class_agreement": 68,
         "class_changes": 0,
-        "float_correct": 34,
-        "quantized_correct": 34,
+        "float_correct": 68,
+        "quantized_correct": 68,
         "threshold_decision_changes": 0,
         "emitted_label_changes": 0,
-        "max_probability_error": 3.404452666444513e-07,
-        "max_logit_error": 4.501886933994115e-05,
+        "max_probability_error": 9.253200188366617e-08,
+        "max_logit_error": 3.539146050002273e-05,
         "changed_class_indices": [],
         "changed_filtered_indices": []
       },
@@ -126,13 +126,13 @@
     "tb_hand_cnn.cpp": "348f00543cc2da4813eb40c9dacf0ed1ec23d7b20ff734c1f08dc855b120ef68",
     "hand_perf_warm.cfg": "12f325da21d09168a77c439c498ae4a2983f13a801ba36d0feb7238260262817",
     "hand_perf_cold.cfg": "df40e62c37195ae99bcf3b9ff6c04cfa84d49280687db28c674b65659f180f29",
-    "left/parameter_words.bin": "d107d655af44e93814601fb93fd99defead30c16f4d70ef0bfd2d558c2804a0e",
-    "left/normalization.npz": "46d425381e272fe26fef0b02bd3a7c52635feacc59bd3bda53405beec4bd2dc8",
+    "left/parameter_words.bin": "08e285cd93dd41b195bb7b955e81c3d02cf1d1785ac52cb2e5a627a61d185f74",
+    "left/normalization.npz": "d2cf7deb6d6f21a5f2b81213242d30a8d44dcb11ea6882ebaffc06c27ae6b733",
     "left/config.json": "0fde017444c054c87c06c27f50f47a125e34f7bc8e66dc03805bbad9dbbae078",
-    "right/parameter_words.bin": "c48ef2bebfe94c3875420fba42363d5aa2bb7e6181bea5b1b1f86d715b64d11e",
-    "right/normalization.npz": "cac487b8141bba592beb476231e83f4672aa26118d0755719878e6372b541f00",
+    "right/parameter_words.bin": "c8accdb4374bdde63acf0a0171a69c261abfd33f337130e3cbf87859021c59e6",
+    "right/normalization.npz": "f9d56759227cd486433522a2d95e4b8c6c7e93b80a8005e6f802ce97d191e308",
     "right/config.json": "0fde017444c054c87c06c27f50f47a125e34f7bc8e66dc03805bbad9dbbae078",
-    "vectors/hand_test.bin": "34bc879dff39556914a75c5f161901af672d5fd30bb1fd83126901f0a3c82452",
+    "vectors/hand_test.bin": "275463e8330f971ff2e9432d0136d829246e058b99544535c16bfea79f75ad7b",
     "hand_contract.json": "3a4a343a5a814f9d53fa72478672fd9c77c760858e55072c13dc817411ce3feb"
   },
   "pending": [

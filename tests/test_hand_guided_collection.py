@@ -18,27 +18,71 @@ class GuidedTests(unittest.TestCase):
             changed=dict(base,split='validation')
             self.assertEqual(prepare_session(changed),[1])
 
-    def test_budgets_and_corrected_throw(self):
+    def test_budgets_and_revised_variants(self):
         for train,validation,test in ((30,4,6),(20,3,4)):
             rows=plan(train)
             for g in LABELS:
                 for split,n in zip(('train','validation','test'),(train,validation,test)):
                     self.assertEqual(sum(r['target'] for r in rows if r['gesture']==g and r['split']==split),n)
             self.assertTrue(all(r['target']>0 for r in rows))
+        pickup=[r for r in plan(30) if r['split']=='train' and r['gesture']=='PICKUP']
+        self.assertEqual([r['target'] for r in pickup],[10,10,5,5])
+        self.assertTrue(all('underhand' not in r['note'] for r in pickup))
+        self.assertTrue(all('lift' not in r['note'] for r in pickup))
+        chop=[r for r in plan(30) if r['split']=='train' and r['gesture']=='CHOP']
+        self.assertEqual([r['target'] for r in chop],[7,7,5,5,3,3])
+        self.assertEqual(sum(r['target'] for r in chop if 'continuous' in r['note']),24)
+        self.assertEqual(sum(r['target'] for r in chop if 'outlier' in r['note']),6)
+        self.assertTrue(all('normal-speed' not in r['note'] and 'faster-speed' not in r['note'] for r in chop))
+        self.assertTrue(any('elbows bent' in r['note'] for r in chop))
+        self.assertTrue(any('arms straight' in r['note'] for r in chop))
+        wash=[r for r in plan(30) if r['split']=='train' and r['gesture']=='WASH']
+        self.assertEqual([r['target'] for r in wash],[15,15])
+        self.assertTrue(all('continuous circles' in r['note'] for r in wash))
+        self.assertTrue(all('left hand above' not in r['note'] and 'right hand above' not in r['note'] for r in wash))
+        self.assertEqual([r['target'] for r in plan(30) if r['split']=='validation' and r['gesture']=='WASH'],[2,2])
+        self.assertEqual([r['target'] for r in plan(30) if r['split']=='test' and r['gesture']=='WASH'],[3,3])
+        pickup_extra=[r for r in plan(30,True) if r['split']=='train' and r['gesture']=='PICKUP']
+        self.assertEqual([r['target'] for r in pickup_extra],[10,10,5,5,3,3])
+        self.assertEqual(sum(r['target'] for r in pickup_extra),36)
+        self.assertEqual(sum(r['target'] for r in plan(30,True) if r['gesture']=='PICKUP' and r['split']=='validation'),4)
+        self.assertEqual(sum(r['target'] for r in plan(30,True) if r['gesture']=='PICKUP' and r['split']=='test'),6)
         throw=[r for r in plan(30) if r['split']=='train' and r['gesture']=='THROW']
         self.assertEqual([r['target'] for r in throw],[8,7,7,8])
         self.assertIn('thumb straight; finish palm vertical',throw[0]['note'])
+
+    def test_sideways_knife_only_plan(self):
+        rows=plan(30,only_variant='sideways-knife-pickup')
+        self.assertEqual(len(rows),6)
+        self.assertEqual([(r['split'],r['target']) for r in rows],[
+            ('train',5),('validation',1),('test',2),
+            ('train',5),('validation',1),('test',2),
+        ])
+        self.assertTrue(all(r['gesture']=='PICKUP' for r in rows))
+        self.assertTrue(all('stationary sideways knife pickup' in r['note'] for r in rows))
+
+    def test_sideways_knife_train_supplement_plan(self):
+        rows=plan(30,only_variant='sideways-knife-train-supplement')
+        self.assertEqual([(r['split'],r['target']) for r in rows],[
+            ('train',1),('train',1),
+        ])
+        self.assertTrue(all(r['gesture']=='PICKUP' for r in rows))
+
+    def test_sideways_knife_one_straight_plan(self):
+        rows=plan(30,only_variant='sideways-knife-train-one-straight')
+        self.assertEqual([(r['split'],r['target']) for r in rows],[('train',1)])
+        self.assertEqual(rows[0]['note'], 'PICKUP; stationary sideways knife pickup; thumb straight')
     def test_plan_interleaves_each_variant_train_validation_test(self):
         rows=plan(30)
         self.assertEqual([(r['split'],r['note']) for r in rows[:3]], [
-            ('train','PICKUP; underhand supporting lift; thumb straight'),
-            ('validation','PICKUP; underhand supporting lift; thumb straight'),
-            ('test','PICKUP; underhand supporting lift; thumb straight'),
+            ('train','PICKUP; stationary overhand pickup; thumb straight'),
+            ('validation','PICKUP; stationary overhand pickup; thumb straight'),
+            ('test','PICKUP; stationary overhand pickup; thumb straight'),
         ])
         self.assertEqual([(r['split'],r['note']) for r in rows[3:6]], [
-            ('train','PICKUP; underhand supporting lift; thumb bent'),
-            ('validation','PICKUP; underhand supporting lift; thumb bent'),
-            ('test','PICKUP; underhand supporting lift; thumb bent'),
+            ('train','PICKUP; stationary overhand pickup; thumb bent'),
+            ('validation','PICKUP; stationary overhand pickup; thumb bent'),
+            ('test','PICKUP; stationary overhand pickup; thumb bent'),
         ])
     def test_counts_ignore_other_sessions_and_trim_notes(self):
         row=plan(30)[0]
