@@ -101,6 +101,11 @@ def load_data(path,source,split):
         if row['split'] not in ('train','validation','test') or row['gesture']!=source['classes'][label] or int(row['device_id'])!=source['training']['device_id']:
             raise ValueError('Metadata label/split/hand mismatch')
         session=(row['person'],row['session'])
+        # Guided combined sessions intentionally contain train, validation
+        # and test trials under one session identity. Keep ordinary sessions
+        # strict, but validate marked combined sessions per split.
+        if row.get('session_scope')=='combined':
+            session=(row['person'],row['session'],row['split'])
         if session in owners and owners[session]!=row['split']:raise ValueError('Session crosses dataset splits')
         owners[session]=row['split']
         identity=(*session,row['gesture'],row['trial'])

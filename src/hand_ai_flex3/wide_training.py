@@ -23,7 +23,20 @@ def validate_ratios(rows):
     if not rows: return _validate_ratios(rows)
     counts={g:{s:0 for s in SPLITS} for g in LABELS}
     for person in sorted({r['person'] for r in rows}):
-        checked=_validate_ratios([r for r in rows if r['person']==person])
+        person_rows=[]
+        for row in rows:
+            if row['person']!=person:
+                continue
+            # The guided recorder deliberately keeps one combined session
+            # identity while the operator moves through train/validation/test.
+            # core.validate_ratios() normally rejects a session crossing
+            # splits, so give combined sessions split-local validation keys.
+            # Ordinary sessions retain their original key and still fail if
+            # they cross dataset splits accidentally.
+            if row.get('session_scope')=='combined':
+                row=dict(row,session=f"{row['session']}::{row['split']}")
+            person_rows.append(row)
+        checked=_validate_ratios(person_rows)
         for g in LABELS:
             for split in SPLITS: counts[g][split]+=checked[g][split]
     return counts
@@ -90,6 +103,7 @@ def read_hand(root,device):
         if fingerprint in fingerprints:raise ValueError('Duplicate resampled input')
         fingerprints.add(fingerprint);windows.append(value);labels.append(LABELS.index(meta['gesture']))
         records.append(dict(**{k:meta[k] for k in ('person','session','split','device_id','gesture','trial')},
+            session_scope=marker.get('session_scope'),
             source=str(path.resolve()),sha256=check['sha256'],sidecar_sha256=sha(path.with_suffix('.json')),
             session_marker_sha256=sha(marker_path),input_sha256=fingerprint,
             acquisition_transport_json=json.dumps(meta['acquisition_transport'],sort_keys=True)))

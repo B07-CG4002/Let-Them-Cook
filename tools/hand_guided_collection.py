@@ -6,24 +6,26 @@ from pathlib import Path
 from tools.hand_capture_review import inventory, quarantine
 from tools.hand_collection import session_name
 
-# Wording and allocations agreed with Wen Ree, including swapped THROW endpoints.
+# Core recording plan.  Counts are per hand for the 30/4/6 plan.  The
+# optional lifted PICKUP samples are intentionally not part of this balanced
+# plan; they are an extra training supplement recorded separately.
 VARIANTS = [
-('PICKUP',5,'underhand supporting lift; thumb straight'),
-('PICKUP',5,'underhand supporting lift; thumb bent'),
-('PICKUP',10,'overhand grasp and lift; thumb straight'),
-('PICKUP',10,'overhand grasp and lift; thumb bent'),
+('PICKUP',10,'stationary overhand pickup; thumb straight'),
+('PICKUP',10,'stationary overhand pickup; thumb bent'),
+('PICKUP',5,'stationary sideways knife pickup; thumb straight'),
+('PICKUP',5,'stationary sideways knife pickup; thumb bent'),
 ('DROP',8,'elbows bent; stationary release; thumb straight'),
 ('DROP',7,'elbows bent; stationary release; thumb bent'),
 ('DROP',7,'arms forward; stationary release; thumb straight'),
 ('DROP',8,'arms forward; stationary release; thumb bent'),
-('CHOP',8,'normal speed; lift then one downstroke; thumb straight'),
-('CHOP',7,'normal speed; lift then one downstroke; thumb bent'),
-('CHOP',7,'faster speed; lift then one downstroke; thumb straight'),
-('CHOP',8,'faster speed; lift then one downstroke; thumb bent'),
-('WASH',8,'left hand above; arms forward; open grip; one circle'),
-('WASH',7,'left hand above; elbows tucked; open grip; one circle'),
-('WASH',7,'right hand above; arms forward; open grip; one circle'),
-('WASH',8,'right hand above; elbows tucked; open grip; one circle'),
+('CHOP',7,'continuous chopping; elbows bent; thumb straight'),
+('CHOP',7,'continuous chopping; elbows bent; thumb bent'),
+('CHOP',5,'continuous chopping; arms straight; thumb straight'),
+('CHOP',5,'continuous chopping; arms straight; thumb bent'),
+('CHOP',3,'single downstroke outlier; elbows bent; thumb straight'),
+('CHOP',3,'single downstroke outlier; elbows bent; thumb bent'),
+('WASH',15,'arms forward; open grip; continuous circles'),
+('WASH',15,'elbows tucked; open grip; continuous circles'),
 ('THROW',8,'chest-forward thrust and release; starting thumb straight; finish palm vertical'),
 ('THROW',7,'chest-forward thrust and release; starting thumb straight; finish palm horizontal'),
 ('THROW',7,'chest-forward thrust and release; starting thumb bent; finish palm vertical'),
@@ -37,6 +39,17 @@ VARIANTS = [
 ('IDLE',4,'hands resting on table; closed grip; thumb straight'),('IDLE',4,'hands resting on table; closed grip; thumb bent'),
 ('IDLE',1,'hands by side; small finger movements'),('IDLE',1,'hands on table; light finger tapping')]
 
+LIFT_SUPPLEMENT = [
+('PICKUP',3,'optional pickup with lift; thumb straight'),
+('PICKUP',3,'optional pickup with lift; thumb bent'),
+]
+
+ONLY_VARIANT_PREFIXES = {
+    'sideways-knife-pickup': 'stationary sideways knife pickup; ',
+    'sideways-knife-train-supplement': 'stationary sideways knife pickup; ',
+    'sideways-knife-train-one-straight': 'stationary sideways knife pickup; thumb straight',
+}
+
 def allocation(weights, total):
     # Largest remainder; stable ties. Counts sum exactly to chosen budget.
     base=[w*total//sum(weights) for w in weights]
@@ -44,28 +57,58 @@ def allocation(weights, total):
     for i in order[:total-sum(base)]: base[i]+=1
     return base
 
-def plan(train_target):
+def plan(train_target, include_lift_supplement=False, only_variant=None):
     if train_target not in (20,30): raise ValueError('Choose 20 (20/3/4) or 30 (30/4/6); other budgets need a reviewed split plan')
+    variants_source = VARIANTS + (LIFT_SUPPLEMENT if include_lift_supplement else [])
+    if only_variant is not None:
+        try: prefix = ONLY_VARIANT_PREFIXES[only_variant]
+        except KeyError: raise ValueError(f'Unknown --only-variant: {only_variant}')
+        variants_source = [v for v in variants_source if v[2].startswith(prefix)]
+        if not variants_source:
+            raise ValueError(f'No variants match --only-variant: {only_variant}')
     # Build allocations first, then interleave each variant as
     # train -> validation -> test.  This keeps the movement description
     # constant while the operator changes only the split.
     allocations={}
     for split in ('train','validation','test'):
         allocations[split]={}
-        for gesture in dict.fromkeys(v[0] for v in VARIANTS):
-            variants=[v for v in VARIANTS if v[0]==gesture]
+        for gesture in dict.fromkeys(v[0] for v in variants_source):
+            variants=[v for v in variants_source if v[0]==gesture]
             if split=='train':
-                counts=([v[1] for v in variants] if train_target==30 else [1+x for x in allocation([v[1]-1 for v in variants],train_target-len(variants))])
-            elif gesture=='IDLE': counts=[1,1,0,1,0,1,0,0] if split=='validation' else [1,1,1,1,1,1,0,0]
-            else: counts=([1]*4 if split=='validation' else ([1,1,2,2] if gesture=='PICKUP' else [2,1,1,2]))
-            if train_target==20 and split=='validation':
-                counts=([1,1,0,0,0,1,0,0] if gesture=='IDLE' else [1,1,1,0])
-            if train_target==20 and split=='test':
-                counts=([1,1,0,1,0,1,0,0] if gesture=='IDLE' else [1,1,1,1])
+                if only_variant == 'sideways-knife-train-one-straight' and gesture == 'PICKUP':
+                    counts=[1]
+                elif only_variant == 'sideways-knife-train-supplement' and gesture == 'PICKUP':
+                    counts=[1,1]
+                elif only_variant == 'sideways-knife-pickup' and gesture == 'PICKUP' and train_target == 30:
+                    counts=[5,5]
+                else:
+                    counts=([v[1] for v in variants] if train_target==30 else [1+x for x in allocation([max(1,v[1]-1) for v in variants],train_target-len(variants))])
+            elif train_target==30:
+                if gesture=='IDLE':
+                    counts=[1,1,0,1,0,1,0,0] if split=='validation' else [1,1,1,1,1,1,0,0]
+                elif gesture=='PICKUP':
+                    if only_variant in ('sideways-knife-train-one-straight','sideways-knife-train-supplement'):
+                        counts=[0] if only_variant == 'sideways-knife-train-one-straight' else [0,0]
+                    elif only_variant == 'sideways-knife-pickup':
+                        counts=[1,1] if split=='validation' else [2,2]
+                    else:
+                        base=[1,1,1,1] if split=='validation' else [1,1,2,2]
+                        counts=base+[0,0] if include_lift_supplement else base
+                elif gesture=='CHOP':
+                    counts=[1,1,1,1,0,0] if split=='validation' else [1,1,1,1,1,1]
+                elif gesture=='WASH':
+                    counts=[2,2] if split=='validation' else [3,3]
+                else:
+                    counts=[1,1,1,1] if split=='validation' else [2,1,1,2]
+            else:
+                # Keep the legacy 20/3/4 budget usable for quick tests while
+                # distributing validation/test samples across all variants.
+                total=3 if split=='validation' else 4
+                counts=allocation([max(1,v[1]) for v in variants],total)
             allocations[split][gesture]=counts
     rows=[]
-    for gesture in dict.fromkeys(v[0] for v in VARIANTS):
-        variants=[v for v in VARIANTS if v[0]==gesture]
+    for gesture in dict.fromkeys(v[0] for v in variants_source):
+        variants=[v for v in variants_source if v[0]==gesture]
         for variant_index,(g,w,note) in enumerate(variants):
             for split in ('train','validation','test'):
                 target=allocations[split][gesture][variant_index]
@@ -84,9 +127,10 @@ def launch(a):
     from tkinter import ttk,messagebox,simpledialog
     from src.hand_ai_flex3.wide_record_gui import WideApp
     from src.hand_ai_flex3.record_both_gui import pair_settings,validate_session_settings
-    rows=plan(a.train_target)
+    rows=plan(a.train_target,a.include_lift_supplement,a.only_variant)
     rootpath=Path('data/hand_raw_flex3')/a.campaign
-    identity=dict(version=2,person=a.person,date=a.date,campaign=a.campaign,train_target=a.train_target,
+    identity=dict(version=3,person=a.person,date=a.date,campaign=a.campaign,train_target=a.train_target,
+                  include_lift_supplement=a.include_lift_supplement,only_variant=a.only_variant,
                   combined_session=True,gyro_dps=2000,rows=rows)
     marker=Path('.comms-local/guided_plans')/a.campaign/(a.person+'_'+a.date+'.json')
     if marker.exists():
@@ -266,10 +310,14 @@ def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--person',required=True)
     p.add_argument('--date',default=date.today().strftime('%Y%m%d'));p.add_argument('--campaign',default='repaired_drop_g2000_guided_v2')
     p.add_argument('--train-target',type=int,default=30);p.add_argument('--batch',type=int,default=3)
+    p.add_argument('--only-variant',choices=tuple(ONLY_VARIANT_PREFIXES),
+                   help='Record only the selected variant, including its train/validation/test rows.')
     p.add_argument('--stage',choices=('train','validation','test'),default='train');p.add_argument('--print-plan',action='store_true')
+    p.add_argument('--include-lift-supplement',action='store_true',
+                   help='Add three optional lifted PICKUP training captures per thumb variant.')
     a=p.parse_args();session_name(a.person,a.date,a.campaign,a.stage)
     if not 1<=a.batch<=10:p.error('--batch must be 1..10')
-    rows=plan(a.train_target)
+    rows=plan(a.train_target,a.include_lift_supplement,a.only_variant)
     if a.print_plan:print(json.dumps(rows,indent=2));return
     launch(a)
 if __name__=='__main__':main()

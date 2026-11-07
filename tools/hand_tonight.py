@@ -1,5 +1,4 @@
 """Explicit v5 preparation, two-hand provisional training, evaluation and live CPU check."""
-from src.hand_ai_flex3.async_queue import queue_item
 import argparse
 import asyncio
 from contextlib import AsyncExitStack
@@ -53,7 +52,8 @@ async def live(a):
     if any(models[d].device_id!=d for d in devices):raise ValueError('Wrong-hand model')
     class Backend:
         def probabilities(self,device,window):return models[device].probabilities(window)[0]
-    engine=HandEngine(Backend(),threshold=a.threshold,confirmations=3,interval=.2)
+    confirmations=getattr(a,'confirmations',3)
+    engine=HandEngine(Backend(),threshold=a.threshold,confirmations=confirmations,interval=.2)
     out=Path(a.out)
     if out.exists():raise FileExistsError(out)
     out.mkdir(parents=True);started=time.monotonic();counts={d:0 for d in devices};predictions={d:0 for d in devices}
@@ -64,13 +64,15 @@ async def live(a):
         def clock():return time.monotonic()-started
         def record(row):results.write(json.dumps(row,allow_nan=False)+'\n');results.flush()
         console=LiveConsole(a.threshold)
-        print(f'Predictions shown only when confidence > {a.threshold:.2f}. All predictions are saved to predictions.jsonl.',flush=True)
+        print(f'Predictions shown only when confidence > {a.threshold:.2f}; '
+              f'accepted events require {confirmations} consecutive predictions. '
+              'All predictions are saved to predictions.jsonl.',flush=True)
         print('PREDICT = model candidate; ACCEPT/START/IDLE = confirmed event; END/RESET/STALE = status.',flush=True)
         print(console.HEADER,flush=True)
         status='finished'
         async def receive(d,queue,health):
             while True:
-                p,values,received=await queue_item(queue,3);ensure_healthy(health)
+                p,values,received=await asyncio.wait_for(queue.get(),3);ensure_healthy(health)
                 row=dict(type='sample',elapsed_s=received-started,device_id=d,boot_id=p.boot_id,
                          seq=p.seq,uptime_ms=p.uptime_ms,values=list(values))
                 capture.write(json.dumps(row,allow_nan=False)+'\n');capture.flush();counts[d]+=1
@@ -100,6 +102,7 @@ async def live(a):
             engine.reset(clock())
             for row in engine.pending:record(row)
             training.write(out/'live_summary.json',dict(status=status,samples=counts,predictions=predictions,
+                confirmation_count=confirmations,confidence_threshold=a.threshold,
                 game_commands_sent=False,scope='local CPU recognition only; no FPGA/server/phone verification',
                 model_sha256={str(d):training.sha(Path(a.runs)/('left' if d==1 else 'right')/'model.pth') for d in devices}))
     # Independent receive tasks can consume two hand queues in a different
@@ -119,18 +122,19 @@ def main(argv=None):
     prep=sub.add_parser('prepare');prep.add_argument('--input',required=True);prep.add_argument('--out',required=True)
     tr=sub.add_parser('train');tr.add_argument('--data',required=True);tr.add_argument('--out',required=True)
     tr.add_argument('--epochs',type=int,default=30);tr.add_argument('--seeds',type=int,nargs='+',default=[42,73,101])
-    tr.add_argument('--exclude-right-index',action='store_true',help='legacy faulty-index fallback; default uses all 12 repaired channels')
     ev=sub.add_parser('evaluate');ev.add_argument('--runs',required=True);ev.add_argument('--data',required=True)
     ev.add_argument('--split',choices=['validation','test'],required=True);ev.add_argument('--out',required=True);ev.add_argument('--allow-test-use',action='store_true')
     ex=sub.add_parser('export-fpga');ex.add_argument('--runs',required=True);ex.add_argument('--data',required=True);ex.add_argument('--out',required=True)
     li=sub.add_parser('live');li.add_argument('--runs',required=True);li.add_argument('--out',required=True)
     li.add_argument('--hands',choices=['BOTH','LEFT','RIGHT'],default='BOTH');li.add_argument('--seconds',type=float,default=120)
-    li.add_argument('--threshold',type=float,default=.7);li.add_argument('--person',default='P01')
+    li.add_argument('--threshold',type=float,default=.7);li.add_argument('--confirmations',type=int,default=3,
+                     help='Consecutive above-threshold predictions required for a local accepted event (default: 3).')
+    li.add_argument('--person',default='P01')
     li.add_argument('--session',default='P01_live_'+datetime.now().strftime('%Y%m%d_%H%M%S'))
     a=p.parse_args(argv)
     if a.command=='progress':result=training.progress(a.input)
     elif a.command=='prepare':result=training.prepare(a.input,a.out)
-    elif a.command=='train':result=training.train(a.data,a.out,a.epochs,a.seeds,exclude_right_index=a.exclude_right_index)
+    elif a.command=='train':result=training.train(a.data,a.out,a.epochs,a.seeds)
     elif a.command=='evaluate':
         r=training.evaluate(a.runs,a.data,a.split,a.out,a.allow_test_use)
         result=dict(split=r['split'],test_use_recorded=r['test_use_recorded'],metrics={h:v['metrics'] for h,v in r['models'].items()})
@@ -140,7 +144,8 @@ def main(argv=None):
                   left_data=Path(a.data)/'left',right_data=Path(a.data)/'right')
         result=dict(status=r['status'],scope=r['scope'],board_validation_pending=True)
     else:
-        if not 0<a.seconds<=3600 or not 0<=a.threshold<1:p.error('Invalid duration/threshold')
+        if not 0<a.seconds<=3600 or not 0<=a.threshold<1 or not 1<=a.confirmations<=10:
+            p.error('Invalid duration/threshold/confirmations')
         try:result=asyncio.run(live(a))
         except KeyboardInterrupt:print('Live check stopped; partial logs retained.');return
     print(json.dumps(result,indent=2,allow_nan=False))
