@@ -1,6 +1,7 @@
 using UnityEngine;
 
-public enum IngredientType { Carrot, Potato, Beef, CurryCube }
+// Water is added at the sink (the pot fills itself there); nobody carries it. New values go at the end so saved ones keep their meaning.
+public enum IngredientType { Carrot, Potato, Beef, CurryCube, Water }
 
 public class IngredientState : MonoBehaviour
 {
@@ -12,6 +13,6 @@ public class IngredientState : MonoBehaviour
     public bool OnChoppingBoard = false;
     [HideInInspector] public ChoppingBoard Board; // which board it's resting on; null while held or off a board
 
-    // Only the curry cube goes into the pot whole; everything else must be fully chopped first.
-    public static bool NeedsChopping(IngredientType type) => type != IngredientType.CurryCube;
+    // Only the curry cube (and water, from the sink) goes into the pot whole; everything else must be fully chopped first.
+    public static bool NeedsChopping(IngredientType type) => type != IngredientType.CurryCube && type != IngredientType.Water;
 }

@@ -1,6 +1,7 @@
 using UnityEngine;
 
-// Screen-space hit tests shared by the pot (ingredient drops) and pot stations (pot drops). Only called on a drop.
+// Screen-space hit tests shared by the pot (ingredient drops), pot stations (pot drops), bin, sink and serve window.
+// Only called on a drop or pour.
 public static class ScreenBounds
 {
     // True if `worldPos` appears on screen inside `root`'s outline (its meshes' bounds, projected).
@@ -15,6 +16,9 @@ public static class ScreenBounds
         foreach (var r in root.GetComponentsInChildren<Renderer>())
         {
             if (exclude != null && r.transform.IsChildOf(exclude)) continue;
+            // Fire/smoke/steam: a particle system's box covers wherever its particles have been, often far bigger than
+            // the station, so it would make the station "cover" places it isn't. Only real meshes count.
+            if (r is ParticleSystemRenderer || r is TrailRenderer || r is LineRenderer) continue;
             if (!any) { b = r.bounds; any = true; }
             else b.Encapsulate(r.bounds);
         }

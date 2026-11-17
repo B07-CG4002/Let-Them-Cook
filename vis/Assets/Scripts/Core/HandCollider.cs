@@ -3,14 +3,15 @@ using UnityEngine;
 
 // Gives the real hand a physical presence: finger points placed at the LiDAR hand depth push HandPushable objects,
 // which then spring back to where they were (see HandPushable). Nothing uses Unity's physics simulation, so objects
-// never drift out of grab range. Grab/proximity is unaffected and still 2D screen space.
+// never drift out of grab range. Grab/proximity is unaffected and still 2D screen space. Each hand collides on its own,
+// at its own LiDAR depth.
 // Put this on any scene object (e.g. next to GestureButtonController) and fill in the references.
 public class HandCollider : MonoBehaviour
 {
     [SerializeField] private Camera arCamera;
     [SerializeField] private HandTrackingManager handTrackingManager;
     [SerializeField] private HandDepthEstimator handDepth;
-    [Tooltip("Collisions are switched off while something is held, so a held knife can't shove the carrot away mid-chop.")]
+    [Tooltip("A hand that holds something doesn't collide, so a held knife can't shove the carrot away mid-chop. The other hand still does.")]
     [SerializeField] private GestureButtonController gestureController;
 
     [Tooltip("Master switch, e.g. to compare performance with collisions off.")]
@@ -63,19 +64,26 @@ public class HandCollider : MonoBehaviour
     private bool ComputeHandPoints()
     {
         handPoints.Clear();
-        if (gestureController != null && gestureController.CurrentlyHeldType != null) return false;
-        if (handDepth == null || !handDepth.HasDepth) return false; // no real depth, no collisions (never guess)
-        if (!handTrackingManager.TryGetPrimaryHandLandmarks(landmarks)) return false;
+        foreach (Hand hand in HandExtensions.Both)
+            AddHandPoints(hand);
+        return handPoints.Count > 0;
+    }
 
-        float depth = handDepth.Depth;
+    private void AddHandPoints(Hand hand)
+    {
+        if (gestureController != null && gestureController.HeldType(hand) != null) return;
+        if (handDepth == null || !handDepth.HasDepthFor(hand)) return; // no real depth, no collisions (never guess)
+        if (!handTrackingManager.TryGetHandLandmarks(hand, landmarks)) return;
+
+        float depth = handDepth.DepthOf(hand);
         foreach (int i in collidingLandmarks)
         {
             if (i < 0 || i >= landmarks.Count) continue;
             // Same normalized -> pixel mapping as HandTrackingManager's fingertip (MediaPipe is y-down).
-            var screen = new Vector3(landmarks[i].x * arCamera.pixelWidth, (1f - landmarks[i].y) * arCamera.pixelHeight, depth);
+            Vector2 v = handTrackingManager.ToViewport(landmarks[i]);
+            var screen = new Vector3(v.x * arCamera.pixelWidth, (1f - v.y) * arCamera.pixelHeight, depth);
             handPoints.Add(arCamera.ScreenToWorldPoint(screen));
         }
-        return handPoints.Count > 0;
     }
 
     // Sum of how far every hand point has sunk into this object's colliders, as the world-space move that separates them.
