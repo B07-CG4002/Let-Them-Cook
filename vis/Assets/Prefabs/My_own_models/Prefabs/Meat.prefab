@@ -86,6 +86,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: c98330106cbc84ed6981ef38d91d7481, type: 3}
       insertIndex: -1
       addedObject: {fileID: 3989902500119719301}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: c98330106cbc84ed6981ef38d91d7481, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 4492160779580956461}
   m_SourcePrefab: {fileID: 100100000, guid: c98330106cbc84ed6981ef38d91d7481, type: 3}
 --- !u!1 &1447276107069881665 stripped
 GameObject:
@@ -127,6 +130,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Grabbable
   itemType: 1
+  holdBehindHand: 0
+  minHoldDistance: 0
   isHeld: 0
 --- !u!114 &-4409579622164671141
 MonoBehaviour:
@@ -201,7 +206,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: af7dd83d075ec47d99f397f4f957b7f4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MeshHoverFeedback
-  highlightColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
+  dim: 0.8
+  skip: []
 --- !u!114 &3989902500119719301
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -218,3 +224,16 @@ MonoBehaviour:
   CrossSectionMaterial: {fileID: 2100000, guid: 646c694d5a0fe4d5bb1ea098bdeb1871, type: 2}
   OnChoppingBoard: 0
   Board: {fileID: 0}
+--- !u!114 &4492160779580956461
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1447276107069881665}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c34519f2a060f43a9b9d0bc854a08bd7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LayFlatOnBoard
+  longAxis: 0

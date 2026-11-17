@@ -5,7 +5,7 @@ using UnityEngine.XR.ARFoundation;
 using UnityEngine.XR.ARSubsystems;
 
 // Reads the LiDAR depth map (the same one AROcclusionManager uses for occlusion) at the tracked hand's pixels,
-// giving the hand's real distance from the camera in meters.
+// giving the hand's real distance from the camera in meters. Each hand (left/right) gets its own reading.
 // The depth image covers the same view as the raw camera image, just at lower resolution (256x192 on iPhone).
 // MediaPipe sees that camera image rotated by HandTrackingManager's Rotation Degrees, so landmarks are rotated back
 // before looking up depth. Turn on Show Debug View to check the red dots sit on your finger in the depth picture.
@@ -46,13 +46,13 @@ public class HandDepthEstimator : MonoBehaviour
 
     private readonly List<Vector2> landmarks = new List<Vector2>();
     private readonly List<float> samples = new List<float>();
-    private float smoothedDepth;
-    private float lastValidTime = float.NegativeInfinity;
+    private readonly float[] smoothedDepth = new float[2]; // indexed by Hand
+    private readonly float[] lastValidTime = { float.NegativeInfinity, float.NegativeInfinity };
     private Texture2D debugTexture;
     private Color32[] debugPixels;
 
-    public bool HasDepth => Time.time - lastValidTime <= maxAge;
-    public float Depth => smoothedDepth; // meters along the camera's forward axis, same as WorldToScreenPoint().z
+    public bool HasDepthFor(Hand hand) => Time.time - lastValidTime[(int)hand] <= maxAge;
+    public float DepthOf(Hand hand) => smoothedDepth[(int)hand]; // meters along the camera's forward axis, same as WorldToScreenPoint().z
 
     // MediaPipe normalized landmark (x right, y down, in the image it was given) -> normalized raw camera/depth image coords.
     // MediaPipe rotates clockwise, so this undoes that rotation.
@@ -73,7 +73,7 @@ public class HandDepthEstimator : MonoBehaviour
     void Update()
     {
         if (occlusionManager == null || handTrackingManager == null) return;
-        if (!handTrackingManager.TryGetPrimaryHandLandmarks(landmarks)) return;
+        if (!handTrackingManager.IsTracked(Hand.Left) && !handTrackingManager.IsTracked(Hand.Right)) return;
         if (!occlusionManager.TryAcquireEnvironmentDepthCpuImage(out XRCpuImage depthImage)) return;
 
         XRCpuImage confImage = default;
@@ -98,35 +98,47 @@ public class HandDepthEstimator : MonoBehaviour
             int w = depthImage.width, h = depthImage.height;
             if (showDebugView) DrawDebugDepth(depth, depthRow, w, h);
 
-            samples.Clear();
-            foreach (int index in sampleLandmarks)
+            foreach (Hand hand in HandExtensions.Both)
             {
-                if (index < 0 || index >= landmarks.Count) continue;
-                Vector2 raw = LandmarkToRaw(landmarks[index]);
-                int cx = Mathf.RoundToInt(raw.x * (w - 1));
-                int cy = Mathf.RoundToInt(raw.y * (h - 1)); // row 0 is the top
-                for (int y = cy - patchRadius; y <= cy + patchRadius; y++)
-                for (int x = cx - patchRadius; x <= cx + patchRadius; x++)
-                {
-                    if (x < 0 || y < 0 || x >= w || y >= h) continue;
-                    if (hasConf && conf[y * confRow + x] == 0) continue; // ARKit: 0 low, 1 medium, 2 high
-                    float d = depth[y * depthRow + x];
-                    if (d >= minDepth && d <= maxDepth) samples.Add(d);
-                }
+                if (!handTrackingManager.TryGetHandLandmarks(hand, landmarks)) continue;
+                if (showDebugView) DrawDebugDots();
+                SampleHand(hand, depth, depthRow, conf, confRow, hasConf, w, h);
             }
             if (showDebugView) debugTexture.Apply();
-            if (samples.Count == 0) return;
-
-            samples.Sort();
-            float reading = samples[Mathf.Clamp(Mathf.FloorToInt(samples.Count * percentile), 0, samples.Count - 1)];
-            smoothedDepth = HasDepth ? Mathf.Lerp(reading, smoothedDepth, smoothing) : reading;
-            lastValidTime = Time.time;
         }
         finally
         {
             depthImage.Dispose();
             if (acquiredConf) confImage.Dispose();
         }
+    }
+
+    // Reads `landmarks` (one hand's) from the depth map and updates that hand's smoothed depth.
+    private void SampleHand(Hand hand, NativeArray<float> depth, int depthRow, NativeArray<byte> conf, int confRow, bool hasConf, int w, int h)
+    {
+        samples.Clear();
+        foreach (int index in sampleLandmarks)
+        {
+            if (index < 0 || index >= landmarks.Count) continue;
+            Vector2 raw = LandmarkToRaw(landmarks[index]);
+            int cx = Mathf.RoundToInt(raw.x * (w - 1));
+            int cy = Mathf.RoundToInt(raw.y * (h - 1)); // row 0 is the top
+            for (int y = cy - patchRadius; y <= cy + patchRadius; y++)
+            for (int x = cx - patchRadius; x <= cx + patchRadius; x++)
+            {
+                if (x < 0 || y < 0 || x >= w || y >= h) continue;
+                if (hasConf && conf[y * confRow + x] == 0) continue; // ARKit: 0 low, 1 medium, 2 high
+                float d = depth[y * depthRow + x];
+                if (d >= minDepth && d <= maxDepth) samples.Add(d);
+            }
+        }
+        if (samples.Count == 0) return;
+
+        samples.Sort();
+        float reading = samples[Mathf.Clamp(Mathf.FloorToInt(samples.Count * percentile), 0, samples.Count - 1)];
+        int i = (int)hand;
+        smoothedDepth[i] = HasDepthFor(hand) ? Mathf.Lerp(reading, smoothedDepth[i], smoothing) : reading;
+        lastValidTime[i] = Time.time;
     }
 
     // Renders the depth map in MediaPipe's (rotated) frame, so it lines up with how the hand appears to MediaPipe,
@@ -150,7 +162,13 @@ public class HandDepthEstimator : MonoBehaviour
             byte g = (byte)(255f * (1f - Mathf.Clamp01((d - minDepth) / (maxDepth - minDepth))));
             debugPixels[(th - 1 - ty) * tw + tx] = new Color32(g, g, g, 255); // Texture2D row 0 is the bottom
         }
+        debugTexture.SetPixels32(debugPixels);
+    }
 
+    // Marks where `landmarks` (one hand's) are sampled, in red, on the debug texture.
+    private void DrawDebugDots()
+    {
+        int tw = debugTexture.width, th = debugTexture.height;
         foreach (int index in sampleLandmarks)
         {
             if (index < 0 || index >= landmarks.Count) continue;
@@ -161,10 +179,9 @@ public class HandDepthEstimator : MonoBehaviour
             {
                 int px = tx + ox, py = ty + oy;
                 if (px < 0 || py < 0 || px >= tw || py >= th) continue;
-                debugPixels[(th - 1 - py) * tw + px] = new Color32(255, 0, 0, 255);
+                debugTexture.SetPixel(px, th - 1 - py, new Color32(255, 0, 0, 255));
             }
         }
-        debugTexture.SetPixels32(debugPixels);
     }
 
     void OnGUI()
@@ -174,6 +191,8 @@ public class HandDepthEstimator : MonoBehaviour
         var rect = new UnityEngine.Rect(Screen.width - width - 10, 10, width, debugViewHeight);
         GUI.DrawTexture(rect, debugTexture);
         GUI.Label(new UnityEngine.Rect(rect.x, rect.yMax + 5, width, 30),
-            HasDepth ? $"Hand depth: {smoothedDepth:F2} m" : "Hand depth: no reading");
+            $"Hand depth: left {Reading(Hand.Left)}, right {Reading(Hand.Right)}");
     }
+
+    private string Reading(Hand hand) => HasDepthFor(hand) ? $"{DepthOf(hand):F2} m" : "none";
 }

@@ -122,6 +122,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Grabbable
   itemType: 1
+  holdBehindHand: 0
+  minHoldDistance: 0
   isHeld: 0
 --- !u!114 &-2045580054806357348
 MonoBehaviour:
@@ -208,7 +210,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: af7dd83d075ec47d99f397f4f957b7f4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MeshHoverFeedback
-  highlightColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
+  dim: 0.8
+  skip: []
 --- !u!114 &-6227691866159700242
 MonoBehaviour:
   m_ObjectHideFlags: 0
