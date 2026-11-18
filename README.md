@@ -10,7 +10,7 @@ The player wears a phone in a headset and a gesture glove on each hand. The phon
 
 1. **Hardware:** each glove samples its IMU and flex sensors and streams them over Bluetooth Low Energy.
 2. **Comms:** the laptop relays both gloves' streams to the Ultra96 over TLS. The Ultra96 service passes each sample to the AI model and publishes the results.
-3. **AI:** a 1D CNN, accelerated on the Ultra96's FPGA, turns each window of sensor data into a gesture label with a confidence.
+3. **AI:** a 1D CNN, accelerated on the Ultra96's FPGA, turns each 50 × 12 window of one glove's sensor data into a gesture label with a confidence.
 4. **Visualiser:** the phone app subscribes to the results (through the NUS VPN), maps each label to a game action for the left or right hand, and runs the game.
 
 ## Repository map
@@ -60,6 +60,14 @@ Let-Them-Cook/
 | AI (Ultra96 board) | `requirements_board.txt` |
 | Glove firmware | PlatformIO (`firmware/esp32/platformio.ini`) |
 | Visualiser | Unity 6 (6000.5) with iOS support, Xcode, iPhone with LiDAR (iOS 15+) |
+
+## AI gesture model
+
+- **Input:** a 50 × 12 sensor window from one glove.
+- **Output:** one of seven classes: `PICKUP`, `DROP`, `CHOP`, `WASH`, `THROW`, `POURING` and `IDLE`.
+- **Two hands:** the left and right gloves use independent model parameters while sharing one CNN accelerator on the FPGA.
+- **Final model bundle:** [models/hand12_v5_candidate3/](models/hand12_v5_candidate3/).
+- **Training data:** the prepared training dataset is not in this repository; it was sent separately as `Final_Prepared_Hand_Dataset.zip`.
 
 ## Communications
 
