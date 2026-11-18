@@ -63,6 +63,11 @@ htmlcov/
 .week7-local/
 .comms-local/
 
+# Communications agent instructions stay tracked in the personal fork only.
+# Ignore untracked copies in team checkouts; existing tracked fork files remain.
+/AGENTS.md
+/CLAUDE.md
+
 # Reviewed deployment artifacts and integration handoff files
 #
 # Keep raw training runs, live-test folders, backups and local model-selection
