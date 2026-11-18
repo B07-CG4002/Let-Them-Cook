@@ -46,10 +46,12 @@ Let-Them-Cook/
 
 ## Running the full system
 
-1. **Gloves:** flash and pair both boards (`python -m tools.flash --help`). See [hardware/gloves/README.md](hardware/gloves/README.md) for the hardware.
-2. **Ultra96:** connect to the NUS VPN, deploy and start the board service and the AI worker (`python -m tools.deploy_service --dry-run` first; AI worker steps in [docs/ai/README_AI_20261019.md](docs/ai/README_AI_20261019.md) and [docs/ai/README_FULL_CNN.md](docs/ai/README_FULL_CNN.md)).
-3. **Laptop relay:** start the SSH tunnel and both glove streams (`python -m tools.demo start`).
-4. **Phone:** build the Unity project with CommsNative ([vis/README.md](vis/README.md#building)), open the app, tap **Communications Connect**, wait for **Subscribed**, then scan the QR codes to place the kitchen.
+The final build uses **sensor version 5** (the format of the hand12 v5 models). The gloves, the Ultra96 service and the laptop must all use the same version, or the laptop and service refuse the samples. The tools default to version 3 when no version is given, so always pass the version 5 options below.
+
+1. **Gloves:** flash and pair both boards with `python -m tools.flash --glove --wide-gyro` (`--wide-gyro` builds version 5 and implies `--flex3`). See [hardware/gloves/README.md](hardware/gloves/README.md) for the hardware.
+2. **Ultra96:** connect to the NUS VPN, then deploy the service and the AI worker with `python -m tools.deploy_service --sensor-version 5 --model ultra96.model_bridge --runner-module src.socket_worker_hand --runner-cwd <board checkout> ...`, adding the runner arguments from the AI guide ([docs/ai/README_AI_20261019.md](docs/ai/README_AI_20261019.md), [docs/ai/README_FULL_CNN.md](docs/ai/README_FULL_CNN.md)). This is the example in the docstring of [tools/deploy_service.py](tools/deploy_service.py). Add `--dry-run` first to print the plan.
+3. **Laptop relay:** start the SSH tunnel and both glove streams with `python -m tools.demo start --sensor-version 5`.
+4. **Phone:** build the Unity project with CommsNative ([vis/README.md](vis/README.md#building)), open the app, tap **Communications Connect**, wait for **Subscribed**, then scan the QR codes to place the kitchen. The game reads per-hand events (`COMMS_HAND_EVENTS` is already set in the Unity project settings).
 
 ## Requirements
 
@@ -71,7 +73,7 @@ Let-Them-Cook/
 
 ## Communications
 
-Protected sensor streams from two FireBeetle32 boards go through a Windows relay to the Ultra96 service, which passes each new sample to a model (a built-in dummy model by default) and sends the results to an iPhone app that links this repository's `CommsNative` package.
+Protected sensor streams from the two FireBeetle32 glove boards go over BLE to a Windows relay, then over TLS-protected TCP (through an SSH tunnel) to the Ultra96 service. The service passes each new sample to the AI worker: `ultra96.model_bridge` hands samples to `src.socket_worker_hand`, which connects to the service over a Unix socket. (With no model configured, the service falls back to a built-in dummy model.) The service sends the results to an iPhone app that links this repository's `CommsNative` package.
 
 - [tools/flash.py](tools/flash.py): build, upload and pair the LEFT and RIGHT boards; run `python -m tools.flash --help` for options.
 - [tools/demo.py](tools/demo.py): run a whole capture in one command (`python -m tools.demo start`: the SSH tunnel, both boards, a live view and one `run.log`; `q` stops it), or open the SSH tunnel, capture both streams and review reports step by step; run `python -m tools.demo --help`, `python -m tools.demo start --help` or `python -m tools.demo run --help` for options.
@@ -81,7 +83,11 @@ Protected sensor streams from two FireBeetle32 boards go through a Windows relay
 
 Run these commands from the repository root. Install Communications dependencies with `python -m pip install -r tools/requirements-dev.txt`. The root `demo.py`, `flash.py` and `requirements-dev.txt` remain compatibility entry points, so existing commands still work.
 
-Sensor packets use the `LC` marker, source statistics use `LCS3`, and the session is `ltc-comms`. Both boards, the Ultra96 service and the phone app must run builds of this source. A board on older firmware (version 2 with `LCS1` statistics, or Week 7 with `W7` packets and `W7S1` statistics) is refused by the laptop until it is flashed again, and the app installed for Week 7 subscribes to `week7-demo`, which a server started from this source does not serve. Laptop, server and phone must use the same session: `demo.py start/run/live`, `demo.py service --start`, `tools.deploy_service` and the phone source all default to `ltc-comms`; `--session-id` changes it for the laptop commands, and `$env:LTC_COMMS_SESSION` for the `demo.py` commands only (`tools.deploy_service` does not read it). Captures recorded with Week 7 firmware hold `W7` packets, so `demo.py report` no longer passes them; review those from commit `880abba`. Captures recorded with version-2 firmware are refused too; review those from commit `5a004c6`. The TLS name `ultra96.week7.internal` stays because it is written into the server certificate, and the `Week7*` bridge symbols stay for the Week 7 Unity export. The Unity Xcode export and a prebuilt iPhone app are not part of this repository.
+**Sensor format:** the final build uses sensor version 5 (40-byte packets with 12 values, source statistics `LCS5`). Version 3 (`LCS3`) is only what the tools use when no version is given. Sensor packets use the `LC` marker, and the session is `ltc-comms`. Laptop, server and phone must use the same session; `--session-id` changes it for the laptop commands. The TLS name `ultra96.week7.internal` is written into the server certificate, so it stays.
+
+**Hand events:** the phone subscribes with `SUBSCRIBE` version 2 and receives `HAND_EVENT` frames as well as `GESTURE_RESULT`. Unity reads them with `CommsNextHandEvent` and `CommsHandState` when built with `COMMS_HAND_EVENTS`.
+
+The Unity Xcode export and a prebuilt iPhone app are not part of this repository.
 
 ## Team
 
