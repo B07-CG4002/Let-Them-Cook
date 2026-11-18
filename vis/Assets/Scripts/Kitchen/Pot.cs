@@ -5,33 +5,36 @@ using UnityEngine.Events;
 
 // The pot, starting on the stove marker. It can be grabbed and carried (Grabbable, type Pot); see PotStation.
 // GestureButtonController calls TryAdd on a Drop with the hand at the pot.
-// The first ingredient picks the dish; the pot then only takes what that dish still needs. When a stage has all its
-// ingredients it cooks, then a burn countdown starts (the curry's next ingredient must go in before it ends).
-// The soup surface (a child plane) rises one step per ingredient. Timers run in Update; no per-frame searches.
+// Recipes are ingredient sets (variations), max 4, in any order. The pot takes any ingredient that isn't in yet
+// (max 4), even one no order needs. Once the contents exactly match a variation, ordered or not, it cooks (one stage),
+// then a burn countdown starts. A dish nobody ordered can be plated, but the serve window refuses it.
+// A mix that is no variation never cooks, so the player has to pour it out at the sink (PotPour).
+// The soup surface (a child plane) rises a quarter per ingredient.
+// Water: put down on the sink station, the pot gets its water at once. Cooking and the burn countdown only run
+// while the pot sits on the stove station; off it they pause. Timers run in Update; no per-frame searches.
 [RequireComponent(typeof(HandInteractable))]
 public class Pot : MonoBehaviour
 {
-    [System.Serializable]
-    public class Stage
-    {
-        public List<IngredientType> ingredients = new List<IngredientType>();
-        public Color color = Color.white; // surface colour while this stage is raw/cooking
-    }
+    public enum RecipeType { Soup, Curry }
 
     [System.Serializable]
     public class Recipe
     {
         public string name;
-        public List<Stage> stages = new List<Stage>();
+        public RecipeType type;
+        public List<IngredientType> ingredients = new List<IngredientType>();
+        public Color color = new Color(1f, 0.6f, 0.15f); // surface colour once this dish is cooking
     }
 
     public enum PotState { Empty, Filling, Cooking, Cooked, Burnt }
 
-    [Tooltip("The dishes. The recipe whose first stage contains the first ingredient dropped in is the one cooked.")]
-    [SerializeField] private List<Recipe> recipes = DefaultRecipes();
-    [SerializeField] private float cookTime = 10f;
-    [Tooltip("Seconds from cooked to burnt (the grace period between curry stages).")]
-    [SerializeField] private float burnTime = 10f;
+    public const int MaxIngredients = 4;
+
+    [Tooltip("Every variation in the game; OrderManager picks its orders from these. With no OrderManager, all of them count as active orders.")]
+    [SerializeField] private List<Recipe> variations = DefaultVariations();
+    [SerializeField] private float cookTime = 5f;
+    [Tooltip("Seconds from cooked to burnt.")]
+    [SerializeField] private float burnTime = 7f;
     [Tooltip("Last seconds of the burn countdown in which the bar flashes red.")]
     [SerializeField] private float warningTime = 5f;
 
@@ -40,12 +43,18 @@ public class Pot : MonoBehaviour
     [SerializeField] private Transform soupSurface;
     [Tooltip("Surface local Y with nothing in the pot (it is hidden then).")]
     [SerializeField] private float emptyY;
-    [Tooltip("Surface local Y with every ingredient of the dish in.")]
+    [Tooltip("Surface local Y with 4 ingredients in (a 3-ingredient soup stops at three quarters).")]
     [SerializeField] private float fullY;
     [SerializeField] private float riseDuration = 0.3f;
-    [Tooltip("How much darker the surface gets once a stage is cooked (0 = same colour, 1 = black).")]
+    [Tooltip("How much darker the surface gets once cooked (0 = same colour, 1 = black).")]
     [SerializeField, Range(0f, 1f)] private float cookedDarken = 0.3f;
     [SerializeField] private Color burntColor = new Color(0.08f, 0.08f, 0.08f);
+    [Tooltip("Surface colour while the pot holds only water.")]
+    [SerializeField] private Color waterColor = new Color(0.55f, 0.8f, 1f);
+    [Tooltip("Surface colour while filling, before a curry cube is in.")]
+    [SerializeField] private Color soupColor = new Color(1f, 0.6f, 0.15f);
+    [Tooltip("Surface colour while filling, once a curry cube is in.")]
+    [SerializeField] private Color curryColor = new Color(0.5f, 0.28f, 0.1f);
 
     [Header("Bar")]
     [Tooltip("A ChopProgressBar canvas above the pot. Empty = the first one in the children.")]
@@ -69,48 +78,54 @@ public class Pot : MonoBehaviour
     public UnityEvent onCooked;
     public UnityEvent onWarning;
     public UnityEvent onBurnt;
+    public UnityEvent onWaterAdded;
 
     public PotState State { get; private set; } = PotState.Empty;
+    // The dish being cooked; null until the contents exactly match a variation (an active order first).
     public Recipe CurrentRecipe => recipe;
-    // Every stage done and not burnt: what plating will check.
-    public bool IsReadyToPlate => State == PotState.Cooked && IsLastStage;
+    public IReadOnlyList<IngredientType> Contents => contents;
+    public IReadOnlyList<Recipe> Variations => variations;
+    public bool IsReadyToPlate => State == PotState.Cooked;
     public bool IsBurnt => State == PotState.Burnt;
     public bool IsOnFire { get; private set; }
+    // For the HUD's warning pill: cooked, on the stove and in the last Warning Time seconds before it burns.
+    public bool BurnWarning => State == PotState.Cooked && OnStove && timer <= warningTime;
+    public float BurnTimeLeft => State == PotState.Cooked ? Mathf.Max(0f, timer) : 0f;
     private bool stoveFireOn;
     // The stove/sink it's sitting on; null while held or put down elsewhere. Set by PotStation.
     public PotStation Station { get; set; }
+    // With no stove station in the scene at all the pot cooks wherever it is, as before the stove existed.
+    public bool OnStove => (Station != null && Station.Kind == PotStationKind.Stove) || !AnyStove();
 
     private Recipe recipe;
-    private int stageIndex;
-    private readonly List<IngredientType> stageAdded = new List<IngredientType>();
-    private int ingredientsIn;
-    private int totalIngredients;
-    private float timer;      // counts down while Cooking (cook) and Cooked (burn)
+    private readonly List<IngredientType> contents = new List<IngredientType>();
+    private List<Recipe> activeOrders; // null = every variation counts as an order
+    private float timer;      // counts down while Cooking (cook) and Cooked (burn), only on a stove
     private bool warned;
-    private string cookedLabel;
 
     private Renderer surfaceRenderer;
     private Material surfaceMaterial;
     private float surfaceFrom, surfaceTo, surfaceT = 1f;
 
-    private bool IsLastStage => recipe != null && stageIndex == recipe.stages.Count - 1;
-    private Stage CurrentStage => recipe.stages[stageIndex];
-
-    private static List<Recipe> DefaultRecipes() => new List<Recipe>
+    private static List<Recipe> DefaultVariations() => new List<Recipe>
     {
         new Recipe
         {
-            name = "Vegetable Soup",
-            stages = { new Stage { ingredients = { IngredientType.Carrot, IngredientType.Potato }, color = new Color(1f, 0.6f, 0.15f) } }
+            name = "Carrot & Potato Soup", type = RecipeType.Soup,
+            ingredients = { IngredientType.Carrot, IngredientType.Potato, IngredientType.Water },
+            color = new Color(1f, 0.6f, 0.15f)
         },
         new Recipe
         {
-            name = "Beef Curry",
-            stages =
-            {
-                new Stage { ingredients = { IngredientType.Beef }, color = new Color(0.55f, 0.3f, 0.2f) },
-                new Stage { ingredients = { IngredientType.CurryCube }, color = new Color(0.45f, 0.25f, 0.08f) }
-            }
+            name = "Carrot & Potato Curry", type = RecipeType.Curry,
+            ingredients = { IngredientType.Carrot, IngredientType.Potato, IngredientType.CurryCube, IngredientType.Water },
+            color = new Color(0.6f, 0.35f, 0.1f)
+        },
+        new Recipe
+        {
+            name = "Carrot & Beef Curry", type = RecipeType.Curry,
+            ingredients = { IngredientType.Carrot, IngredientType.Beef, IngredientType.CurryCube, IngredientType.Water },
+            color = new Color(0.45f, 0.22f, 0.08f)
         }
     };
 
@@ -125,79 +140,93 @@ public class Pot : MonoBehaviour
         else Debug.LogWarning($"[Pot] {name} has no SoupSurface child; the pot works but nothing rises.");
         if (Mathf.Approximately(emptyY, fullY)) Debug.LogWarning("[Pot] Empty Y and Full Y are the same, so the surface won't rise.");
 
+        foreach (var v in variations)
+            if (v.ingredients.Count > MaxIngredients) Debug.LogWarning($"[Pot] {v.name} has more than {MaxIngredients} ingredients; it can never be made.");
+
         if (bar == null) bar = GetComponentInChildren<ChopProgressBar>(true);
         StopFire(); // in case Play On Awake was left on
         if (stoveFire != null) stoveFire.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
     }
 
     // In Start, not Awake: the bar sets itself up in its own Awake, which may run after this one.
-    void Start() => Clear();
+    // The pot is spawned by its QR marker, so it tells OrderManager it exists (which starts the orders' dishes).
+    void Start()
+    {
+        Clear();
+        if (OrderManager.Instance != null) OrderManager.Instance.SetPot(this);
+    }
 
-    // Returns false (and why) when the pot won't take it; the caller keeps it in the hand.
-    public bool TryAdd(IngredientType type, out string why)
+    // From OrderManager: the variations currently on order. null = all variations (no OrderManager in the scene).
+    // Ingredients already in stay in; contents that now exactly match a new order start cooking.
+    public void SetActiveOrders(List<Recipe> orders)
+    {
+        activeOrders = orders;
+        if (State == PotState.Filling) TryStartCooking();
+        RefreshBar();
+    }
+
+    // Would the pot take this now? Same answer TryAdd gives, without changing anything.
+    public bool CanAdd(IngredientType type, out string why)
     {
         why = null;
         switch (State)
         {
             case PotState.Empty:
-                recipe = FindRecipeStartingWith(type);
-                if (recipe == null) { why = $"no dish starts with {type}"; return false; }
-                stageIndex = 0;
-                stageAdded.Clear();
-                ingredientsIn = 0;
-                totalIngredients = 0;
-                foreach (var stage in recipe.stages) totalIngredients += stage.ingredients.Count;
-                break;
-
             case PotState.Filling:
-                if (!StageStillNeeds(type)) { why = $"the {recipe.name} doesn't need (more) {type}"; return false; }
+            case PotState.Cooking: // turns it into another dish (a curry cube into a soup) or spoils it into a wrong mix
                 break;
-
             case PotState.Cooked:
-                // Only during a grace period, and only what the next stage needs. This also ends the burn countdown.
-                if (IsLastStage || !recipe.stages[stageIndex + 1].ingredients.Contains(type))
-                {
-                    why = IsLastStage ? $"the {recipe.name} is already cooked" : $"the {recipe.name} needs {NextStageList()} now";
-                    return false;
-                }
-                stageIndex++;
-                stageAdded.Clear();
-                break;
-
-            case PotState.Cooking:
-                why = "it's still cooking"; return false;
+                why = $"the {recipe.name} is already cooked"; return false;
             default:
                 why = "it's burnt"; return false;
         }
-
-        stageAdded.Add(type);
-        ingredientsIn++;
-        RiseTo(Mathf.Lerp(emptyY, fullY, totalIngredients > 0 ? (float)ingredientsIn / totalIngredients : 1f));
-
-        if (stageAdded.Count >= CurrentStage.ingredients.Count)
-        {
-            State = PotState.Cooking;
-            timer = cookTime;
-        }
-        else State = PotState.Filling;
-
-        SetSurfaceColor(CurrentStage.color);
-        RefreshBar();
-        Debug.Log($"[Pot] {type} in ({recipe.name}, {ingredientsIn}/{totalIngredients}), now {State}");
+        if (contents.Count >= MaxIngredients) { why = "the pot is full"; return false; }
+        if (contents.Contains(type)) { why = $"there's already {Name(type)} in"; return false; }
         return true;
+    }
+
+    // Returns false (and why) when the pot won't take it; the caller keeps it in the hand.
+    public bool TryAdd(IngredientType type, out string why)
+    {
+        if (!CanAdd(type, out why)) return false;
+
+        bool wasCooking = State == PotState.Cooking;
+        contents.Add(type);
+        State = PotState.Filling;
+        RiseTo(Mathf.Lerp(emptyY, fullY, (float)contents.Count / MaxIngredients));
+        TryStartCooking();
+        if (State == PotState.Filling) recipe = null;
+
+        SetSurfaceColor(FillColor());
+        RefreshBar();
+        Debug.Log($"[Pot] {type} in ({JoinNames(contents)}), now {State}" +
+                  (recipe != null ? $" {recipe.name}" : "") +
+                  (wasCooking ? " (cook restarted)" : "") +
+                  (State == PotState.Cooking && !OnStove ? ", waiting for the stove" : "") +
+                  (State == PotState.Filling && !AnyOrderFits(contents) ? ", fits no order" : ""));
+        return true;
+    }
+
+    // Contents exactly match a variation (an active order first): start the 10 s cook (from the start, if it was already cooking).
+    private void TryStartCooking()
+    {
+        Recipe match = ExactMatch() ?? ExactVariation();
+        if (match == null) return;
+        recipe = match;
+        State = PotState.Cooking;
+        timer = cookTime;
+        SetSurfaceColor(recipe.color);
     }
 
     // True if `worldPos` appears on screen inside the pot's outline (its meshes' bounds, projected). Only called on a drop.
     public bool CoversOnScreen(Vector3 worldPos, Camera cam) => ScreenBounds.Covers(transform, worldPos, cam);
 
-    // Back to an empty pot. Plating and grabbing burnt food out will call this.
+    // Back to an empty pot. Plating, pouring out at the sink and grabbing burnt food out call this.
     public void Clear()
     {
         State = PotState.Empty;
         recipe = null;
-        stageIndex = 0;
-        stageAdded.Clear();
-        ingredientsIn = 0;
+        contents.Clear();
         warned = false;
         surfaceT = 1f;
         if (soupSurface != null) SetSurfaceY(emptyY);
@@ -209,6 +238,8 @@ public class Pot : MonoBehaviour
     void Update()
     {
         UpdateStoveFire();
+        if (Station != null && Station.Kind == PotStationKind.Sink) FillAtSink();
+
         if (surfaceT < 1f)
         {
             surfaceT = riseDuration > 0f ? surfaceT + Time.deltaTime / riseDuration : 1f;
@@ -217,22 +248,21 @@ public class Pot : MonoBehaviour
 
         if (State == PotState.Cooking)
         {
-            timer -= Time.deltaTime;
+            if (OnStove) timer -= Time.deltaTime; // off the stove: paused
             if (timer <= 0f)
             {
                 State = PotState.Cooked;
                 timer = burnTime;
                 warned = false;
-                cookedLabel = IsLastStage ? "Ready!" : $"Add {NextStageList()}!";
-                SetSurfaceColor(Color.Lerp(CurrentStage.color, Color.black, cookedDarken));
-                Debug.Log($"[Pot] {recipe.name} stage {stageIndex + 1}/{recipe.stages.Count} cooked");
+                SetSurfaceColor(Color.Lerp(recipe.color, Color.black, cookedDarken));
+                Debug.Log($"[Pot] {recipe.name} cooked");
                 onCooked?.Invoke();
             }
             RefreshBar();
         }
         else if (State == PotState.Cooked)
         {
-            timer -= Time.deltaTime;
+            if (OnStove && !RoundTimer.GodRules) timer -= Time.deltaTime; // taking it off the heat stops it burning; never burns in God mode / Tutorial
             if (!warned && timer <= warningTime)
             {
                 warned = true;
@@ -244,6 +274,7 @@ public class Pot : MonoBehaviour
                 SetSurfaceColor(burntColor);
                 Debug.Log($"[Pot] {recipe.name} burnt");
                 onBurnt?.Invoke();
+                if (ScoreManager.Instance != null) ScoreManager.Instance.BurntFood();
                 timer = fireDelay; // now counts down to the fire
                 if (timer <= 0f) StartFire();
             }
@@ -256,22 +287,36 @@ public class Pot : MonoBehaviour
         }
     }
 
+    // On the sink without water yet: the water goes straight in. Checked every frame while on the sink;
+    // after that CanAdd says no (water already in), so it only happens once.
+    private void FillAtSink()
+    {
+        if (!CanAdd(IngredientType.Water, out _)) return;
+        TryAdd(IngredientType.Water, out _);
+        onWaterAdded?.Invoke();
+    }
+
     private void RefreshBar()
     {
         if (bar == null) return;
+        // Off the stove the cooking bar hides (timers are paused too).
+        if ((State == PotState.Cooking || State == PotState.Cooked) && !OnStove)
+        {
+            bar.ResetBar();
+            return;
+        }
         switch (State)
         {
-            case PotState.Filling:
-                bar.Show((float)stageAdded.Count / CurrentStage.ingredients.Count, cookingColor, "Need " + MissingList());
-                break;
+            // No bar while ingredients go in: dishes have 3 or 4 ingredients, so a fill amount would mislead.
+            // The rising surface shows the filling instead.
             case PotState.Cooking:
                 bar.Show(1f - timer / cookTime, cookingColor, "Cooking");
                 break;
             case PotState.Cooked:
                 // Drains over the burn countdown; flashes red for the last warningTime seconds.
-                bool flashOn = timer <= warningTime && Mathf.FloorToInt(Time.time / flashInterval) % 2 == 0;
-                string label = timer <= warningTime && IsLastStage ? "Burning!" : cookedLabel;
-                bar.Show(timer / burnTime, flashOn ? warningColor : (timer <= warningTime ? Color.white : cookedColor), label);
+                bool warning = timer <= warningTime;
+                bool flashOn = warning && Mathf.FloorToInt(Time.time / flashInterval) % 2 == 0;
+                bar.Show(timer / burnTime, flashOn ? warningColor : (warning ? Color.white : cookedColor), warning ? "Burning!" : "Ready!");
                 break;
             case PotState.Burnt:
                 bar.Show(1f, burntColor, "Burnt!");
@@ -291,7 +336,7 @@ public class Pot : MonoBehaviour
 
     private void UpdateStoveFire()
     {
-        bool on = (State == PotState.Cooking || State == PotState.Cooked || State == PotState.Burnt) && Station != null && Station.Kind == PotStationKind.Stove;
+        bool on = (State == PotState.Cooking || State == PotState.Cooked || State == PotState.Burnt) && OnStove;
         if (on == stoveFireOn) return;
         stoveFireOn = on;
         if (stoveFire == null) return;
@@ -305,38 +350,62 @@ public class Pot : MonoBehaviour
         if (fire != null) fire.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
     }
 
-    private Recipe FindRecipeStartingWith(IngredientType type)
+    private IEnumerable<Recipe> Orders() => activeOrders ?? variations;
+
+    // Everything in `have` is part of the recipe (each at most as often as it lists it).
+    private static bool Fits(Recipe r, List<IngredientType> have)
     {
-        foreach (var r in recipes)
-            if (r.stages.Count > 0 && r.stages[0].ingredients.Contains(type)) return r;
+        var left = new List<IngredientType>(r.ingredients);
+        foreach (var t in have)
+            if (!left.Remove(t)) return false;
+        return true;
+    }
+
+    private bool AnyOrderFits(List<IngredientType> have)
+    {
+        foreach (var r in Orders()) if (Fits(r, have)) return true;
+        return false;
+    }
+
+    private Recipe ExactMatch()
+    {
+        foreach (var r in Orders())
+            if (r.ingredients.Count == contents.Count && Fits(r, contents)) return r;
         return null;
     }
 
-    // Allows duplicates only where the stage lists the same ingredient twice.
-    private bool StageStillNeeds(IngredientType type)
+    // Exact match with any variation, ordered or not.
+    private Recipe ExactVariation()
     {
-        int needed = 0, have = 0;
-        foreach (var t in CurrentStage.ingredients) if (t == type) needed++;
-        foreach (var t in stageAdded) if (t == type) have++;
-        return have < needed;
+        foreach (var r in variations)
+            if (r.ingredients.Count == contents.Count && Fits(r, contents)) return r;
+        return null;
     }
 
-    private string MissingList()
+    private Color FillColor()
     {
-        var missing = new List<IngredientType>(CurrentStage.ingredients);
-        foreach (var t in stageAdded) missing.Remove(t);
-        return JoinNames(missing);
+        if (recipe != null) return recipe.color;
+        if (contents.Contains(IngredientType.CurryCube)) return curryColor;
+        if (contents.Count == 1 && contents[0] == IngredientType.Water) return waterColor;
+        return soupColor;
     }
 
-    private string NextStageList() => JoinNames(recipe.stages[stageIndex + 1].ingredients);
+    private static bool AnyStove()
+    {
+        foreach (var s in PotStation.All) if (s.Kind == PotStationKind.Stove) return true;
+        return false;
+    }
+
+    private static string Name(IngredientType type) => type == IngredientType.CurryCube ? "Curry Cube" : type.ToString();
 
     private static string JoinNames(List<IngredientType> types)
     {
+        if (types.Count == 0) return "nothing";
         var sb = new StringBuilder();
         for (int i = 0; i < types.Count; i++)
         {
             if (i > 0) sb.Append(i == types.Count - 1 ? " and " : ", ");
-            sb.Append(types[i] == IngredientType.CurryCube ? "Curry Cube" : types[i].ToString());
+            sb.Append(Name(types[i]));
         }
         return sb.ToString();
     }

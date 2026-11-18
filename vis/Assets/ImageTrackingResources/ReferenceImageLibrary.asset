@@ -47,3 +47,43 @@ MonoBehaviour:
     m_SpecifySize: 1
     m_Name: Ingredient Crate QR
     m_Texture: {fileID: 0}
+  - m_SerializedGuid:
+      m_GuidLow: 4745769343846961997
+      m_GuidHigh: 17798393580899616947
+    m_SerializedTextureGuid:
+      m_GuidLow: 8430546529572294005
+      m_GuidHigh: 3357956656910141913
+    m_Size: {x: 0.06, y: 0.06}
+    m_SpecifySize: 1
+    m_Name: Sink QR code
+    m_Texture: {fileID: 0}
+  - m_SerializedGuid:
+      m_GuidLow: 4618177712296976438
+      m_GuidHigh: 5049131658845554311
+    m_SerializedTextureGuid:
+      m_GuidLow: 13013297485082850801
+      m_GuidHigh: 15591763391620009945
+    m_Size: {x: 0.05, y: 0.05}
+    m_SpecifySize: 1
+    m_Name: Plates QR code
+    m_Texture: {fileID: 0}
+  - m_SerializedGuid:
+      m_GuidLow: 5333090135776998931
+      m_GuidHigh: 7763479400669475470
+    m_SerializedTextureGuid:
+      m_GuidLow: 1482577556801951381
+      m_GuidHigh: 16648468478678333784
+    m_Size: {x: 0.05, y: 0.05}
+    m_SpecifySize: 1
+    m_Name: Serving Window QR code
+    m_Texture: {fileID: 0}
+  - m_SerializedGuid:
+      m_GuidLow: 4650468987120805294
+      m_GuidHigh: 3500727100144779664
+    m_SerializedTextureGuid:
+      m_GuidLow: 11876960311520743431
+      m_GuidHigh: 14194739963224561128
+    m_Size: {x: 0.06, y: 0.06}
+    m_SpecifySize: 1
+    m_Name: Bin QR code
+    m_Texture: {fileID: 0}
